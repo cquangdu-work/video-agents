@@ -32,10 +32,10 @@ def similarity(a: str, b: str) -> float:
 def extract_json(text: str):
     """LLM hay trả JSON kèm chữ thừa/markdown — hàm này móc khối JSON đầu tiên ra."""
     text = re.sub(r"```(?:json)?", "", text).strip("` \n")
-    for opener, closer in [("[", "]"), ("{", "}")]:
-        start = text.find(opener)
-        if start == -1:
-            continue
+    # Lấy khối JSON xuất hiện TRƯỚC trong văn bản (không ưu tiên [ hơn {,
+    # kẻo object chứa mảng con sẽ bị móc nhầm mảng con ra)
+    starts = [(text.find(o), o, c) for o, c in [("[", "]"), ("{", "}")] if text.find(o) != -1]
+    for start, opener, closer in sorted(starts):
         depth = 0
         for i in range(start, len(text)):
             if text[i] == opener:

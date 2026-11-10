@@ -6,4 +6,4 @@ python-dotenv>=1.0
 beautifulsoup4>=4.12
 
 # Điều phối agent (nặng — cài sau khi dry-run chạy ổn)
-crewai>=0.80
+crewai[google-genai]>=0.80
