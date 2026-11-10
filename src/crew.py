@@ -123,14 +123,26 @@ CÔNG THỨC rút từ video ăn khách của các kênh cùng mảng (áp dụn
 
 
 # ------------------------------------------------------------------ Biên kịch
+# Khoảng chấp nhận: video đổi cảnh 2-4s -> 60-90s cần cỡ 15-24 cảnh.
+SCRIPT_MIN_SCENES, SCRIPT_MAX_SCENES = 12, 28
+SCRIPT_MIN_WORDS, SCRIPT_MAX_WORDS = 150, 280
+
+
+def _script_stats(script: dict) -> tuple:
+    scenes = script.get("scenes", [])
+    words = sum(len(str(s.get("voice", "")).split()) for s in scenes)
+    return len(scenes), words
+
+
 def write_script(idea: dict, cfg: dict) -> dict:
-    """Viết kịch bản 60-90 giây + 3 phương án câu mở đầu."""
+    """Viết kịch bản 60-90 giây + 3 phương án câu mở đầu.
+
+    Tự kiểm số cảnh/số từ; hụt chuẩn thì trả lại cho LLM viết lại 1 lần
+    kèm nhận xét cụ thể (giống biên tập viên trả bài).
+    """
     ch = cfg["channel"]
-    out = _run_single_task(
-        role="Biên kịch video ngắn tiếng Việt",
-        goal="Kịch bản cuốn hút, chính xác, dựng được bằng biểu đồ",
-        description=f"""Viết kịch bản video dọc {ch['video_seconds_min']}-{ch['video_seconds_max']} giây
-(tốc độ đọc ~160 từ/phút, tức khoảng 170-240 từ) cho kênh "{ch['name']}".
+    base_description = f"""Viết kịch bản video dọc {ch['video_seconds_min']}-{ch['video_seconds_max']} giây
+cho kênh "{ch['name']}". Tốc độ đọc ~160 từ/phút -> TỔNG LỜI ĐỌC PHẢI ĐẠT 170-240 từ.
 
 Ý tưởng: {idea['title']}
 Góc: {idea['angle']}
@@ -140,18 +152,38 @@ Tóm tắt nguồn: {idea.get('summary', '')}
 Luật chính sách (bắt buộc tuân thủ): {cfg['policy_rules']}
 {_formula_block()}
 
-Yêu cầu:
-- Viết 3 PHƯƠNG ÁN câu mở đầu (hook) khác nhau, mỗi câu <= 15 từ.
-- Thân bài chia theo từng "cảnh": mỗi cảnh 1-2 câu lời đọc + mô tả hình
-  (biểu đồ gì, dữ liệu gì, nguồn dữ liệu nào).
-- Kết bằng một câu đọng lại, không kêu gọi hành động sáo rỗng.
-- Mọi con số trong lời đọc phải ghi rõ lấy từ nguồn nào.""",
-        expected_output="""JSON object:
+Yêu cầu CỨNG về cấu trúc (video đổi cảnh mỗi 2-4 giây):
+- Chia thành 15-24 CẢNH. Mỗi cảnh đúng 1 câu lời đọc NGẮN (7-15 từ).
+- Cảnh 1 chính là hook. Dàn bài: hook (1 cảnh) -> mở vấn đề (2-3 cảnh)
+  -> số liệu chính, mỗi con số một cảnh (8-14 cảnh) -> ngã rẽ/so sánh bất ngờ
+  (2-3 cảnh) -> câu kết đọng lại (1-2 cảnh).
+- Mỗi cảnh kèm mô tả hình (biểu đồ gì, dữ liệu gì) + nguồn dữ liệu của cảnh đó.
+- Viết 3 PHƯƠNG ÁN hook khác nhau, mỗi câu <= 15 từ.
+- Kết không kêu gọi hành động sáo rỗng.
+- Mọi con số trong lời đọc phải ghi rõ lấy từ nguồn nào."""
+    expected = """JSON object:
 {"hooks": ["...", "...", "..."],
- "scenes": [{"voice": "<lời đọc>", "visual": "<mô tả hình/biểu đồ>", "data_source": "<nguồn>"}],
- "claims": [{"claim": "<khẳng định có số liệu>", "source": "<nguồn/link>"}]}""",
-    )
-    return extract_json(out)
+ "scenes": [{"voice": "<1 câu lời đọc>", "visual": "<mô tả hình/biểu đồ>", "data_source": "<nguồn>"}],
+ "claims": [{"claim": "<khẳng định có số liệu>", "source": "<nguồn/link>"}]}"""
+
+    description, script = base_description, None
+    for attempt in range(2):
+        script = extract_json(_run_single_task(
+            role="Biên kịch video ngắn tiếng Việt",
+            goal="Kịch bản cuốn hút, chính xác, dựng được bằng biểu đồ",
+            description=description, expected_output=expected))
+        n, words = _script_stats(script)
+        if SCRIPT_MIN_SCENES <= n <= SCRIPT_MAX_SCENES and SCRIPT_MIN_WORDS <= words <= SCRIPT_MAX_WORDS:
+            return script
+        log.warning("Kịch bản hụt chuẩn (%d cảnh, %d từ) — trả lại viết lần %d",
+                    n, words, attempt + 2)
+        description = base_description + f"""
+
+BẢN NHÁP TRƯỚC BỊ TRẢ LẠI: chỉ có {n} cảnh và {words} từ lời đọc.
+Phải đạt 15-24 cảnh, tổng 170-240 từ. Tách mỗi ý thành một cảnh riêng,
+mỗi con số một cảnh, đừng gộp."""
+    log.warning("Vẫn hụt chuẩn sau 2 lần — dùng bản cuối")
+    return script
 
 
 # ---------------------------------------------------------------- Sản xuất
