@@ -68,6 +68,22 @@ daily:
   raw_target: 30        # ~30 ý tưởng thô mỗi sáng
   shortlist: 3          # chọn ra 2-3 ý tưởng tốt nhất
 
+# ---------- Phân tích đối thủ (python -m src.analysis.competitors) ----------
+competitor_analysis:
+  months_back: 6          # chỉ xét video 6 tháng gần đây
+  min_subs: 3000          # kênh quá nhỏ: số liệu nhiễu
+  max_subs: 800000        # kênh quá to: thắng nhờ thương hiệu, khó học
+  max_channels: 30
+  outlier_ratio: 5.0      # view >= 5x trung vị kênh -> đột biến
+  seed_queries:
+    - {q: "giải thích ngắn kiến thức", lang: vi}
+    - {q: "tại sao shorts khoa học", lang: vi}
+    - {q: "số liệu thú vị shorts", lang: vi}
+    - {q: "지식 쇼츠", lang: ko}
+    - {q: "과학 상식 쇼츠", lang: ko}
+    - {q: "data explained shorts", lang: en}
+    - {q: "map chart explained shorts", lang: en}
+
 # ---------- Trọng số chấm điểm của agent Biên tập ----------
 # Agent Phân tích (giai đoạn 4) sẽ tự điều chỉnh các số này theo số liệu thật
 scoring_weights:

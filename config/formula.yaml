@@ -1,0 +1,39 @@
+title_patterns:
+- 'Đừng [Hành Động Phổ Biến] Nữa! Sự Thật Khiến [Hậu Quả Tiêu Cực] #Shorts'
+- Tại Sao [Hiện Tượng Tự Nhiên/Kỹ Thuật Kỳ Lạ]? 🧐 | [Tên Kênh]
+- Bí Mật [Quy Trình/Công Trình Kỹ Thuật Độc Lạ]
+- Vì Sao [Chủ Thể Bất Thường] Dù [Lợi Thế Lớn] Vẫn [Kết Quả Nghịch Lý]?
+- 'Sai Lầm [Tỷ Lệ]% Mắc Phải Khi [Hành Động Hằng Ngày] #Tags'
+hook_rules:
+- Dùng từ phủ định mạnh để cấm đoán thói quen cũ ('Đừng...', 'Sai lầm...').
+- Tạo sự tò mò bằng câu hỏi tại sao cho những vật thể/hiện tượng quen thuộc hằng ngày
+  ('Vì sao trên đầu trẻ sơ sinh...', 'Tại sao đồng xu lại có khe rãnh?').
+- Đưa ra nghịch lý hoặc con số sốc ngay từ giây đầu ('Bỏ 300 triệu mua gỗ quý, chồng
+  chết lặng khi xẻ ra...', 'Thu gần 1 triệu đô mỗi chuyến mà vẫn lỗ...').
+length_seconds:
+  min: 20
+  max: 90
+topic_clusters:
+- cluster: Giải phẫu công nghệ, cơ khí, cấu trúc xây dựng (Cầu đường, hầm, tàu thuyền,
+    nội thất máy móc)
+  fit: Rất hợp (Cốt lõi dữ liệu, biểu đồ, bản đồ và mã nguồn dựng hình ảnh kỹ thuật).
+- cluster: Địa lý dữ liệu, lịch sử, không gian và lãnh thổ (Why no one lives..., bản
+    đồ chiến tranh/đế chế)
+  fit: Cực kỳ hợp (Trực tiếp dùng dữ liệu số, bản đồ động, code visualization).
+- cluster: Khoa học thường thức, mẹo vặt đời sống & sức khỏe có căn cứ khoa học (Ngâm
+    rau, rã Đông, bọt thịt heo)
+  fit: Hợp vừa (Có thể dùng dữ liệu thống kê, số liệu y tế/sinh học để giải thích).
+- cluster: Kinh tế - Số liệu tài chính nghịch lý (Vận tải hàng hải, chi phí, giá trị
+    tài sản)
+  fit: Rất hợp (Đúng thế mạnh phân tích qua con số).
+notes:
+- Các video có tiêu đề dạng cảnh báo sức khỏe hoặc mẹo kỹ thuật đi ngược lại thói
+  quen cũ đạt hệ số nhân view cao nhất (từ 400x - 800x trung vị kênh).
+- Các chủ đề về không gian, địa lý, bản đồ (nhóm tiếng Anh) thu hút lượng view cực
+  khủng (trên 1 - 2.7 triệu view), cho thấy tiềm năng toàn cầu của dạng nội dung trực
+  quan hóa dữ liệu bản đồ.
+- Thời lượng tối ưu tập trung từ 20 đến 90 giây, đủ thời gian để giải thích một vấn
+  đề kỹ thuật hoặc dữ liệu phức tạp mà không gây nhàm chán.
+_meta:
+  generated_from: 25 kênh, 82 video đột biến
+  scanned_at: '2026-11-10T15:41:46+00:00'

@@ -15,19 +15,44 @@ from .utils import extract_json
 log = logging.getLogger(__name__)
 
 
-def _llm():
-    from crewai import LLM
-    return LLM(model=os.getenv("MODEL", "gemini/gemini-2.5-flash"), temperature=0.7)
+def _model_chain() -> list:
+    """Model chính + các model dự phòng (free tier Gemini hay quá tải 503)."""
+    chain = [os.getenv("MODEL", "gemini/gemini-3.5-flash-lite")]
+    chain += [m.strip() for m in os.getenv("MODEL_FALLBACKS", "").split(",") if m.strip()]
+    return chain
+
+
+def _is_transient(exc: Exception) -> bool:
+    s = str(exc)
+    return any(k in s for k in ("503", "UNAVAILABLE", "overloaded", "429", "RESOURCE_EXHAUSTED"))
 
 
 def _run_single_task(role: str, goal: str, description: str, expected_output: str) -> str:
-    """Tạo một crew 1-agent-1-task rồi chạy. Đơn giản, dễ debug từng bước."""
-    from crewai import Agent, Crew, Task
+    """Tạo một crew 1-agent-1-task rồi chạy. Đơn giản, dễ debug từng bước.
 
-    agent = Agent(role=role, goal=goal, backstory="", llm=_llm(), verbose=False)
-    task = Task(description=description, expected_output=expected_output, agent=agent)
-    crew = Crew(agents=[agent], tasks=[task], verbose=False)
-    return str(crew.kickoff())
+    Quá tải (503/429) thì chờ rồi thử lại, hết kiên nhẫn thì đổi model dự phòng.
+    """
+    import time
+
+    from crewai import LLM, Agent, Crew, Task
+
+    last_exc = None
+    for model in _model_chain():
+        for attempt in range(3):
+            try:
+                agent = Agent(role=role, goal=goal, backstory="",
+                              llm=LLM(model=model, temperature=0.7), verbose=False)
+                task = Task(description=description, expected_output=expected_output, agent=agent)
+                return str(Crew(agents=[agent], tasks=[task], verbose=False).kickoff())
+            except Exception as exc:
+                if not _is_transient(exc):
+                    raise
+                last_exc = exc
+                wait = 20 * (attempt + 1)
+                log.warning("%s quá tải (lần %d) — chờ %ds rồi thử lại", model, attempt + 1, wait)
+                time.sleep(wait)
+        log.warning("Bỏ %s, chuyển model dự phòng tiếp theo", model)
+    raise RuntimeError(f"Mọi model đều quá tải: {last_exc}")
 
 
 # ---------------------------------------------------------------- Săn ý tưởng
@@ -83,6 +108,20 @@ Danh sách:
     return sorted(scored, key=lambda s: -s["total"])
 
 
+def _formula_block() -> str:
+    """Nếu đã chạy phân tích đối thủ thì nhét công thức vào prompt Biên kịch."""
+    from .analysis.formula import load_formula
+    f = load_formula()
+    if not f:
+        return ""
+    return f"""
+CÔNG THỨC rút từ video ăn khách của các kênh cùng mảng (áp dụng linh hoạt, không máy móc):
+- Khuôn tiêu đề/hook hay thắng: {'; '.join(f.get('title_patterns', []))}
+- Luật viết hook: {'; '.join(f.get('hook_rules', []))}
+- Độ dài hay thắng: {f.get('length_seconds', {})}
+"""
+
+
 # ------------------------------------------------------------------ Biên kịch
 def write_script(idea: dict, cfg: dict) -> dict:
     """Viết kịch bản 60-90 giây + 3 phương án câu mở đầu."""
@@ -99,6 +138,7 @@ Nguồn gốc: {idea['source_url']}
 Tóm tắt nguồn: {idea.get('summary', '')}
 
 Luật chính sách (bắt buộc tuân thủ): {cfg['policy_rules']}
+{_formula_block()}
 
 Yêu cầu:
 - Viết 3 PHƯƠNG ÁN câu mở đầu (hook) khác nhau, mỗi câu <= 15 từ.
