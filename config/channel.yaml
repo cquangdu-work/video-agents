@@ -1,0 +1,86 @@
+# ============================================================
+# Cấu hình kênh "Thế giới qua con số"
+# Đổi nguồn / trọng số ở đây, KHÔNG cần sửa code.
+# ============================================================
+
+channel:
+  name: "Thế giới qua con số"
+  language: vi
+  description: >
+    Kênh giải thích thế giới bằng dữ liệu: biểu đồ động, bản đồ,
+    cuộc đua số liệu dựng bằng code. Ưu tiên góc Việt–Hàn khi phù hợp.
+  video_seconds_min: 60
+  video_seconds_max: 90
+
+# ---------- Nguồn ý tưởng (lớp 1: lấy từ nguồn gốc) ----------
+sources:
+  rss:
+    - name: "OWID Data Insights"
+      url: "https://ourworldindata.org/atom-data-insights.xml"
+      lang: en
+      weight: 3          # nguồn hợp chủ đề nhất thì weight cao
+    - name: "ScienceDaily Top"
+      url: "https://www.sciencedaily.com/rss/top/science.xml"
+      lang: en
+      weight: 2
+    - name: "ScienceDaily All"
+      url: "https://www.sciencedaily.com/rss/all.xml"
+      lang: en
+      weight: 1
+    - name: "Hankyoreh Science (Hàn)"
+      url: "https://www.hani.co.kr/rss/science/"
+      lang: ko
+      weight: 2          # nguồn tiếng Hàn ít kênh Việt khai thác
+    - name: "Donga Science (Hàn)"
+      url: "https://rss.donga.com/science.xml"
+      lang: ko
+      weight: 2
+
+  arxiv:
+    categories: ["econ.GN", "physics.soc-ph", "cs.CY"]   # kinh tế, xã hội định lượng
+    max_results: 15
+
+  # Lưu ý: Reddit chặn truy cập JSON công khai (403) — cần đăng ký app API
+  # chính thức (miễn phí) rồi thêm key vào .env ở bước sau. Hiện tại bỏ qua.
+  reddit:
+    subreddits: ["askscience", "explainlikeimfive", "dataisbeautiful"]
+    listing: "top"
+    time: "day"
+    limit: 20
+
+# ---------- Lớp 2: kiểm tra trùng ----------
+dedup:
+  title_similarity_threshold: 0.55   # trùng >55% từ khóa với ý tưởng cũ -> loại
+  youtube_check:                     # cần YOUTUBE_API_KEY, không có thì bỏ qua
+    max_results: 10
+    high_view_threshold: 100000      # đã có video tiếng Việt >100k view -> phải có góc mới
+    max_popular_allowed: 2
+
+# ---------- Lớp 3: luật "góc" bắt buộc ----------
+angle_rules: >
+  Mỗi ý tưởng PHẢI có ít nhất một "góc": (a) phát hiện/số liệu mới 1-2 năm gần đây,
+  (b) điều ngược suy nghĩ thông thường và có nguồn, hoặc (c) kết nối hai lĩnh vực
+  tưởng như không liên quan. Thiếu góc thì loại. Cộng điểm nếu lồng được
+  so sánh Việt Nam - Hàn Quốc.
+
+# ---------- Lớp 4: số lượng mỗi ngày ----------
+daily:
+  raw_target: 30        # ~30 ý tưởng thô mỗi sáng
+  shortlist: 3          # chọn ra 2-3 ý tưởng tốt nhất
+
+# ---------- Trọng số chấm điểm của agent Biên tập ----------
+# Agent Phân tích (giai đoạn 4) sẽ tự điều chỉnh các số này theo số liệu thật
+scoring_weights:
+  curiosity: 1.0        # độ tò mò
+  novelty: 1.0          # độ mới
+  verifiability: 1.0    # kiểm chứng được
+  accessibility: 1.0    # ai cũng hiểu
+  visualizability: 1.5  # dễ minh họa bằng biểu đồ/bản đồ -> quan trọng nhất với kênh này
+  min_total: 17         # tổng điểm có trọng số tối thiểu để được chọn
+
+# ---------- Luật chính sách (nhúng vào prompt của Biên kịch) ----------
+policy_rules: >
+  - Không viết như lời khuyên sức khỏe/tài chính/pháp lý; chỉ giải thích dữ liệu.
+  - Không giật tít gây sợ hãi hay thao túng cảm xúc.
+  - Mọi con số phải có nguồn kèm link.
+  - Giọng văn tự nhiên, có quan điểm, không đọc đều đều như máy.

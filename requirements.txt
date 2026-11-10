@@ -1,0 +1,9 @@
+# Lõi nhẹ — chạy được bước lấy ý tưởng (dry-run) mà không cần LLM
+feedparser>=6.0
+requests>=2.31
+PyYAML>=6.0
+python-dotenv>=1.0
+beautifulsoup4>=4.12
+
+# Điều phối agent (nặng — cài sau khi dry-run chạy ổn)
+crewai>=0.80
