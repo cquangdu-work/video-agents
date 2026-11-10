@@ -97,11 +97,18 @@ class Versus(BrandScene):
         dec = p.get("decimals", 0)
         trL, trR = ValueTracker(0), ValueTracker(0)
         sides = [(p["left"], c["vietnam"], -2.2, trL), (p["right"], c["korea"], 2.2, trR)]
+        # Cỡ chữ chung cho 2 bên, dò theo số DÀI nhất để không tràn cột (~3.9 đơn vị)
+        widest = max(
+            Text(fmt_num(s["value"], dec), font=pick_font("number"), font_size=72,
+                 weight="BOLD").width for s in (p["left"], p["right"]))
+        fsize = 72 * min(3.9 / widest, 1)
         for side, color, x, tr in sides:
-            self.add(Text(side["label"], font=pick_font(), font_size=40, color=color,
-                          weight="BOLD").move_to([x, 2.2, 0]))
+            lbl = Text(side["label"], font=pick_font(), font_size=40, color=color,
+                       weight="BOLD").move_to([x, 2.2, 0])
+            fit_width(lbl, 4.0)
+            self.add(lbl)
             self.add(always_redraw(lambda tr=tr, color=color, x=x: Text(
-                fmt_num(tr.get_value(), dec), font=pick_font("number"), font_size=72,
+                fmt_num(tr.get_value(), dec), font=pick_font("number"), font_size=fsize,
                 color=color, weight="BOLD").move_to([x, 0.6, 0])))
         self.add(Line([0, 2.6, 0], [0, -0.4, 0], color=c["muted"], stroke_width=2))
         if p.get("suffix"):

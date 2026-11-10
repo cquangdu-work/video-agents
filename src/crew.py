@@ -154,6 +154,55 @@ Yêu cầu:
     return extract_json(out)
 
 
+# ---------------------------------------------------------------- Sản xuất
+TEMPLATE_GUIDE = """Các template có sẵn và tham số (CHỈ dùng đúng các template này):
+1. "big_number": {"title": str, "value": số, "suffix": str, "source": str, "decimals": int}
+   — một con số gây ấn tượng đếm từ 0. Dùng khi lời đọc xoay quanh MỘT con số.
+2. "versus": {"title": str, "left": {"label": str, "value": số}, "right": {"label": str,
+   "value": số}, "suffix": str, "source": str, "decimals": int}
+   — so sánh 2 bên (Việt-Hàn để left=Việt Nam, right=Hàn Quốc).
+3. "bar_chart": {"title": str, "items": [{"label": str, "value": số}], "unit": str,
+   "source": str, "decimals": int} — xếp hạng 3-6 mục.
+4. "line_chart": {"title": str, "xs": [số...], "ys": [số...], "unit": str, "source": str,
+   "decimals": int} — xu hướng theo thời gian, xs/ys cùng độ dài.
+"""
+
+
+def design_scenes(idea: dict, scenes: list, cfg: dict) -> list:
+    """Agent Sản xuất: dịch từng cảnh kịch bản thành scene spec cho engine Manim.
+
+    Luật sắt: mọi con số trong spec phải lấy từ kịch bản/claims, không được bịa.
+    """
+    pacing = cfg.get("pacing", {"scene_seconds_min": 2, "scene_seconds_max": 4})
+    listing = "\n".join(
+        f"- Cảnh {i+1}: LỜI: {s.get('voice','')} | HÌNH GỢI Ý: {s.get('visual','')}"
+        f" | NGUỒN: {s.get('data_source','')}"
+        for i, s in enumerate(scenes)
+    )
+    out = _run_single_task(
+        role="Đạo diễn đồ họa dữ liệu",
+        goal="Dịch kịch bản thành cảnh đồ họa, số liệu tuyệt đối trung thực",
+        description=f"""Video của kênh "{cfg['channel']['name']}", ý tưởng: {idea['title']}
+
+Kịch bản:
+{listing}
+
+{TEMPLATE_GUIDE}
+
+Yêu cầu:
+- Mỗi cảnh kịch bản -> đúng 1 cảnh đồ họa, giữ nguyên thứ tự.
+- "seconds" mỗi cảnh: {pacing['scene_seconds_min']}-{pacing['scene_seconds_max']} giây,
+  ước theo độ dài lời đọc (~2.7 từ/giây).
+- MỌI con số phải lấy nguyên văn từ kịch bản. Cảnh không có số liệu cụ thể thì dùng
+  "big_number" với con số đáng chú ý nhất trong lời của cảnh đó.
+- "title" ngắn <= 9 từ, tiếng Việt; "source" ghi nguồn của cảnh đó.
+- KHÔNG thêm template "intro" (engine tự thêm).""",
+        expected_output="""JSON array, mỗi phần tử:
+{"template": "<tên template>", "seconds": <số>, "params": {...}}""",
+    )
+    return extract_json(out)
+
+
 # ---------------------------------------------------------------- Kiểm chứng
 def fact_check(script: dict, idea: dict, source_text: str, cfg: dict) -> dict:
     """Đối chiếu từng claim với nội dung bài nguồn. Trả về verdict từng claim.

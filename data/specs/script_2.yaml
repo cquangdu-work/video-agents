@@ -1,0 +1,47 @@
+- template: intro
+  seconds: 1.2
+  params: {}
+- template: big_number
+  seconds: 4
+  params:
+    title: Người dùng Claude tại Hàn Quốc vượt mốc
+    value: 5000000
+    suffix: ' người'
+    source: WiseApp Retail
+    decimals: 0
+- template: line_chart
+  seconds: 4
+  params:
+    title: Tăng trưởng người dùng Claude qua các tháng
+    xs:
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    ys:
+    - 520000
+    - 1000000
+    - 1500000
+    - 2000000
+    - 3000000
+    - 4000000
+    - 5000000
+    unit: người
+    source: WiseApp Retail
+    decimals: 0
+- template: versus
+  seconds: 4
+  params:
+    title: So sánh khoảng cách với người dẫn đầu
+    left:
+      label: ChatGPT (Số 1)
+      value: 25000000
+    right:
+      label: Claude (Số 3)
+      value: 5000000
+    suffix: ' người'
+    source: WiseApp Retail
+    decimals: 0
