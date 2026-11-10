@@ -1,0 +1,90 @@
+- template: intro
+  seconds: 1.2
+  params: {}
+- template: statement
+  seconds: 4
+  params:
+    text: Đừng phớt lờ những con số sau 10 năm Thỏa thuận Paris!
+    source: Hankyoreh
+- template: statement
+  seconds: 4
+  params:
+    text: Thế giới từng đặt nhiều kỳ vọng vào hiệp ước lịch sử này.
+    source: Hankyoreh
+- template: statement
+  seconds: 4
+  params:
+    text: Nhưng thực tế đằng sau các bản cam kết lại rất khắc nghiệt.
+    source: Hankyoreh
+- template: statement
+  seconds: 4
+  params:
+    text: Một thống kê mới vừa công bố khiến nhiều người phải giật mình.
+    source: Hankyoreh
+- template: statement
+  seconds: 4
+  params:
+    text: Tính từ mốc 10 năm trước, Trái Đất đã chứng kiến điều tồi tệ.
+    source: Hankyoreh
+- template: big_number
+  seconds: 4
+  params:
+    title: Tử vong trung bình mỗi năm
+    value: 540000
+    suffix: người
+    source: Hankyoreh
+    decimals: 0
+- template: statement
+  seconds: 4
+  params:
+    text: Con số này xuất phát trực tiếp từ các đợt nắng nóng cực đoan.
+    source: Hankyoreh
+- template: big_number
+  seconds: 4
+  params:
+    title: Sinh mạng bị đe dọa mỗi ngày
+    value: 1479
+    suffix: người
+    source: Hankyoreh
+    decimals: 0
+- template: statement
+  seconds: 4
+  params:
+    text: Các quốc gia thu nhập thấp chịu ảnh hưởng nặng nề nhất.
+    source: Hankyoreh
+- template: big_number
+  seconds: 4
+  params:
+    title: Tử vong ở vùng nhiệt đới
+    value: 60
+    suffix: '%'
+    source: Hankyoreh
+    decimals: 0
+- template: big_number
+  seconds: 4
+  params:
+    title: Mức tăng nhiệt toàn cầu
+    value: 1.2
+    suffix: độ C
+    source: Hankyoreh
+    decimals: 1
+- template: statement
+  seconds: 4
+  params:
+    text: Khoảng cách giữa cam kết trên giấy và thực tế vẫn rất lớn.
+    source: Hankyoreh
+- template: statement
+  seconds: 4
+  params:
+    text: Liệu trong 10 năm tới, con số này có tiếp tục leo thang?
+    source: Hankyoreh
+- template: statement
+  seconds: 4
+  params:
+    text: Nắng nóng không chỉ là thời tiết, mà là thảm họa thầm lặng.
+    source: Hankyoreh
+- template: statement
+  seconds: 4
+  params:
+    text: Hãy nhìn vào dữ liệu để thấy sự thật đằng sau khí hậu.
+    source: Hankyoreh
