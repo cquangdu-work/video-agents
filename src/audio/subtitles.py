@@ -10,10 +10,26 @@ log = logging.getLogger(__name__)
 
 
 def transcribe_words(audio_path: Path, model_size: str = "small") -> list:
-    """[(từ, giây bắt đầu, giây kết thúc), ...]"""
+    """[(từ, giây bắt đầu, giây kết thúc), ...]
+
+    Nạp WAV bằng numpy rồi đưa thẳng mảng cho Whisper — né xung đột phiên bản
+    thư viện av giữa faster-whisper và manim (cùng venv).
+    """
+    import subprocess
+    import wave as wave_mod
+
+    import numpy as np
     from faster_whisper import WhisperModel   # import muộn: model tải lần đầu hơi lâu
+
+    wav16 = audio_path.with_name(audio_path.stem + "_16k.wav")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(audio_path),
+                    "-ar", "16000", "-ac", "1", "-sample_fmt", "s16", str(wav16)], check=True)
+    with wave_mod.open(str(wav16), "rb") as w:
+        audio = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
+    audio = audio.astype(np.float32) / 32768.0
+
     model = WhisperModel(model_size, device="cpu", compute_type="int8")
-    segments, _ = model.transcribe(str(audio_path), language="vi", word_timestamps=True)
+    segments, _ = model.transcribe(audio, language="vi", word_timestamps=True)
     words = []
     for seg in segments:
         for w in seg.words or []:

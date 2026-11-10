@@ -62,6 +62,8 @@ def main():
         if not wav.exists():                      # chạy lại không tốn TTS lần nữa
             log.info("TTS cảnh %d/%d: %s...", i + 1, len(spec), voice[:40])
             synth(voice, wav)
+            import time
+            time.sleep(30)                        # free tier TTS giới hạn số lần/phút
         sc["_wav"] = wav
         sc["seconds"] = max(2.0, min(wav_duration(wav) + 0.35, 9.0))
 

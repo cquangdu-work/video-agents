@@ -15,8 +15,10 @@ import requests
 
 log = logging.getLogger(__name__)
 
-STYLE = ("Đọc tiếng Việt tự nhiên như người dẫn chuyện video ngắn: nhịp nhanh vừa, "
-         "có nhấn nhá ở con số và từ quan trọng, không đều đều. Nội dung: ")
+# QUAN TRỌNG: gemini-3.8-flash-tts đọc NGUYÊN VĂN mọi chữ trong text — đã thử
+# chỉ dẫn phong cách cả tiếng Việt lẫn tiếng Anh đều bị đọc ra loa. Vì vậy chỉ
+# gửi đúng nội dung; muốn đổi chất giọng thì đổi TTS_VOICE trong .env.
+STYLE = ""
 
 
 def synth(text: str, out_path: Path) -> Path:
@@ -33,7 +35,7 @@ def synth(text: str, out_path: Path) -> Path:
         },
     }
     last = None
-    for attempt in range(4):
+    for attempt in range(6):
         try:
             r = requests.post(url, params={"key": key}, json=body, timeout=120)
             if r.status_code in (429, 503):
@@ -46,10 +48,10 @@ def synth(text: str, out_path: Path) -> Path:
             return out_path
         except Exception as exc:
             last = exc
-            wait = 15 * (attempt + 1)
+            wait = 45 * (attempt + 1)          # free tier TTS giới hạn ~vài lần/phút
             log.warning("TTS lỗi (%s) — chờ %ds thử lại", exc, wait)
             time.sleep(wait)
-    raise RuntimeError(f"TTS thất bại sau 4 lần: {last}")
+    raise RuntimeError(f"TTS thất bại sau 6 lần: {last}")
 
 
 def wav_duration(path: Path) -> float:
