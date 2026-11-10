@@ -7,3 +7,6 @@ beautifulsoup4>=4.12
 
 # Điều phối agent (nặng — cài sau khi dry-run chạy ổn)
 crewai[google-genai]>=0.80
+
+# Dựng video (giai đoạn 2; cần ffmpeg cài sẵn trên máy)
+manim>=0.19
