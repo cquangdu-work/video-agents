@@ -10,3 +10,6 @@ crewai[google-genai]>=0.80
 
 # Dựng video (giai đoạn 2; cần ffmpeg cài sẵn trên máy)
 manim>=0.19
+
+# Giọng đọc + phụ đề (giai đoạn 3)
+faster-whisper>=1.0

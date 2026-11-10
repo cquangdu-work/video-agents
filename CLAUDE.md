@@ -17,9 +17,10 @@ Một đội agent chạy theo lịch, mỗi ngày tạo video ngắn dọc (60�
 - Video được dựng từ **"chất liệu" đặc trưng riêng** của kênh (không dùng kiểu video stock ghép giọng AI). Chất liệu được chọn sao cho sinh ra tự nhiên từ chủ đề.
 - Có bước người duyệt: mỗi ngày Du duyệt video qua Telegram (~5 phút). Không bỏ bước này.
 
-## Còn chờ Du chốt
-- **Chủ đề kênh.** Đề xuất hiện tại: **"Thế giới qua con số"** — chất liệu là biểu đồ, bản đồ động, cuộc đua số liệu dựng bằng code; nguồn dữ liệu mở (Our World in Data, World Bank, KOSIS...); có thể lồng góc Việt–Hàn. Hỏi Du xác nhận trước khi viết phần phụ thuộc chủ đề.
-- Giọng đọc: nhân bản giọng của Du hay giọng AI có sẵn (ưu tiên giọng Du vì giảm rủi ro chính sách).
+## Đã chốt thêm (11/2026)
+- **Chủ đề kênh: "Thế giới qua con số"** (Du chốt 10/11/2026) — biểu đồ, bản đồ động, cuộc đua số liệu dựng bằng code; nguồn mở (OWID, World Bank, KOSIS...); lồng góc Việt–Hàn.
+- **Giọng đọc: Gemini TTS** (Du chốt 11/11/2026, model gemini-3.8-flash-tts, giọng đặt trong `.env` TTS_VOICE). Muốn đổi sang giọng nhân bản của Du sau này: chỉ thay `src/audio/tts.py`.
+- Nhạc nền: tạm chưa dùng; khi Du tải nhạc từ YouTube Audio Library vào `assets/music/` thì nối vào `src/assemble.py` (đã chừa chỗ, dùng sidechaincompress để nhạc tự hạ khi có giọng).
 
 ## Tiêu chí của "chất liệu" tốt
 1. Sinh ra tự nhiên từ nội dung.

@@ -3,88 +3,78 @@
   params: {}
 - template: statement
   seconds: 4
+  voice: Đừng phớt lờ những con số này sau 10 năm Thỏa thuận Paris!
   params:
-    text: Đừng phớt lờ những con số sau 10 năm Thỏa thuận Paris!
+    text: 10 năm Thỏa thuận Paris
     source: Hankyoreh
 - template: statement
   seconds: 4
+  voice: Thế giới từng đặt nhiều kỳ vọng vào hiệp ước lịch sử này. Nhưng thực tế đằng
+    sau các bản cam kết lại rất khắc nghiệt.
   params:
-    text: Thế giới từng đặt nhiều kỳ vọng vào hiệp ước lịch sử này.
+    text: Kỳ vọng và thực tế khắc nghiệt
     source: Hankyoreh
 - template: statement
   seconds: 4
+  voice: Một thống kê mới vừa công bố khiến nhiều người phải giật mình. Tính từ mốc
+    10 năm trước, Trái Đất đã chứng kiến điều tồi tệ.
   params:
-    text: Nhưng thực tế đằng sau các bản cam kết lại rất khắc nghiệt.
-    source: Hankyoreh
-- template: statement
-  seconds: 4
-  params:
-    text: Một thống kê mới vừa công bố khiến nhiều người phải giật mình.
-    source: Hankyoreh
-- template: statement
-  seconds: 4
-  params:
-    text: Tính từ mốc 10 năm trước, Trái Đất đã chứng kiến điều tồi tệ.
+    text: Thống kê gây giật mình về khí hậu
     source: Hankyoreh
 - template: big_number
   seconds: 4
+  voice: Cụ thể, có trung bình 540.000 người tử vong mỗi năm. Con số này xuất phát
+    trực tiếp từ các đợt nắng nóng cực đoan.
   params:
-    title: Tử vong trung bình mỗi năm
+    title: Tử vong mỗi năm do nắng nóng
     value: 540000
     suffix: người
     source: Hankyoreh
     decimals: 0
-- template: statement
-  seconds: 4
-  params:
-    text: Con số này xuất phát trực tiếp từ các đợt nắng nóng cực đoan.
-    source: Hankyoreh
 - template: big_number
   seconds: 4
+  voice: Quy đổi ra, mỗi ngày có khoảng 1.479 sinh mạng bị đe dọa.
   params:
-    title: Sinh mạng bị đe dọa mỗi ngày
+    title: Số ca tử vong trung bình mỗi ngày
     value: 1479
     suffix: người
     source: Hankyoreh
     decimals: 0
 - template: statement
   seconds: 4
+  voice: Các quốc gia thu nhập thấp chịu ảnh hưởng nặng nề nhất.
   params:
-    text: Các quốc gia thu nhập thấp chịu ảnh hưởng nặng nề nhất.
+    text: Quốc gia thu nhập thấp chịu ảnh hưởng
     source: Hankyoreh
 - template: big_number
   seconds: 4
+  voice: Hơn 60% số ca tử vong tập trung ở các vùng khí hậu nhiệt đới.
   params:
-    title: Tử vong ở vùng nhiệt đới
+    title: Tử vong ở vùng khí hậu nhiệt đới
     value: 60
     suffix: '%'
     source: Hankyoreh
     decimals: 0
 - template: big_number
   seconds: 4
+  voice: Trong khi đó, mức tăng nhiệt toàn cầu đã vượt quá 1,2 độ C.
   params:
-    title: Mức tăng nhiệt toàn cầu
+    title: Mức tăng nhiệt độ toàn cầu
     value: 1.2
-    suffix: độ C
+    suffix: °C
     source: Hankyoreh
     decimals: 1
 - template: statement
   seconds: 4
+  voice: Khoảng cách giữa cam kết trên giấy và thực tế vẫn rất lớn. Liệu trong 10
+    năm tới, con số này có tiếp tục leo thang?
   params:
-    text: Khoảng cách giữa cam kết trên giấy và thực tế vẫn rất lớn.
+    text: Cam kết và thực tế chênh lệch
     source: Hankyoreh
 - template: statement
   seconds: 4
+  voice: Nắng nóng không chỉ là thời tiết, mà là một thảm họa thầm lặng. Hãy nhìn
+    vào dữ liệu để thấy sự thật đằng sau khí hậu.
   params:
-    text: Liệu trong 10 năm tới, con số này có tiếp tục leo thang?
-    source: Hankyoreh
-- template: statement
-  seconds: 4
-  params:
-    text: Nắng nóng không chỉ là thời tiết, mà là thảm họa thầm lặng.
-    source: Hankyoreh
-- template: statement
-  seconds: 4
-  params:
-    text: Hãy nhìn vào dữ liệu để thấy sự thật đằng sau khí hậu.
+    text: Thảm họa thầm lặng từ nắng nóng
     source: Hankyoreh

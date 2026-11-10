@@ -257,9 +257,11 @@ Yêu cầu:
   cùng template; con số nhỏ tầm thường (1, 2, 3...) không đáng làm big_number.
 - "seconds" mỗi cảnh: {pacing['scene_seconds_min']}-{pacing['scene_seconds_max']} giây.
 - "title" ngắn <= 9 từ, tiếng Việt; "source" ghi nguồn của cảnh đó.
+- Mỗi cảnh có trường "voice": lời đọc NGUYÊN VĂN của (các) cảnh kịch bản tương ứng,
+  không sửa chữ; cảnh gộp thì nối các câu lại.
 - KHÔNG thêm template "intro" (engine tự thêm)."""
     expected = """JSON array, mỗi phần tử:
-{"template": "<tên template>", "seconds": <số>, "params": {...}}"""
+{"template": "<tên template>", "seconds": <số>, "voice": "<lời đọc nguyên văn>", "params": {...}}"""
 
     # Tập chữ số có thật trong kịch bản — chuẩn đối chiếu chống bịa.
     # Tính cả tiêu đề ý tưởng (kịch bản hay viết số bằng chữ: "tám nghìn...")
