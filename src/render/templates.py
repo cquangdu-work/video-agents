@@ -149,7 +149,27 @@ class LineChart(BrandScene):
         self.wait(max(self.seconds * 0.4 - 0.3, 0.1))
 
 
+class Statement(BrandScene):
+    """Câu dẫn/chuyển tiếp KHÔNG có số liệu — params: {text, source?}
+    Chữ lớn giữa màn + gạch nhấn màu accent. Dùng cho cảnh không có con số thật."""
+
+    def construct(self):
+        import textwrap
+        p, c = self.params, self.b["colors"]
+        self.add_signature(p.get("source"))
+        body = "\n".join(textwrap.wrap(p["text"], 20))
+        t = Text(body, font=pick_font(), font_size=58, color=c["text"],
+                 weight="BOLD", line_spacing=1.05).move_to(ORIGIN)
+        fit_width(t, 7.9)
+        bar = Line(ORIGIN, RIGHT * 1.6, color=c["accent"], stroke_width=8)
+        bar.next_to(t, DOWN, buff=0.7)
+        self.play(FadeIn(t, shift=UP * 0.4), GrowFromEdge(bar, LEFT),
+                  run_time=min(self.seconds * 0.4, 0.8))
+        self.wait(max(self.seconds - min(self.seconds * 0.4, 0.8), 0.1))
+
+
 TEMPLATES = {
+    "statement": Statement,
     "intro": Intro,
     "big_number": BigNumber,
     "bar_chart": BarChart,

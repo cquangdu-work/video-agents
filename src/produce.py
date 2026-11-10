@@ -25,6 +25,7 @@ SPEC_DIR = Path(__file__).resolve().parent.parent / "data" / "specs"
 
 # Tham số BẮT BUỘC của từng template — spec LLM sinh ra phải qua cửa này
 REQUIRED = {
+    "statement": ["text"],
     "big_number": ["title", "value"],
     "versus": ["title", "left", "right"],
     "bar_chart": ["title", "items"],

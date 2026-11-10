@@ -29,6 +29,27 @@ def similarity(a: str, b: str) -> float:
     return len(ta & tb) / len(ta | tb)
 
 
+def digit_set(text: str) -> set:
+    """Tập 'chuỗi chữ số' trong văn bản: '8.030 hệ thống, 29,3 tuổi' -> {'8030','293'}.
+    Dùng để bắt LLM bịa số: số trong spec phải có mặt trong kịch bản."""
+    return {re.sub(r"[.,\s]", "", m) for m in re.findall(r"\d[\d.,]*", text)}
+
+
+def digits_of(value) -> set:
+    """Các dạng chữ số hợp lệ của một giá trị, kể cả khi kịch bản viết '5 triệu'
+    còn spec viết 5000000 (thử chia 1 nghìn/triệu/tỷ)."""
+    out = set()
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return out
+    for scaled in (v, v / 1e3, v / 1e6, v / 1e9):
+        s = f"{scaled:.10g}"
+        if "e" not in s:
+            out.add(re.sub(r"[.,\s-]", "", s))
+    return out
+
+
 def extract_json(text: str):
     """LLM hay trả JSON kèm chữ thừa/markdown — hàm này móc khối JSON đầu tiên ra."""
     text = re.sub(r"```(?:json)?", "", text).strip("` \n")
