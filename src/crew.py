@@ -128,17 +128,22 @@ SCRIPT_MIN_SCENES, SCRIPT_MAX_SCENES = 12, 28
 SCRIPT_MIN_WORDS, SCRIPT_MAX_WORDS = 150, 280
 
 
+SCRIPT_MIN_NUMBERS = 4   # kênh "Thế giới qua con số" — lời đọc ít số là hỏng từ gốc
+
+
 def _script_stats(script: dict) -> tuple:
+    from .utils import digit_set
     scenes = script.get("scenes", [])
+    voice_all = " ".join(str(s.get("voice", "")) for s in scenes)
     words = sum(len(str(s.get("voice", "")).split()) for s in scenes)
-    return len(scenes), words
+    return len(scenes), words, len(digit_set(voice_all))
 
 
-def write_script(idea: dict, cfg: dict) -> dict:
+def write_script(idea: dict, cfg: dict, feedback: str = None) -> dict:
     """Viết kịch bản 60-90 giây + 3 phương án câu mở đầu.
 
-    Tự kiểm số cảnh/số từ; hụt chuẩn thì trả lại cho LLM viết lại 1 lần
-    kèm nhận xét cụ thể (giống biên tập viên trả bài).
+    Tự kiểm số cảnh/số từ; hụt chuẩn thì trả lại cho LLM viết lại 1 lần.
+    feedback: lỗi từ agent Kiểm chứng (luồng "sai thì trả về Biên kịch").
     """
     ch = cfg["channel"]
     base_description = f"""Viết kịch bản video dọc {ch['video_seconds_min']}-{ch['video_seconds_max']} giây
@@ -158,9 +163,19 @@ Yêu cầu CỨNG về cấu trúc (video đổi cảnh mỗi 2-4 giây):
   -> số liệu chính, mỗi con số một cảnh (8-14 cảnh) -> ngã rẽ/so sánh bất ngờ
   (2-3 cảnh) -> câu kết đọng lại (1-2 cảnh).
 - Mỗi cảnh kèm mô tả hình (biểu đồ gì, dữ liệu gì) + nguồn dữ liệu của cảnh đó.
+- GIÀU SỐ LIỆU: lời đọc toàn video phải chứa ÍT NHẤT 6 con số cụ thể lấy từ nguồn
+  (kênh tên là "{ch['name']}" — thiếu số là hỏng). LUÔN viết số bằng CHỮ SỐ
+  ("8.030", "38%", "15 tỷ"), không viết bằng chữ ("tám nghìn").
+- CẨN THẬN ĐƠN VỊ khi nguồn là tiếng Hàn/Anh: 만 = 10.000 (54만 = 540.000),
+  억 = 100 triệu; million = triệu, billion = tỷ. Quy đổi sai một bậc là tai nạn.
 - Viết 3 PHƯƠNG ÁN hook khác nhau, mỗi câu <= 15 từ.
 - Kết không kêu gọi hành động sáo rỗng.
 - Mọi con số trong lời đọc phải ghi rõ lấy từ nguồn nào."""
+    if feedback:
+        base_description += f"""
+
+AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — phải sửa đúng theo nguồn:
+{feedback}"""
     expected = """JSON object:
 {"hooks": ["...", "...", "..."],
  "scenes": [{"voice": "<1 câu lời đọc>", "visual": "<mô tả hình/biểu đồ>", "data_source": "<nguồn>"}],
@@ -172,16 +187,18 @@ Yêu cầu CỨNG về cấu trúc (video đổi cảnh mỗi 2-4 giây):
             role="Biên kịch video ngắn tiếng Việt",
             goal="Kịch bản cuốn hút, chính xác, dựng được bằng biểu đồ",
             description=description, expected_output=expected))
-        n, words = _script_stats(script)
-        if SCRIPT_MIN_SCENES <= n <= SCRIPT_MAX_SCENES and SCRIPT_MIN_WORDS <= words <= SCRIPT_MAX_WORDS:
+        n, words, numbers = _script_stats(script)
+        if (SCRIPT_MIN_SCENES <= n <= SCRIPT_MAX_SCENES
+                and SCRIPT_MIN_WORDS <= words <= SCRIPT_MAX_WORDS
+                and numbers >= SCRIPT_MIN_NUMBERS):
             return script
-        log.warning("Kịch bản hụt chuẩn (%d cảnh, %d từ) — trả lại viết lần %d",
-                    n, words, attempt + 2)
+        log.warning("Kịch bản hụt chuẩn (%d cảnh, %d từ, %d con số) — trả lại viết lần %d",
+                    n, words, numbers, attempt + 2)
         description = base_description + f"""
 
-BẢN NHÁP TRƯỚC BỊ TRẢ LẠI: chỉ có {n} cảnh và {words} từ lời đọc.
-Phải đạt 15-24 cảnh, tổng 170-240 từ. Tách mỗi ý thành một cảnh riêng,
-mỗi con số một cảnh, đừng gộp."""
+BẢN NHÁP TRƯỚC BỊ TRẢ LẠI: {n} cảnh, {words} từ, chỉ {numbers} con số trong lời đọc.
+Phải đạt 15-24 cảnh, 170-240 từ, và ÍT NHẤT 6 con số cụ thể viết bằng chữ số.
+Tách mỗi ý thành một cảnh riêng, mỗi con số một cảnh, đừng gộp."""
     log.warning("Vẫn hụt chuẩn sau 2 lần — dùng bản cuối")
     return script
 
@@ -274,9 +291,14 @@ Yêu cầu:
             role="Đạo diễn đồ họa dữ liệu",
             goal="Dịch kịch bản thành cảnh đồ họa, số liệu tuyệt đối trung thực",
             description=description, expected_output=expected))
+        # Đơn điệu chỉ tính trên các template SỐ LIỆU: kịch bản ít con số thì
+        # nhiều statement là đúng đắn, không được ép vẽ biểu đồ (sẽ sinh bịa số).
         counts = collections.Counter(s.get("template") for s in spec)
-        share = counts.most_common(1)[0][1] / max(len(spec), 1)
-        total = sum(float(s.get("seconds", 3)) for s in spec)
+        data_counts = {k: v for k, v in counts.items() if k not in ("statement", "intro")}
+        share = max(data_counts.values(), default=0) / max(len(spec), 1)
+        # Tính tổng bằng thời lượng ĐÃ KẸP 2-4s (chặn chiêu khai mỗi cảnh 8s cho đủ tổng)
+        s_lo, s_hi = pacing["scene_seconds_min"], pacing["scene_seconds_max"]
+        total = sum(min(s_hi, max(s_lo, float(s.get("seconds", 3)))) for s in spec)
         problems = []
         fakes = fabricated(spec)
         if fakes:

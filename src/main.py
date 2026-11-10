@@ -89,12 +89,19 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
     selected = sorted(selected, key=lambda i: -i["score"])[: cfg["daily"]["shortlist"]]
     log.info("Biên tập chọn %d ý tưởng", len(selected))
 
-    # --- Biên kịch + Kiểm chứng từng ý tưởng
+    # --- Biên kịch + Kiểm chứng từng ý tưởng (sai số liệu thì trả về viết lại 1 lần)
     sent = 0
     for idea in selected:
         script = crew.write_script(idea, cfg)
         source_text = fetch_page_text(idea["source_url"])
         fc = crew.fact_check(script, idea, source_text, cfg)
+        if not fc.get("pass"):
+            feedback = "\n".join(
+                f"- SAI: {v.get('claim', '')} -> {v.get('note', '')}"
+                for v in fc.get("verdicts", []) if not v.get("ok"))
+            log.warning("Kiểm chứng trượt — trả về Biên kịch viết lại:\n%s", feedback)
+            script = crew.write_script(idea, cfg, feedback=feedback)
+            fc = crew.fact_check(script, idea, source_text, cfg)
         status = "verified" if fc.get("pass") else "draft"
         db.save_script(con, idea["id"], script["hooks"],
                        yaml.safe_dump(script["scenes"], allow_unicode=True),
