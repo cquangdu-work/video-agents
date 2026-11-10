@@ -1,0 +1,52 @@
+# ============================================================
+# Bộ nhận diện kênh "Thế giới qua con số"
+# Tiêu chí: nhìn 1 giây là nhận ra kênh. Mọi template Manim đọc file này.
+# ============================================================
+
+# Bảng màu — nền tối, dữ liệu phát sáng (kiểu "đài quan sát ban đêm")
+colors:
+  background: "#0D1321"     # xanh đen thẫm — nền mọi cảnh
+  surface:    "#1D2D44"     # khối/thanh nền phụ
+  text:       "#F0EBD8"     # chữ chính (trắng ngà, dịu mắt)
+  muted:      "#748CAB"     # chữ phụ, trục, chú nguồn
+  accent:     "#FFB703"     # vàng hổ phách — SỐ LIỆU CHÍNH, điểm nhấn duy nhất
+  vietnam:    "#E63946"     # đỏ — chuỗi dữ liệu Việt Nam
+  korea:      "#457B9D"     # xanh — chuỗi dữ liệu Hàn Quốc
+  good:       "#2A9D8F"     # xanh ngọc — tăng/tốt
+  bad:        "#E76F51"     # cam đất — giảm/xấu
+
+# Font: phải có đủ dấu tiếng Việt + Hàn. Ưu tiên theo thứ tự, thiếu thì rơi xuống.
+# (Be Vietnam Pro = font mở OFL, sẽ cài vào máy/VM sau; Segoe UI/Malgun có sẵn Windows)
+fonts:
+  primary: ["Be Vietnam Pro", "Segoe UI", "Noto Sans", "Arial"]
+  number:  ["Be Vietnam Pro", "Segoe UI", "Noto Sans", "Arial"]  # số to dùng weight BOLD
+
+# Khung hình dọc 1080x1920, hệ tọa độ Manim: rộng 9 x cao 16
+frame:
+  pixel_width: 1080
+  pixel_height: 1920
+  frame_width: 9.0
+  frame_height: 16.0
+  fps: 30
+  # Vùng an toàn: tránh UI của YouTube/TikTok đè lên
+  margin_top: 2.2        # đơn vị Manim (tiêu đề bắt đầu dưới mức này)
+  margin_bottom: 3.0     # chừa chỗ phụ đề + thanh tiến trình nền tảng
+  subtitle_y: -5.2       # tâm khung phụ đề (giai đoạn 3 dùng)
+
+# Chữ ký hình ảnh xuất hiện ở MỌI cảnh -> nhận diện kênh
+signature:
+  grid: true             # lưới chấm mờ phía sau (kiểu giấy kẻ ô kỹ thuật)
+  grid_opacity: 0.13
+  source_label: true     # góc dưới luôn ghi "Nguồn: ..." — vừa nhận diện vừa đúng chính sách
+  watermark: "thegioiquaconso"
+
+# Intro 1 giây mở đầu mọi video
+intro:
+  seconds: 1.0
+  text: "THẾ GIỚI QUA CON SỐ"
+  style: "đếm số 0→1 kèm logo chữ, nền background, chữ accent"
+
+# Nhịp dựng (theo file công thức + CLAUDE.md)
+pacing:
+  scene_seconds_min: 2
+  scene_seconds_max: 4
