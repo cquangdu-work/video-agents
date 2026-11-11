@@ -149,14 +149,22 @@ def _script_one(crew, idea: dict, source_text: str, cfg: dict) -> tuple:
     Trả về (kịch bản, hồ sơ kiểm chứng, 'verified' | 'draft')."""
     script = crew.write_script(idea, cfg, source_text=source_text)
     fc = crew.fact_check(script, idea, source_text, cfg)
-    if not fc.get("pass"):
+    # Kiểm chứng bằng LLM chỉ soát các "claims" được khai; code tự soát TỪNG con số trong
+    # lời đọc xem có trong bài nguồn không (bắt kiểu hook "99% người..." tự chế)
+    unsourced = crew.unsourced_numbers(script, idea, source_text)
+    if not fc.get("pass") or unsourced:
         feedback = "\n".join(
-            f"- SAI: {v.get('claim', '')} -> {v.get('note', '')}"
-            for v in fc.get("verdicts", []) if not v.get("ok"))
+            [f"- SAI: {v.get('claim', '')} -> {v.get('note', '')}"
+             for v in fc.get("verdicts", []) if not v.get("ok")]
+            + [f"- BỊA SỐ: con số {n} trong lời đọc không có trong bài nguồn — bỏ đi hoặc"
+               f" thay bằng con số có thật trong nguồn" for n in unsourced])
         log.warning("Kiểm chứng trượt — trả về Biên kịch viết lại:\n%s", feedback)
         script = crew.write_script(idea, cfg, feedback=feedback, source_text=source_text)
         fc = crew.fact_check(script, idea, source_text, cfg)
+        unsourced = crew.unsourced_numbers(script, idea, source_text)
     problems = crew.script_problems(script, cfg)
+    if unsourced:
+        problems.append("con số không có trong bài nguồn: " + ", ".join(unsourced))
     if problems:
         # Ghi lý do vào hồ sơ kiểm chứng để về sau tra được vì sao kịch bản bị giữ lại
         fc["standard_problems"] = problems

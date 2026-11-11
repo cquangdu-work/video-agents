@@ -9,6 +9,7 @@ LLM lấy từ biến môi trường MODEL (chuẩn litellm, ví dụ gemini/gem
 import json
 import logging
 import os
+import re
 
 from .utils import extract_json
 
@@ -168,6 +169,47 @@ def _script_stats(script: dict) -> tuple:
     return len(scenes), words, len(digit_set(voice_all))
 
 
+def clean_spoken(text) -> str:
+    """Lời ĐỌC không được chứa thứ chỉ dành cho tiêu đề: hashtag, emoji, đuôi "| Tên kênh".
+    Biên kịch hay lẫn câu mở đầu với tiêu đề YouTube ("...môi trường! #Shorts") và giọng
+    đọc sẽ đọc cả "#Shorts" thành tiếng."""
+    text = str(text or "")
+    text = re.sub(r"\s*\|[^|]*$", "", text)                                  # "... | Thế giới qua con số"
+    text = re.sub(r"#\w+", "", text)                                         # #Shorts
+    text = re.sub(r"[\U0001F000-\U0001FAFF☀-➿️‍]", "", text)   # emoji
+    return " ".join(text.split())
+
+
+def unsourced_numbers(script: dict, idea: dict, source_text: str) -> list:
+    """Những con số trong lời đọc KHÔNG tìm thấy trong bài nguồn (kể cả tiêu đề, tóm tắt).
+
+    Agent Kiểm chứng chỉ soát danh sách "claims" do chính Biên kịch khai, nên con số bịa
+    đặt ở chỗ khác lọt lưới. Ca thật 12/11/2026: câu mở đầu "Sai lầm 99% người ăn chay
+    mắc phải..." — 11 con số còn lại đều có trong nguồn, riêng 99% là tự chế để câu view.
+    Ở đây code tự đối chiếu, không nhờ LLM:
+    - so theo chuỗi chữ số, bỏ dấu chấm/phẩy ("2.549,55" khớp "2,549.55");
+    - bỏ qua số 0 ở đuôi để chịu được quy đổi đơn vị ("540.000" khớp "54만", "5 triệu");
+    - số đếm thông thường từ 0 đến 10 (không kèm %) được miễn ("3 lý do", "2 nhóm").
+    """
+    from .utils import digit_set
+    have = digit_set(f"{source_text} {idea.get('title', '')} {idea.get('summary', '')}")
+    loose = {h.rstrip("0") for h in have}
+    voice = " ".join(str(s.get("voice", "")) for s in script.get("scenes", []))
+    out = []
+    for m in re.finditer(r"\d[\d.,]*\d|\d", voice):
+        raw = m.group(0)
+        percent = voice[m.end():m.end() + 1] == "%"
+        norm = re.sub(r"[.,]", "", raw)
+        if not percent and raw.isdigit() and int(raw) <= 10:
+            continue
+        if norm in have or (norm.rstrip("0") and norm.rstrip("0") in loose):
+            continue
+        shown = raw + ("%" if percent else "")
+        if shown not in out:
+            out.append(shown)
+    return out
+
+
 def as_script(obj) -> dict:
     """Đưa câu trả lời của LLM về đúng dạng {"hooks": [...], "scenes": [...], "claims": [...]}.
 
@@ -187,6 +229,9 @@ def as_script(obj) -> dict:
     for key in ("hooks", "claims"):
         if not isinstance(obj.get(key), list):
             obj[key] = []
+    for s in obj["scenes"]:                     # lời đọc sạch hashtag/emoji trước khi tới TTS
+        s["voice"] = clean_spoken(s.get("voice"))
+    obj["hooks"] = [clean_spoken(h) for h in obj["hooks"]]
     return obj
 
 
@@ -243,7 +288,10 @@ Yêu cầu CỨNG về cấu trúc (video đổi cảnh mỗi 2-4 giây):
   ("8.030", "38%", "15 tỷ"), không viết bằng chữ ("tám nghìn").
 - CẨN THẬN ĐƠN VỊ khi nguồn là tiếng Hàn/Anh: 만 = 10.000 (54만 = 540.000),
   억 = 100 triệu; million = triệu, billion = tỷ. Quy đổi sai một bậc là tai nạn.
-- Viết 3 PHƯƠNG ÁN hook khác nhau, mỗi câu <= 15 từ.
+- Viết 3 PHƯƠNG ÁN hook khác nhau, mỗi câu <= 15 từ. Hook là câu ĐỌC THÀNH TIẾNG, không
+  phải tiêu đề: không hashtag, không emoji, không kèm tên kênh.
+- TUYỆT ĐỐI không tự chế con số để giật gân ("99% người...", "9 trên 10 người...") — hook
+  cũng chỉ được dùng con số có trong bài nguồn. Máy sẽ đối chiếu TỪNG con số với nguồn.
 - Kết không kêu gọi hành động sáo rỗng.
 - Mọi con số trong lời đọc phải ghi rõ lấy từ nguồn nào."""
     if feedback:
@@ -443,7 +491,16 @@ không? Khẳng định nào không tìm thấy trong nguồn thì đánh dấu 
 {"verdicts": [{"claim": "...", "ok": true/false, "note": "<giải thích ngắn>"}],
  "pass": true/false}""",
     )
-    return extract_json(out)
+    try:
+        fc = extract_json(out)
+    except ValueError:
+        fc = None
+    if not isinstance(fc, dict):                # model trả sai khuôn = CHƯA kiểm chứng được
+        return {"pass": False, "verdicts": [], "note": "Agent Kiểm chứng trả lời sai khuôn"}
+    if not isinstance(fc.get("verdicts"), list):
+        fc["verdicts"] = []
+    fc["verdicts"] = [v for v in fc["verdicts"] if isinstance(v, dict)]
+    return fc
 
 
 # ------------------------------------------------------------------ Đăng bài

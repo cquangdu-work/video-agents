@@ -84,6 +84,34 @@ class ScriptStandardTest(unittest.TestCase):
         self.assertEqual(got["scenes"], [])
         self.assertTrue(crew.script_problems(got, CFG))          # rỗng = hụt chuẩn, không lọt đi dựng
 
+    def test_every_spoken_number_must_come_from_the_source(self):
+        idea = {"title": "두부 36점, 체더치즈 13점", "summary": "폭염 사망 54만 명"}
+        source = "Tofu scored 36 of 40. Beef emits 64.19kg, tofu 0.61kg. Sodium: 2,549.55mg per 100g."
+        say = lambda *lines: {"scenes": [{"voice": l} for l in lines]}
+        ok = say("Trên thang 40 điểm, đậu hũ đạt 36 điểm, Cheddar chỉ 13.",
+                 "Thịt bò thải 64,19kg, đậu hũ 0,61kg; natri tới 2.549,55mg trong 100g.",
+                 "Có 3 lý do, và 540.000 người chịu ảnh hưởng.")          # 54만 = 540.000
+        self.assertEqual(crew.unsourced_numbers(ok, idea, source), [])
+        bad = say("Sai lầm 99% người ăn chay mắc phải!", "Đậu hũ đạt 36 điểm, tăng 25 bậc.",
+                  "Và 99% vẫn chưa biết.")
+        self.assertEqual(crew.unsourced_numbers(bad, idea, source), ["99%", "25"])
+
+    def test_spoken_lines_are_stripped_of_hashtags_emoji_and_channel_tail(self):
+        self.assertEqual(crew.clean_spoken("Sai lầm khi chọn đạm! #Shorts"), "Sai lầm khi chọn đạm!")
+        self.assertEqual(crew.clean_spoken("Vì sao đậu hũ thắng thịt bò? 🧐 | Thế giới qua con số"),
+                         "Vì sao đậu hũ thắng thịt bò?")
+        got = crew.as_script({"hooks": ["Hook #Shorts"], "scenes": [{"voice": "Câu 1 🔥 #viral"}]})
+        self.assertEqual((got["hooks"], got["scenes"][0]["voice"]), (["Hook"], "Câu 1"))
+
+    def test_fact_checker_answer_in_the_wrong_shape_counts_as_not_verified(self):
+        for answer in ('["ok"]', "Tôi nghĩ là đúng.", '{"pass": true, "verdicts": "tất cả ổn"}'):
+            with mock.patch.object(crew, "_run_single_task", lambda **kw: answer):
+                fc = crew.fact_check(script(), {"source_url": "https://x"}, "nguồn", CFG)
+            self.assertIsInstance(fc["verdicts"], list)
+        self.assertFalse(crew.fact_check.__doc__ is None)
+        with mock.patch.object(crew, "_run_single_task", lambda **kw: '["ok"]'):
+            self.assertFalse(crew.fact_check(script(), {"source_url": "u"}, "n", CFG)["pass"])
+
     def test_hunter_is_told_how_many_numbers_each_idea_has(self):
         seen = []
         raw = [{"id": 1, "source_name": "OWID", "lang": "en", "title": "540.000 deaths a year",
@@ -110,16 +138,22 @@ class StandardGateTest(unittest.TestCase):
             for i, w in enumerate(["alpha", "beta", "gamma", "delta", "epsilon"])])
         self.ids = [r["id"] for r in self.con.execute("SELECT id FROM ideas ORDER BY id")]
 
-    def run_agents(self, bad_ideas, crash=(), no_source=()):
+    SOURCE = "toàn văn bài nguồn có các số 1000, 1001, 1002, 1003, 1004 và 1005"
+
+    def run_agents(self, bad_ideas, crash=(), no_source=(), invents=(), keeps_inventing=()):
         from src import main, page_text
-        written = []
+        written, self.feedback = [], []
 
         def write(idea, cfg, feedback=None, source_text=""):
             written.append(idea["id"])
-            assert source_text == "toàn văn"                     # bài nguồn được tải TRƯỚC khi viết
+            self.feedback.append(feedback)
+            assert source_text == self.SOURCE                    # bài nguồn được tải TRƯỚC khi viết
             if idea["id"] in crash:
                 raise RuntimeError("Mọi model đều quá tải")
-            return dict(script(numbers=2 if idea["id"] in bad_ideas else 6))
+            s = script(numbers=2 if idea["id"] in bad_ideas else 6)
+            if idea["id"] in keeps_inventing or (idea["id"] in invents and not feedback):
+                s["scenes"][-1]["voice"] = "Sai lầm 99% người mắc phải " + "từ " * 9
+            return s
         url_of = {f"https://s/{n}": i for n, i in enumerate(self.ids)}
         patches = [
             mock.patch.object(crew, "hunt_ideas",
@@ -129,7 +163,7 @@ class StandardGateTest(unittest.TestCase):
             mock.patch.object(crew, "write_script", write),
             mock.patch.object(crew, "fact_check", lambda *a: {"pass": True, "verdicts": []}),
             mock.patch.object(page_text, "fetch_page_text",
-                              lambda url: "" if url_of[url] in no_source else "toàn văn"),
+                              lambda url: "" if url_of[url] in no_source else self.SOURCE),
             mock.patch.object(main, "count_popular_vietnamese_videos", lambda *a: None),
             mock.patch("builtins.print"),
         ]
@@ -154,6 +188,16 @@ class StandardGateTest(unittest.TestCase):
         reasons = dict(self.con.execute("SELECT id, reject_reason FROM ideas WHERE status='rejected'"))
         self.assertIn("quá tải", reasons[a])
         self.assertEqual(reasons[b], "Không tải được bài nguồn")
+
+    def test_invented_number_is_sent_back_and_blocks_the_script_if_it_stays(self):
+        # Ca thật trên VM: hook "Sai lầm 99% người ăn chay mắc phải" — Kiểm chứng LLM cho qua
+        a, b, c, d, e = self.ids
+        written, statuses, rows = self.run_agents(bad_ideas=set(), invents={a}, keeps_inventing={b})
+        self.assertEqual(written, [a, a, b, b, c])               # a, b mỗi cái bị trả lại viết lần 2
+        self.assertIn("BỊA SỐ: con số 99%", self.feedback[1])
+        self.assertEqual(statuses, [(a, "verified"), (b, "draft"), (c, "verified")])
+        self.assertIn("con số không có trong bài nguồn: 99%",
+                      json.loads(rows[1]["factcheck"])["standard_problems"])
 
     def test_no_extra_llm_calls_when_first_scripts_are_good(self):
         written, statuses, _ = self.run_agents(bad_ideas=set())
