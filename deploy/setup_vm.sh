@@ -68,7 +68,9 @@ echo
 echo "== 5/5 Cài lịch chạy (systemd cấp người dùng) =="
 UNIT_DIR="$HOME/.config/systemd/user"
 mkdir -p "$UNIT_DIR"
-for f in video-agents-daily.service video-agents-daily.timer video-agents-review.service \
+for f in video-agents-daily.service video-agents-daily.timer \
+         video-agents-daily-retry.service video-agents-daily-retry.timer \
+         video-agents-review.service \
          video-agents-weekly.service video-agents-weekly.timer; do
     sed "s|@REPO@|$REPO|g" "deploy/$f" > "$UNIT_DIR/$f"
 done
@@ -87,10 +89,10 @@ XONG PHẦN CÀI ĐẶT. Chưa có gì tự chạy. Làm lần lượt:
        venv/bin/python -m src.daily --skip-ideas
   2. Bật bot chờ duyệt (chạy suốt):
        systemctl --user enable --now video-agents-review.service
-  3. Khi đã ưng, bật lịch chạy mỗi sáng và báo cáo mỗi Chủ nhật:
-       systemctl --user enable --now video-agents-daily.timer video-agents-weekly.timer
+  3. Khi đã ưng, bật lịch: mỗi sáng 06:00, chạy bù 17:40 (khi sáng hết quota), báo cáo Chủ nhật:
+       systemctl --user enable --now video-agents-daily.timer video-agents-daily-retry.timer video-agents-weekly.timer
 
   Xem lịch:   systemctl --user list-timers
   Xem log:    journalctl --user -u video-agents-daily -n 50     (và thư mục logs/)
-  Tắt hết:    systemctl --user disable --now video-agents-daily.timer video-agents-weekly.timer video-agents-review.service
+  Tắt hết:    systemctl --user disable --now video-agents-daily.timer video-agents-daily-retry.timer video-agents-weekly.timer video-agents-review.service
 MSG

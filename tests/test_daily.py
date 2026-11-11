@@ -26,6 +26,7 @@ class DailyCase(unittest.TestCase):
         root = Path(self.tmp.name)
         (root / "output").mkdir(); (root / "specs").mkdir()
         for target, attr, val in [(db, "DB_PATH", root / "t.db"), (daily, "OUTPUT", root / "output"),
+                                  (daily, "LOCK", root / "daily.lock"),
                                   (daily, "SPEC_DIR", root / "specs"), (daily, "LOG_DIR", root / "logs"),
                                   (daily, "load_config", lambda: CFG)]:
             p = mock.patch.object(target, attr, val); p.start(); self.addCleanup(p.stop)
@@ -101,6 +102,30 @@ class PickTest(DailyCase):
 
 
 class RunTest(DailyCase):
+    def test_a_day_is_a_calendar_day_in_korea_not_a_rolling_window(self):
+        vid = db.upsert_video(self.con, 1, "f.mp4", "T", "D", [], [])
+        db.update_video(self.con, vid, tg_message_id=10)
+        at = lambda iso_utc: datetime.fromisoformat(iso_utc)
+        # video ra lúc 18:10 giờ Hàn ngày 11 (lượt chạy bù buổi chiều)
+        self.con.execute("UPDATE videos SET created_at='2026-11-11T09:10:00+00:00'")
+        self.con.commit()
+        self.assertEqual(daily.videos_made_today(self.con, CFG, at("2026-11-11T14:00:00+00:00")), 1)  # 23:00 cùng ngày
+        self.assertEqual(daily.videos_made_today(self.con, CFG, at("2026-11-11T21:00:00+00:00")), 0)  # 06:00 hôm sau
+        # video ra lúc 06:30 giờ Hàn -> lượt chạy bù 17:40 cùng ngày không làm thêm
+        self.con.execute("UPDATE videos SET created_at='2026-11-10T21:30:00+00:00'")
+        self.con.commit()
+        self.assertEqual(daily.videos_made_today(self.con, CFG, at("2026-11-11T08:40:00+00:00")), 1)
+
+    def test_second_run_at_the_same_time_backs_off(self):
+        self.script(1, 26.5)
+        self.assertTrue(daily.acquire_lock())            # một lượt khác đang chạy
+        self.assertEqual(daily.run_daily(skip_ideas=True, runner=self.runner()), 0)
+        self.assertEqual(self.ran, [])
+        self.assertTrue(daily.LOCK.exists())             # không được xoá khoá của lượt kia
+        os.utime(daily.LOCK, (0, 0))                     # khoá từ năm 1970 = lượt trước chết giữa chừng
+        self.assertEqual(daily.run_daily(skip_ideas=True, runner=self.runner()), 1)
+        self.assertFalse(daily.LOCK.exists())            # chạy xong thì nhả khoá
+
     def test_happy_path_makes_one_video_then_stops_for_the_day(self):
         self.script(1, 26.5); self.script(2, 25.5)
         self.assertEqual(daily.run_daily(runner=self.runner()), 1)

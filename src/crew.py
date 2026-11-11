@@ -134,7 +134,18 @@ CÔNG THỨC rút từ video ăn khách của các kênh cùng mảng (áp dụn
 # ------------------------------------------------------------------ Biên kịch
 # Khoảng chấp nhận: video đổi cảnh 2-4s -> 60-90s cần cỡ 15-24 cảnh.
 SCRIPT_MIN_SCENES, SCRIPT_MAX_SCENES = 12, 28
-SCRIPT_MIN_WORDS, SCRIPT_MAX_WORDS = 150, 280
+WORDS_PER_SECOND = 3.4   # ĐO THẬT 11/2026 trên 3 video (giọng Gemini, tiếng Việt, tính cả
+                         # nghỉ giữa câu): 3,2-3,5 từ/giây. Số cũ 2,7 làm video hụt ~20%.
+
+
+def words_per_second(cfg: dict) -> float:
+    return float(cfg.get("pacing", {}).get("words_per_second", WORDS_PER_SECOND))
+
+
+def word_budget(cfg: dict) -> tuple:
+    """(ít nhất, nhiều nhất) số từ lời đọc để video dài đúng video_seconds_min..max."""
+    ch, wps = cfg["channel"], words_per_second(cfg)
+    return int(ch["video_seconds_min"] * wps), int(ch["video_seconds_max"] * wps)
 
 
 SCRIPT_MIN_NUMBERS = 4   # kênh "Thế giới qua con số" — lời đọc ít số là hỏng từ gốc
@@ -155,8 +166,9 @@ def write_script(idea: dict, cfg: dict, feedback: str = None) -> dict:
     feedback: lỗi từ agent Kiểm chứng (luồng "sai thì trả về Biên kịch").
     """
     ch = cfg["channel"]
+    lo_words, hi_words = word_budget(cfg)
     base_description = f"""Viết kịch bản video dọc {ch['video_seconds_min']}-{ch['video_seconds_max']} giây
-cho kênh "{ch['name']}". Tốc độ đọc ~160 từ/phút -> TỔNG LỜI ĐỌC PHẢI ĐẠT 170-240 từ.
+cho kênh "{ch['name']}". Tốc độ đọc ~{words_per_second(cfg) * 60:.0f} từ/phút -> TỔNG LỜI ĐỌC PHẢI ĐẠT {lo_words}-{hi_words} từ.
 
 Ý tưởng: {idea['title']}
 Góc: {idea['angle']}
@@ -167,7 +179,7 @@ Luật chính sách (bắt buộc tuân thủ): {cfg['policy_rules']}
 {_formula_block()}
 
 Yêu cầu CỨNG về cấu trúc (video đổi cảnh mỗi 2-4 giây):
-- Chia thành 15-24 CẢNH. Mỗi cảnh đúng 1 câu lời đọc NGẮN (7-15 từ).
+- Chia thành 16-26 CẢNH. Mỗi cảnh đúng 1 câu lời đọc NGẮN (8-15 từ).
 - Cảnh 1 chính là hook. Dàn bài: hook (1 cảnh) -> mở vấn đề (2-3 cảnh)
   -> số liệu chính, mỗi con số một cảnh (8-14 cảnh) -> ngã rẽ/so sánh bất ngờ
   (2-3 cảnh) -> câu kết đọng lại (1-2 cảnh).
@@ -197,8 +209,9 @@ AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — 
             goal="Kịch bản cuốn hút, chính xác, dựng được bằng biểu đồ",
             description=description, expected_output=expected))
         n, words, numbers = _script_stats(script)
+        # Cho lệch một chút quanh ngân sách từ: hụt 10% hay dư 5% vẫn ra video đúng cỡ
         if (SCRIPT_MIN_SCENES <= n <= SCRIPT_MAX_SCENES
-                and SCRIPT_MIN_WORDS <= words <= SCRIPT_MAX_WORDS
+                and 0.9 * lo_words <= words <= 1.05 * hi_words
                 and numbers >= SCRIPT_MIN_NUMBERS):
             return script
         log.warning("Kịch bản hụt chuẩn (%d cảnh, %d từ, %d con số) — trả lại viết lần %d",
@@ -206,7 +219,7 @@ AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — 
         description = base_description + f"""
 
 BẢN NHÁP TRƯỚC BỊ TRẢ LẠI: {n} cảnh, {words} từ, chỉ {numbers} con số trong lời đọc.
-Phải đạt 15-24 cảnh, 170-240 từ, và ÍT NHẤT 6 con số cụ thể viết bằng chữ số.
+Phải đạt 16-26 cảnh, {lo_words}-{hi_words} từ, và ÍT NHẤT 6 con số cụ thể viết bằng chữ số.
 Tách mỗi ý thành một cảnh riêng, mỗi con số một cảnh, đừng gộp."""
     log.warning("Vẫn hụt chuẩn sau 2 lần — dùng bản cuối")
     return script
@@ -243,7 +256,7 @@ def design_scenes(idea: dict, scenes: list, cfg: dict) -> list:
         for i, s in enumerate(scenes)
     )
     total_words = sum(len(str(s.get("voice", "")).split()) for s in scenes)
-    target_secs = total_words / 2.7          # tốc độ đọc ~2.7 từ/giây
+    target_secs = total_words / words_per_second(cfg)
     lo_total, hi_total = int(target_secs * 0.75), int(target_secs * 1.25)
 
     base_description = f"""Video của kênh "{cfg['channel']['name']}", ý tưởng: {idea['title']}

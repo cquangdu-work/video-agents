@@ -21,6 +21,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -36,6 +37,7 @@ CONFIG_PATH = ROOT / "config" / "channel.yaml"
 SPEC_DIR = ROOT / "data" / "specs"
 OUTPUT = ROOT / "output"
 LOG_DIR = ROOT / "logs"
+LOCK = ROOT / "data" / "daily.lock"
 
 MAX_FAILS_PER_SCRIPT = 2          # kịch bản dựng hỏng 2 lần thì thôi không thử nữa
 EXIT_RETRY_LATER = 75             # bước con thoát mã này = "lỗi tạm thời của dịch vụ ngoài"
@@ -51,9 +53,17 @@ def final_path(script_id: int) -> Path:
     return OUTPUT / f"final_{script_id}.mp4"
 
 
-def videos_made_since(con, hours: float = 20, now: datetime = None) -> int:
-    """Số video đã gửi duyệt trong N giờ qua — để chạy lại trong ngày không làm dư."""
-    since = ((now or datetime.now(timezone.utc)) - timedelta(hours=hours)).isoformat(timespec="seconds")
+def videos_made_today(con, cfg: dict, now: datetime = None) -> int:
+    """Số video đã gửi duyệt trong NGÀY hôm nay theo giờ của Du (daily.utc_offset_hours,
+    Hàn = +9) — để chạy lại trong ngày không làm dư.
+
+    Đếm theo ngày lịch chứ không theo "N giờ qua": hôm nào video ra muộn (lượt chạy
+    bù buổi chiều vì sáng hết quota) thì sáng hôm sau vẫn phải làm video mới.
+    """
+    tz = timezone(timedelta(hours=float(cfg["daily"].get("utc_offset_hours", 9))))
+    local = (now or datetime.now(timezone.utc)).astimezone(tz)
+    midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    since = midnight.astimezone(timezone.utc).isoformat(timespec="seconds")
     # Chỉ tính video ĐÃ TỚI Telegram (có tg_message_id); gửi hụt thì không tính
     return con.execute("SELECT COUNT(*) FROM videos WHERE created_at >= ?"
                        " AND tg_message_id IS NOT NULL", (since,)).fetchone()[0]
@@ -150,13 +160,37 @@ def run_step(name: str, key: str, args: list, log_file: Path) -> tuple:
     return False, f"{why}\n" + "\n".join(lines[-6:])
 
 
+def acquire_lock(max_age_hours: float = 5) -> bool:
+    """Một lúc chỉ MỘT lượt daily. Hai lượt chạy chồng (timer + gõ tay, hoặc hai phiên
+    làm việc cùng lúc) sẽ ghi đè file giọng của nhau và đốt quota gấp đôi.
+    Khoá cũ hơn max_age_hours coi như lượt trước chết giữa chừng -> dọn đi."""
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        if time.time() - LOCK.stat().st_mtime > max_age_hours * 3600:
+            LOCK.unlink()
+    except OSError:
+        pass                                    # chưa có khoá: bình thường
+    try:
+        fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    os.write(fd, str(os.getpid()).encode())
+    os.close(fd)
+    return True
+
+
 def run_daily(skip_ideas: bool = False, dry_run: bool = False, runner=run_step) -> int:
     """Trả về số video đã gửi duyệt trong lượt chạy này."""
+    if not dry_run and not acquire_lock():
+        log.warning("Đang có một lượt daily khác chạy (%s) — lượt này thoát.", LOCK)
+        return 0
     cfg, con = load_config(), db.connect()
     try:
         return _run_daily(cfg, con, skip_ideas, dry_run, runner)
     finally:
         con.close()      # Windows: kết nối mở giữ khóa file DB
+        if not dry_run:
+            LOCK.unlink(missing_ok=True)
 
 
 def _run_daily(cfg, con, skip_ideas, dry_run, runner) -> int:
@@ -164,7 +198,7 @@ def _run_daily(cfg, con, skip_ideas, dry_run, runner) -> int:
     LOG_DIR.mkdir(exist_ok=True)
     log_file = LOG_DIR / f"daily_{datetime.now():%Y-%m-%d}.log"
 
-    already = videos_made_since(con)
+    already = videos_made_today(con, cfg)
     if already >= want:
         log.info("Hôm nay đã gửi duyệt %d video — không làm thêm.", already)
         return 0

@@ -1,0 +1,11 @@
+# Hẹn giờ lượt chạy bù. Quota ngày của Gemini hồi lúc nửa đêm giờ Thái Bình Dương
+# = 16:00 (mùa hè) hoặc 17:00 (mùa đông) giờ Hàn -> 17:40 là chắc chắn đã hồi.
+[Unit]
+Description=video-agents: hen gio chay bu buoi chieu
+
+[Timer]
+OnCalendar=*-*-* 17:40:00 Asia/Seoul
+Persistent=true
+
+[Install]
+WantedBy=timers.target

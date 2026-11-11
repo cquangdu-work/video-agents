@@ -1,0 +1,15 @@
+# Lượt chạy BÙ buổi chiều: nếu sáng nay chưa gửi được video (thường vì hết quota giọng
+# đọc) thì làm tiếp từ chỗ dừng. Sáng đã gửi rồi thì lệnh này tự thoát, không làm gì.
+# --skip-ideas: không săn ý tưởng lại, dùng kịch bản lượt sáng đã viết.
+[Unit]
+Description=video-agents: chay bu buoi chieu (khi sang het quota)
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+ExecStart=@REPO@/venv/bin/python -m src.daily --skip-ideas
+Environment=PYTHONUNBUFFERED=1
+Nice=10
+MemoryHigh=5G
+MemoryMax=7G
+TimeoutStartSec=4h
