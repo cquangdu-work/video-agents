@@ -76,8 +76,14 @@ class PickTest(DailyCase):
     def test_plan_skips_done_work(self):
         names = lambda sid: [s[1] for s in daily.plan_steps(sid)]
         self.assertEqual(names(1), ["produce", "assemble", "review"])
-        (self.root / "specs" / "script_1.yaml").write_text("[]")
-        self.assertEqual(names(1), ["assemble", "review"])          # không sinh lại spec
+        # Spec đời cũ KHÔNG có 'voice' -> video sẽ câm -> phải sinh lại
+        (self.root / "specs" / "script_1.yaml").write_text(
+            "- template: statement\n  params: {text: x}\n", encoding="utf-8")
+        self.assertEqual(names(1), ["produce", "assemble", "review"])
+        # Spec có lời đọc -> dùng lại, không sinh lại (giữ cache giọng)
+        (self.root / "specs" / "script_1.yaml").write_text(
+            "- template: statement\n  voice: xin chào\n  params: {text: x}\n", encoding="utf-8")
+        self.assertEqual(names(1), ["assemble", "review"])
         (self.root / "output" / "final_1.mp4").write_bytes(b"x")
         self.assertEqual(names(1), ["review"])
 

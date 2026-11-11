@@ -52,7 +52,12 @@ def main():
     from .render.engine import concat, render_scene
 
     # ---- 1. TTS từng cảnh, chỉnh thời lượng cảnh theo giọng
+    voiced = sum(1 for sc in spec if (sc.get("voice") or "").strip())
+    if voiced == 0:
+        sys.exit(f"Spec {spec_path.name} không có trường 'voice' ở cảnh nào (spec đời cũ)."
+                 f" Sinh lại: python -m src.produce {args.script_id} --spec-only")
     audio_dir = RENDER / f"audio_{args.script_id}"
+    audio_dir.mkdir(parents=True, exist_ok=True)   # cảnh không lời vẫn cần ghi file đệm
     for i, sc in enumerate(spec):
         voice = (sc.get("voice") or "").strip()
         if not voice:

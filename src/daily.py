@@ -83,15 +83,27 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     return sorted(out, key=lambda c: (not c["has_final"], -c["score"], -c["id"]))
 
 
+def _spec_usable(path: Path) -> bool:
+    """Spec dùng được = tồn tại VÀ có lời đọc (spec đời cũ không có 'voice'
+    sẽ cho ra video câm — phải sinh lại)."""
+    if not path.exists():
+        return False
+    try:
+        spec = yaml.safe_load(path.read_text(encoding="utf-8")) or []
+        return any((sc.get("voice") or "").strip() for sc in spec)
+    except Exception:
+        return False
+
+
 def plan_steps(script_id: int) -> list:
     """Các bước còn phải chạy cho một kịch bản: [(tên, khoá timeout, tham số python)].
 
-    Spec đã có thì KHÔNG sinh lại: assemble giữ cache giọng đọc theo thứ tự cảnh,
-    spec mới + giọng cũ sẽ lệch nhau.
+    Spec đã có (và dùng được) thì KHÔNG sinh lại: assemble giữ cache giọng đọc
+    theo thứ tự cảnh, spec mới + giọng cũ sẽ lệch nhau.
     """
     sid, steps = str(script_id), []
     if not final_path(script_id).exists():
-        if not (SPEC_DIR / f"script_{sid}.yaml").exists():
+        if not _spec_usable(SPEC_DIR / f"script_{sid}.yaml"):
             steps.append(("Dựng spec cảnh", "produce", ["-m", "src.produce", sid, "--spec-only"]))
         steps.append(("Lắp ráp video", "assemble", ["-m", "src.assemble", sid]))
     steps.append(("Kiểm định + gửi duyệt", "review", ["-m", "src.review", "send", sid]))

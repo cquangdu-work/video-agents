@@ -21,37 +21,51 @@ log = logging.getLogger(__name__)
 STYLE = ""
 
 
+def _model_chain() -> list:
+    """Model chính + dự phòng. Free tier giới hạn quota THEO NGÀY cho TỪNG model,
+    nên khi một model cạn (429 dai dẳng) thì nhảy sang model khác, bucket khác."""
+    chain = [os.getenv("TTS_MODEL", "gemini-3.8-flash-lite-tts")]
+    chain += [m.strip() for m in os.getenv("TTS_MODEL_FALLBACKS", "").split(",") if m.strip()]
+    return chain
+
+
 def synth(text: str, out_path: Path) -> Path:
-    """Một câu/đoạn -> file WAV. Tự thử lại khi quá tải (503/429)."""
-    model = os.getenv("TTS_MODEL", "gemini-3.8-flash-tts")
+    """Một câu/đoạn -> file WAV. Thử lại khi quá tải; cạn quota thì đổi model dự phòng.
+
+    Các model cùng tên giọng (TTS_VOICE) nghe gần nhau nhưng không giống hệt —
+    một video lỡ trộn 2 model vẫn nghe ổn, có log warning để biết mà nghe lại kỹ.
+    """
     voice = os.getenv("TTS_VOICE", "Kore")
     key = os.getenv("GEMINI_API_KEY")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    body = {
-        "contents": [{"parts": [{"text": STYLE + text}]}],
-        "generationConfig": {
-            "responseModalities": ["AUDIO"],
-            "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}},
-        },
-    }
     last = None
-    for attempt in range(6):
-        try:
-            r = requests.post(url, params={"key": key}, json=body, timeout=120)
-            if r.status_code in (429, 503):
-                raise RuntimeError(f"HTTP {r.status_code}")
-            r.raise_for_status()
-            part = r.json()["candidates"][0]["content"]["parts"][0]["inlineData"]
-            audio = base64.b64decode(part["data"])
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_bytes(audio)        # mimeType là audio/wav sẵn
-            return out_path
-        except Exception as exc:
-            last = exc
-            wait = 45 * (attempt + 1)          # free tier TTS giới hạn ~vài lần/phút
-            log.warning("TTS lỗi (%s) — chờ %ds thử lại", exc, wait)
-            time.sleep(wait)
-    raise RuntimeError(f"TTS thất bại sau 6 lần: {last}")
+    for mi, model in enumerate(_model_chain()):
+        if mi:
+            log.warning("TTS chuyển sang model dự phòng: %s", model)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        body = {
+            "contents": [{"parts": [{"text": STYLE + text}]}],
+            "generationConfig": {
+                "responseModalities": ["AUDIO"],
+                "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}},
+            },
+        }
+        for attempt in range(3):
+            try:
+                r = requests.post(url, params={"key": key}, json=body, timeout=120)
+                if r.status_code in (429, 503):
+                    raise RuntimeError(f"HTTP {r.status_code}")
+                r.raise_for_status()
+                part = r.json()["candidates"][0]["content"]["parts"][0]["inlineData"]
+                audio = base64.b64decode(part["data"])
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path.write_bytes(audio)        # mimeType là audio/wav sẵn
+                return out_path
+            except Exception as exc:
+                last = exc
+                wait = 45 * (attempt + 1)          # 429 nhất thời thì chờ là qua
+                log.warning("TTS %s lỗi (%s) — chờ %ds thử lại", model, exc, wait)
+                time.sleep(wait)
+    raise RuntimeError(f"TTS thất bại trên mọi model: {last}")
 
 
 def wav_duration(path: Path) -> float:
