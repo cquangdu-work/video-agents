@@ -106,9 +106,17 @@ def synth(text: str, out_path: Path) -> Path:
                 time.sleep(wait)
                 continue
             if r.status_code == 200:
-                part = r.json()["candidates"][0]["content"]["parts"][0]["inlineData"]
+                try:
+                    part = r.json()["candidates"][0]["content"]["parts"][0]["inlineData"]
+                    audio = base64.b64decode(part["data"])             # audio/wav sẵn
+                except (KeyError, IndexError, TypeError, ValueError):
+                    # Thỉnh thoảng model trả 200 mà không kèm âm thanh -> thử lại như quá tải
+                    last = f"{model}: trả về 200 nhưng không có âm thanh"
+                    log.warning("TTS %s không trả âm thanh — chờ %ds thử lại", model, wait)
+                    time.sleep(wait)
+                    continue
                 out_path.parent.mkdir(parents=True, exist_ok=True)
-                out_path.write_bytes(base64.b64decode(part["data"]))   # audio/wav sẵn
+                out_path.write_bytes(audio)
                 return out_path
             if r.status_code == 429:
                 daily, delay, note = _quota_info(r)

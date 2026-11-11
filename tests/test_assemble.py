@@ -123,6 +123,12 @@ class TtsQuotaTest(TtsCase):
         self.assertNotIsInstance(cm.exception, tts.QuotaExhausted)
         self.assertEqual(self.calls, ["lite"] + ["main"] * 3 + ["old"])   # 4xx không thử lại
 
+    def test_empty_200_answer_is_retried_instead_of_crashing(self):
+        self.post({"lite": [resp(200, {"candidates": [{"finishReason": "OTHER"}]}), OK]})
+        tts.synth("xin chào", self.out)
+        self.assertEqual(self.calls, ["lite", "lite"])
+        self.assertEqual(self.out.read_bytes(), b"RIFFdata")
+
     def test_network_error_does_not_leak_api_key_into_log(self):
         boom = tts.requests.ConnectionError("https://x/models/lite:generateContent?key=SECRET")
         with mock.patch.object(tts.requests, "post", side_effect=boom), \
