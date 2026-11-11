@@ -74,6 +74,7 @@ daily:
   max_attempts: 2       # kịch bản đầu dựng hỏng thì thử kịch bản kế, tối đa bấy nhiêu lần
   max_script_age_days: 3   # kịch bản cũ hơn thế thì bỏ (số liệu "mới" đã nguội)
   min_script_words: 165    # lời đọc ít hơn thế (~48 giây) thì bỏ: video sẽ rớt Kiểm định độ dài
+  min_script_numbers: 4    # lời đọc có ít con số hơn thế thì bỏ: video sẽ toàn cảnh chữ
 
 # ---------- Nhịp video ----------
 pacing:

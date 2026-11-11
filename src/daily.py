@@ -78,6 +78,16 @@ def script_words(body: str) -> int:
         return 0
 
 
+def script_numbers(body: str) -> int:
+    """Số con số KHÁC NHAU viết bằng chữ số trong lời đọc của một kịch bản."""
+    from .utils import digit_set
+    try:
+        scenes = yaml.safe_load(body or "") or []
+        return len(digit_set(" ".join(str(s.get("voice", "")) for s in scenes)))
+    except Exception:
+        return 0
+
+
 def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     """Kịch bản đủ điều kiện dựng, theo thứ tự ưu tiên. Trả về [{"id", "score", "has_final"}].
 
@@ -87,6 +97,7 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     """
     max_age = cfg["daily"].get("max_script_age_days", 3)
     min_words = cfg["daily"].get("min_script_words", 150)
+    min_numbers = cfg["daily"].get("min_script_numbers", 4)
     since = ((now or datetime.now(timezone.utc)) - timedelta(days=max_age)).isoformat(timespec="seconds")
     rows = con.execute(
         "SELECT s.id, s.body, i.scores FROM scripts s JOIN ideas i ON i.id = s.idea_id"
@@ -103,6 +114,12 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
             # Chặn TRƯỚC khi tốn quota giọng đọc + công dựng: kịch bản đời cũ (3 cảnh,
             # ~115 từ) cho ra video ~40 giây, kiểu gì cũng rớt Kiểm định độ dài.
             log.info("Bỏ qua kịch bản #%d: lời đọc chỉ %d từ (cần ≥ %d)", r["id"], words, min_words)
+            continue
+        numbers = script_numbers(r["body"])
+        if numbers < min_numbers:
+            # Kênh "qua con số": kịch bản 1-2 con số dựng ra toàn cảnh chữ, không có biểu đồ
+            log.info("Bỏ qua kịch bản #%d: lời đọc chỉ có %d con số (cần ≥ %d)",
+                     r["id"], numbers, min_numbers)
             continue
         try:
             score = float(json.loads(r["scores"] or "{}").get("total", 0))
