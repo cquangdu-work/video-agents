@@ -81,8 +81,30 @@ class SubtitleChunkTest(unittest.TestCase):
         words = (spread("Đừng vội kết nối AI với công việc văn phòng nữa!", 0.0, 2.9)
                  + spread("Công nghệ AI đang giúp doanh nghiệp.", 3.0, 5.0))
         texts = [" ".join(w[0] for w in c) for c in chunk_words(words)]
+        # ... và cụm cuối câu không bị mồ côi một từ ("đang giúp doanh | nghiệp." -> 2 + 2)
         self.assertEqual(texts, ["Đừng vội kết", "nối AI với", "công việc văn", "phòng nữa!",
-                                 "Công nghệ AI", "đang giúp doanh", "nghiệp."])
+                                 "Công nghệ AI", "đang giúp", "doanh nghiệp."])
+
+    def test_subtitles_show_the_script_text_with_whisper_timing(self):
+        from src.audio.subtitles import script_words_timed
+        # Ca thật (video #3 trên VM): Whisper nghe "phàn nàn" thành "phan an", số viết kiểu khác
+        want = "Mạng xã hội ngập tràn phàn nàn về AI. Có 1.260.967 phiếu bầu!".split()
+        heard = spread("Mạng xã hội ngập tràn phan an về AI", 0.0, 2.7) + \
+            spread("có 1 triệu 260 .967 phiếu bầu", 3.0, 5.4)
+        got = script_words_timed(want, heard)
+        self.assertEqual([w for w, _, _ in got], want)           # chữ đúng như kịch bản
+        self.assertEqual(got[0][1:], heard[0][1:])               # từ khớp giữ nguyên mốc
+        phan, nan = got[5], got[6]
+        self.assertAlmostEqual(phan[1], heard[5][1]); self.assertAlmostEqual(nan[2], heard[6][2])
+        self.assertTrue(all(a[2] <= b[1] + 1e-9 for a, b in zip(got, got[1:])))   # không chồng mốc
+        self.assertAlmostEqual(got[-1][2], heard[-1][2])
+
+    def test_subtitles_fall_back_to_whisper_when_reading_is_garbled(self):
+        from src.audio.subtitles import script_words_timed
+        heard = spread("một bài hát hoàn toàn khác", 0.0, 2.0)
+        with self.assertLogs("src.audio.subtitles", "WARNING"):
+            self.assertEqual(script_words_timed("Xin chào các bạn nhé".split(), heard), heard)
+        self.assertEqual(script_words_timed([], heard), heard)
 
     def test_a_long_pause_also_ends_the_chunk(self):
         from src.audio.subtitles import chunk_words

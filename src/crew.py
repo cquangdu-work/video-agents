@@ -168,6 +168,28 @@ def _script_stats(script: dict) -> tuple:
     return len(scenes), words, len(digit_set(voice_all))
 
 
+def as_script(obj) -> dict:
+    """Đưa câu trả lời của LLM về đúng dạng {"hooks": [...], "scenes": [...], "claims": [...]}.
+
+    Model dự phòng (lúc model chính quá tải) hay trả sai khuôn: mảng cảnh trần, hoặc
+    object bọc trong mảng. Ca thật 12/11/2026: trả mảng -> script.get() nổ, sập cả khâu
+    ý tưởng. Không cứu được thì trả kịch bản rỗng — nó sẽ bị tính là hụt chuẩn và viết lại.
+    """
+    if isinstance(obj, list):
+        if len(obj) == 1 and isinstance(obj[0], dict) and "scenes" in obj[0]:
+            obj = obj[0]
+        elif obj and all(isinstance(s, dict) and "voice" in s for s in obj):
+            obj = {"scenes": obj}
+    if not isinstance(obj, dict):
+        obj = {}
+    scenes = obj.get("scenes")
+    obj["scenes"] = [s for s in scenes if isinstance(s, dict)] if isinstance(scenes, list) else []
+    for key in ("hooks", "claims"):
+        if not isinstance(obj.get(key), list):
+            obj[key] = []
+    return obj
+
+
 def script_problems(script: dict, cfg: dict) -> list:
     """Kịch bản hụt chuẩn ở đâu -> danh sách lý do (rỗng = đạt). Dùng chung cho vòng
     viết lại của Biên kịch và cho main (kịch bản còn lỗi thì KHÔNG được đem đi dựng)."""
@@ -237,10 +259,14 @@ AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — 
     description, best, best_problems = base_description, None, None
     tries = 2
     for attempt in range(tries):
-        script = extract_json(_run_single_task(
+        answer = _run_single_task(
             role="Biên kịch video ngắn tiếng Việt",
             goal="Kịch bản cuốn hút, chính xác, dựng được bằng biểu đồ",
-            description=description, expected_output=expected))
+            description=description, expected_output=expected)
+        try:
+            script = as_script(extract_json(answer))
+        except ValueError:                      # không móc được JSON nào ra
+            script = as_script(None)
         problems = script_problems(script, cfg)
         if best is None or len(problems) <= len(best_problems):
             best, best_problems = script, problems

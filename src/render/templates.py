@@ -154,7 +154,8 @@ class LineChart(BrandScene):
 def highlights(text: str) -> list:
     """Những mẩu chữ đáng tô màu nhấn trong một câu: con số ('8.030', '38,4%') và
     chữ viết tắt in hoa ('AI', 'GDP'). Kênh tên là "qua con số" nên số luôn phát sáng."""
-    found = re.findall(r"\d[\d.,]*\d%?|\d%?|\b[A-ZĐ]{2,}\b", text)
+    # số có thể kèm dấu chấm/phẩy/gạch chéo ở giữa: "8.030", "38,4%", "05/2023"
+    found = re.findall(r"\d[\d.,/]*\d%?|\d%?|\b[A-ZĐ]{2,}\b", text)
     return sorted(set(found), key=len, reverse=True)
 
 

@@ -67,6 +67,23 @@ class ScriptStandardTest(unittest.TestCase):
         self.assertLess(len(seen[0]), 9000)                      # bài dài được cắt bớt
         self.assertIn("BẢN NHÁP TRƯỚC BỊ TRẢ LẠI vì: chỉ 3 con số", seen[1])
 
+    def test_malformed_llm_answers_are_normalised_not_fatal(self):
+        scenes = script()["scenes"]
+        self.assertEqual(crew.as_script(scenes)["scenes"], scenes)             # mảng cảnh trần
+        self.assertEqual(crew.as_script([{"hooks": ["h"], "scenes": scenes}])["hooks"], ["h"])
+        for junk in (None, "xin lỗi", ["a", "b"], {"scenes": "không phải mảng"}, 42):
+            self.assertEqual(crew.as_script(junk), {"scenes": [], "hooks": [], "claims": []})
+
+    def test_writer_survives_a_fallback_model_that_answers_with_a_list(self):
+        # Ca thật trên VM 12/11/2026: model chính 503, model dự phòng trả mảng -> script.get() nổ
+        answers = ['["chỉ có hook", "không có cảnh"]', "Xin lỗi, tôi không làm được.",]
+        idea = {"title": "T", "angle": "G", "source_url": "https://x"}
+        with mock.patch.object(crew, "_run_single_task", lambda **kw: answers.pop(0)), \
+                mock.patch.object(crew, "_formula_block", lambda: ""):
+            got = crew.write_script(idea, CFG, source_text="nguồn")
+        self.assertEqual(got["scenes"], [])
+        self.assertTrue(crew.script_problems(got, CFG))          # rỗng = hụt chuẩn, không lọt đi dựng
+
     def test_hunter_is_told_how_many_numbers_each_idea_has(self):
         seen = []
         raw = [{"id": 1, "source_name": "OWID", "lang": "en", "title": "540.000 deaths a year",
@@ -93,14 +110,17 @@ class StandardGateTest(unittest.TestCase):
             for i, w in enumerate(["alpha", "beta", "gamma", "delta", "epsilon"])])
         self.ids = [r["id"] for r in self.con.execute("SELECT id FROM ideas ORDER BY id")]
 
-    def run_agents(self, bad_ideas):
+    def run_agents(self, bad_ideas, crash=(), no_source=()):
         from src import main, page_text
         written = []
 
         def write(idea, cfg, feedback=None, source_text=""):
             written.append(idea["id"])
             assert source_text == "toàn văn"                     # bài nguồn được tải TRƯỚC khi viết
+            if idea["id"] in crash:
+                raise RuntimeError("Mọi model đều quá tải")
             return dict(script(numbers=2 if idea["id"] in bad_ideas else 6))
+        url_of = {f"https://s/{n}": i for n, i in enumerate(self.ids)}
         patches = [
             mock.patch.object(crew, "hunt_ideas",
                               lambda raw, cfg: [{"id": i, "angle": "góc"} for i in self.ids]),
@@ -108,7 +128,8 @@ class StandardGateTest(unittest.TestCase):
                 {"id": i, "total": 30 - n} for n, i in enumerate(self.ids)]),
             mock.patch.object(crew, "write_script", write),
             mock.patch.object(crew, "fact_check", lambda *a: {"pass": True, "verdicts": []}),
-            mock.patch.object(page_text, "fetch_page_text", lambda url: "toàn văn"),
+            mock.patch.object(page_text, "fetch_page_text",
+                              lambda url: "" if url_of[url] in no_source else "toàn văn"),
             mock.patch.object(main, "count_popular_vietnamese_videos", lambda *a: None),
             mock.patch("builtins.print"),
         ]
@@ -124,6 +145,15 @@ class StandardGateTest(unittest.TestCase):
         self.assertEqual(statuses, [(a, "draft"), (b, "draft"), (c, "verified"), (d, "verified")])
         self.assertEqual(written, [a, b, c, d])                  # đủ 2 bản đạt thì dừng, không viết e
         self.assertIn("chỉ 2 con số", json.loads(rows[0]["factcheck"])["standard_problems"][0])
+
+    def test_one_crashing_idea_or_unreachable_source_does_not_sink_the_stage(self):
+        a, b, c, d, e = self.ids
+        written, statuses, _ = self.run_agents(bad_ideas=set(), crash={a}, no_source={b})
+        self.assertEqual(written, [a, c, d])                     # b không tải được nguồn: khỏi gọi LLM
+        self.assertEqual(statuses, [(c, "verified"), (d, "verified")])
+        reasons = dict(self.con.execute("SELECT id, reject_reason FROM ideas WHERE status='rejected'"))
+        self.assertIn("quá tải", reasons[a])
+        self.assertEqual(reasons[b], "Không tải được bài nguồn")
 
     def test_no_extra_llm_calls_when_first_scripts_are_good(self):
         written, statuses, _ = self.run_agents(bad_ideas=set())

@@ -1,6 +1,6 @@
 # Thế giới qua con số — đội agent sản xuất video ngắn
 
-Pipeline tự động: tìm ý tưởng → chấm điểm → viết kịch bản → kiểm chứng → gửi Telegram cho Du duyệt. (Giai đoạn 1 của lộ trình trong [CLAUDE.md](CLAUDE.md).)
+Dây chuyền tự động chạy mỗi sáng trên VM: tìm ý tưởng → chấm điểm → viết kịch bản → kiểm chứng → dựng spec cảnh → giọng đọc + hình + phụ đề → kiểm định → gửi video vào Telegram cho Du duyệt → Du bấm ✅ thì ra gói đăng. (Lộ trình và các quyết định thiết kế nằm trong [CLAUDE.md](CLAUDE.md).)
 
 ## Chạy
 
@@ -20,11 +20,19 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 |---|---|
 | `config/channel.yaml` | Toàn bộ "não" cấu hình: chủ đề, nguồn, luật góc, trọng số chấm điểm. Sửa kênh = sửa file này, không đụng code. |
 | `src/main.py` | Nhạc trưởng: gọi lần lượt các bước, có cờ `--dry-run`. |
-| `src/sources/` | Lấy ý tưởng thô: RSS (OWID, EurekAlert, Yonhap...), arXiv API, Reddit JSON — đều **không cần API key**. Nguồn chết thì bỏ qua, không sập pipeline. |
+| `src/sources/` | Lấy ý tưởng thô: RSS (OWID, ScienceDaily, Hankyoreh, Donga...), arXiv API, Reddit (JSON, bị chặn thì tự sang RSS) — đều **không cần API key**. Nguồn chết thì bỏ qua, không sập pipeline. |
 | `src/sources/youtube_check.py` | Lớp chống trùng 2: đếm video tiếng Việt view cao cùng đề tài (cần `YOUTUBE_API_KEY`, chưa có thì tự bỏ qua). |
 | `src/db.py` | Kho SQLite (`data/pipeline.db`). Vòng đời ý tưởng: `raw → candidate → selected → scripted → rejected`. Chống lặp bằng URL + độ giống tiêu đề. |
 | `src/crew.py` | 4 agent CrewAI: Săn ý tưởng (ép phải có "góc"), Biên tập (chấm 5 tiêu chí × trọng số), Biên kịch (3 hook + kịch bản theo cảnh), Kiểm chứng (đối chiếu claim với bài nguồn). |
-| `src/page_text.py` | Tải toàn văn bài nguồn cho agent Kiểm chứng. |
+| `src/page_text.py` | Tải toàn văn bài nguồn: Biên kịch lấy số liệu từ đó, Kiểm chứng đối chiếu lại. |
+| `src/produce.py` | **Agent Sản xuất**: kịch bản → spec cảnh (`data/specs/script_<id>.yaml`). Cửa kiểm spec: bỏ cảnh hỏng, không làm tròn mất số lẻ, xoay vòng kiểu cảnh chữ. |
+| `src/render/` | Engine Manim: `templates.py` là kho mẫu hình (số lớn, so găng, thanh ngang, đường xu hướng, vòng phần trăm, cảnh chữ 3 kiểu), `base.py` là bộ nhận diện chung, `engine.py` dựng và nối cảnh. |
+| `src/assemble.py` | **Lắp ráp bản phát hành**: giọng + hình + phụ đề + chuẩn âm lượng → `output/final_<id>.mp4`. |
+| `src/audio/tts.py` | Giọng đọc Gemini TTS, tự đổi model dự phòng khi hết quota. Đổi nhà cung cấp giọng = chỉ thay file này. |
+| `src/audio/batch.py` | Đọc **cả bài bằng một lần gọi TTS** rồi tự cắt theo câu (Whisper dóng chữ + đo khoảng lặng). |
+| `src/audio/subtitles.py` | Whisper lấy mốc từng từ → phụ đề `.ass` theo cụm 3 từ, không vắt ngang hai câu. |
+| `src/qc.py` | **Agent Kiểm định**: độ dài, khung đen, âm lượng, giấy phép, lời đọc có khớp kịch bản không, model nhìn ảnh soát hình. |
+| `src/assets_db.py` | Kho chất liệu: mỗi mẫu hình có giấy phép + nhật ký dùng, cảnh báo khi lạm dụng một mẫu. |
 | `src/telegram_bot.py` | Gửi kịch bản đã kiểm chứng vào Telegram (gọi thẳng Bot API cho nhẹ). |
 | `src/daily.py` | **Chuỗi hằng ngày**: một lệnh chạy cả dây chuyền, bước nào hỏng thì thử kịch bản kế và báo Telegram. |
 | `src/analysis/weekly.py` | **Agent Phân tích**: mỗi tuần đo số liệu video, tìm cảnh người xem rời đi, nhích trọng số, rút bài học. |
@@ -39,7 +47,10 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 ## Giới hạn hiện tại (sẽ nâng ở bước sau)
 - Kiểm chứng mới đối chiếu **1 nguồn** (bài gốc); thiết kế yêu cầu 2 nguồn độc lập → cần thêm search API.
 - Chưa có nguồn KOSIS/World Bank chuyên dụng (mới có OWID qua RSS).
-- Duyệt Telegram mới một chiều (gửi); nút bấm duyệt/loại làm ở giai đoạn sau.
+- Chưa có mẫu bản đồ và "cuộc đua số liệu"; nhạc nền chờ Du tải file vào `assets/music/`.
+- TikTok chưa làm (cần tài khoản developer). YouTube đang ở chế độ `manual`: bot gửi gói, Du tự đăng.
+- Free tier của Gemini: giọng đọc ~15 lần gọi/ngày mỗi model. Đủ cho 1 video/ngày nhờ đọc gộp,
+  nhưng muốn 2-3 video/ngày hoặc thử nghiệm nhiều thì phải tính tới gói trả phí.
 
 ## Giai đoạn 4 — duyệt và đăng
 
@@ -82,17 +93,38 @@ Cách chọn kịch bản: đã qua Kiểm chứng, chưa gửi duyệt, không 
 ưu tiên cái đã dựng xong video, rồi tới điểm Biên tập cao. Mỗi ngày `daily.videos_per_day` video;
 chạy lại trong ngày không làm dư. Kịch bản dựng hỏng 2 lần thì bị bỏ qua. Log: `logs/daily_<ngày>.log`.
 
-Ba điều rút ra từ lần chạy thử đầu trên VM (11/11/2026):
+Mỗi ngày (tính theo giờ Hàn) đúng một lượt `daily` được phép chạy tại một thời điểm (`data/daily.lock`).
 
-- **Kịch bản quá ngắn bị bỏ qua từ đầu** (`daily.min_script_words`, mặc định 150 từ ≈ 45 giây):
-  kịch bản đời cũ 3 cảnh có điểm cao nên bị chọn trước, dựng xong mới lộ ra là hụt độ dài.
-- **Một câu lời đọc dài trải trên nhiều cảnh hình:** spec ghi cùng một `voice` ở các cảnh liền nhau,
-  `src/assemble.py` gom lại, gọi TTS **một lần** rồi chia thời lượng cho các cảnh (`voice_groups`).
-- **Hết quota giọng đọc không tính là kịch bản hỏng:** `src/audio/tts.py` đọc lý do trong lỗi 429
-  (quota phút thì chờ đúng số giây API báo, quota ngày thì nhảy sang `TTS_MODEL_FALLBACKS`); hết sạch
-  thì `assemble` thoát mã 75, `daily` báo "tạm dừng" qua Telegram. Giọng đã đọc nằm trong
-  `data/render/audio_<id>/`, chạy lại là làm tiếp. Quota ngày của Gemini hồi lúc nửa đêm giờ
-  Thái Bình Dương (16–17h giờ Hàn).
+### Cổng chất lượng trước khi tốn công dựng
+
+- **Kịch bản phải đủ dài và đủ số:** `daily.min_script_words` (165 từ ≈ 48 giây) và
+  `daily.min_script_numbers` (4 con số). Ngay khâu viết, kịch bản hụt chuẩn bị giữ ở `draft`
+  và dây chuyền viết ý tưởng kế tiếp (`daily.extra_script_tries`).
+- **Độ dài kịch bản tính từ tốc độ đọc đo thật:** `pacing.words_per_second` = 3,4 →
+  60–90 giây cần 204–306 từ. Đổi giọng (`TTS_VOICE`) thì đo lại con số này.
+
+### Giọng đọc và quota
+
+- **Đọc gộp:** `src/audio/batch.py` gửi cả bài trong **một** lần gọi TTS, Whisper cho mốc từng từ,
+  code dóng với kịch bản để tìm chỗ ngắt câu rồi cắt vào giữa khoảng lặng thật. Hai câu model
+  đọc liền một hơi thì giữ chung một đoạn giọng (hai cảnh hình chia nhau thời lượng). Chỗ nào
+  không chắc thì chỉ câu đó được đọc lẻ. Tắt: `TTS_BATCH_WORDS=0`.
+- **Một câu trải nhiều cảnh hình:** spec ghi cùng một `voice` ở các cảnh liền nhau, `assemble`
+  đọc một lần rồi chia thời lượng (`voice_groups`, `audio_runs`).
+- **Giọng đã đọc được giữ lại** trong `data/render/audio_<id>/` kèm dấu vân tay lời đọc
+  (`voice.sha1`): chạy lại không tốn quota; spec đổi thì giọng cũ tự bị xoá.
+- **Hết quota không tính là kịch bản hỏng:** `tts.py` đọc lý do trong lỗi 429 (quota phút: chờ
+  đúng số giây API báo; quota ngày: nhảy sang `TTS_MODEL_FALLBACKS`). Hết sạch thì `assemble`
+  thoát mã 75, `daily` báo "tạm dừng" qua Telegram, lượt chạy bù 17:40 làm tiếp. Quota ngày của
+  Gemini hồi lúc nửa đêm giờ Thái Bình Dương (16–17h giờ Hàn).
+
+### Kiểm định (`python -m src.qc <id>`)
+
+Sáu phép kiểm, đạt hết mới gửi Telegram: độ dài 45–95 giây, không khung đen, âm lượng quanh
+-16 LUFS, chất liệu đủ giấy phép, **lời đọc khớp kịch bản** (số từ Whisper nghe được so với số từ
+kịch bản — bắt video đọc lặp/đọc cụt), và **model nhìn ảnh** soát 6 khung rải đều. Model nhìn ảnh
+chỉ được báo 3 loại lỗi (sai số, ngược nghĩa, tràn khung), lỗi sai số được code đối chiếu lại,
+nghi lỗi thì hỏi lại lần hai; nó sập thì không chặn video nhưng ghi rõ số cảnh chưa soát.
 
 ## Triển khai lên VM Oracle
 
@@ -114,6 +146,13 @@ bash deploy/setup_vm.sh              # kiểm RAM, cài gói, tạo venv, cài s
 
 Script không tự bật lịch chạy; nó in ra 3 lệnh để thử tay rồi mới bật. Cập nhật code về sau:
 `git push vm master` trên laptop, `git pull` trên VM, rồi `systemctl --user restart video-agents-review`.
+
+Bốn unit: `video-agents-daily` (06:00 giờ Hàn, cả dây chuyền), `video-agents-daily-retry`
+(17:40, chỉ làm khi sáng chưa gửi được video — thường do hết quota giọng đọc),
+`video-agents-weekly` (Chủ nhật 21:00, agent Phân tích), `video-agents-review` (bot chờ nút
+bấm, chạy suốt). Xem lịch: `systemctl --user list-timers`.
+
+DB chính thức nằm trên VM (`~/video-agents/data/pipeline.db`); DB trên laptop chỉ để thử.
 
 ## Agent Phân tích (hằng tuần)
 

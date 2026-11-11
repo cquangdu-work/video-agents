@@ -44,6 +44,57 @@ def _ts(sec: float) -> str:
     return f"{int(h)}:{int(m):02d}:{s:05.2f}"
 
 
+def script_words_timed(script_words: list, heard: list, min_match: float = 0.6) -> list:
+    """Phụ đề hiện CHỮ CỦA KỊCH BẢN, chỉ mượn MỐC THỜI GIAN của Whisper.
+
+    script_words: các từ đúng như kịch bản viết (còn nguyên dấu câu, số liệu).
+    heard: [(từ Whisper nghe được, bắt đầu, kết thúc)].
+    -> [(từ kịch bản, bắt đầu, kết thúc)]
+
+    Whisper nghe nhầm là chuyện thường ("phàn nàn" thành "phan an", "Paris" thành
+    "berries", số bị viết kiểu khác). Chữ nghe nhầm mà hiện lên phụ đề là lỗi chính tả
+    ngay trên video. Ở đây difflib dóng hai chuỗi từ: từ nào khớp thì lấy đúng mốc của
+    nó; đoạn không khớp thì các từ kịch bản chia đều quãng thời gian của đoạn đó.
+    Khớp quá kém (giọng đọc hỏng) thì trả nguyên `heard` như cũ.
+    """
+    import difflib
+
+    from .batch import tokens
+
+    key = lambda w: "".join(tokens(w))
+    a, b = [key(w) for w in script_words], [key(h[0]) for h in heard]
+    if not a or not b:
+        return list(heard)
+    sm = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
+    if sm.ratio() < min_match:
+        log.warning("Phụ đề: chữ nghe được chỉ khớp %.0f%% kịch bản — dùng chữ của Whisper",
+                    sm.ratio() * 100)
+        return list(heard)
+    out = []
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            out += [(script_words[i1 + k], heard[j1 + k][1], heard[j1 + k][2])
+                    for k in range(i2 - i1)]
+        elif i2 > i1:                           # có từ kịch bản cần được xếp chỗ
+            if j2 > j1:                         # ... thay cho một đoạn Whisper nghe khác đi
+                t0, t1 = heard[j1][1], heard[j2 - 1][2]
+            else:                               # ... mà Whisper bỏ sót: nhét vào khe hai bên
+                t0 = heard[j1 - 1][2] if j1 else 0.0
+                t1 = heard[j1][1] if j1 < len(heard) else t0
+            t1 = max(t1, t0 + 0.12 * (i2 - i1))
+            step = (t1 - t0) / (i2 - i1)
+            out += [(script_words[i1 + k], t0 + k * step, t0 + (k + 1) * step)
+                    for k in range(i2 - i1)]
+        # tag == "insert": Whisper nghe thừa chữ không có trong kịch bản -> bỏ
+    fixed, last_end = [], 0.0                   # mốc phải tăng dần, không chồng lên nhau
+    for word, start, end in out:
+        start = max(start, last_end)
+        end = max(end, start + 0.05)
+        fixed.append((word, start, end))
+        last_end = end
+    return fixed
+
+
 SENTENCE_END = (".", "!", "?", "…", ":", ";")
 
 
@@ -54,15 +105,22 @@ def chunk_words(words: list, chunk_size: int = 3, pause: float = 0.35) -> list:
     Trước đây cứ đếm đủ 3 từ là ngắt nên cụm hay vắt ngang hai câu ("phòng nữa. Công"):
     chữ của câu sau hiện ra khi người xem còn đang nghe câu trước.
     """
+    ends = lambda w: w[0].rstrip('"”’)').endswith(SENTENCE_END)
     chunks = []
     for i, w in enumerate(words):
         prev = words[i - 1] if i else None
-        new = (not chunks or len(chunks[-1]) >= chunk_size
-               or prev[0].rstrip('"”’)').endswith(SENTENCE_END)
+        new = (not chunks or len(chunks[-1]) >= chunk_size or ends(prev)
                or w[1] - prev[2] > pause)
         if new:
             chunks.append([])
         chunks[-1].append(w)
+    # Cụm cuối câu chỉ còn MỘT từ ("...chưa từng | có.") chớp lên rồi tắt, rất khó đọc:
+    # kéo một từ từ cụm trước sang cho thành 2 + 2.
+    for k in range(1, len(chunks)):
+        cur, before = chunks[k], chunks[k - 1]
+        if (len(cur) == 1 and len(before) == chunk_size and chunk_size > 2
+                and not ends(before[-1]) and cur[0][1] - before[-1][2] <= pause):
+            cur.insert(0, before.pop())
     return chunks
 
 

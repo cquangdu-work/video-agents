@@ -103,22 +103,21 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
             break
         # Tải bài nguồn TRƯỚC: Biên kịch cần toàn văn để có số liệu mà viết
         source_text = fetch_page_text(idea["source_url"])
-        script = crew.write_script(idea, cfg, source_text=source_text)
-        fc = crew.fact_check(script, idea, source_text, cfg)
-        if not fc.get("pass"):
-            feedback = "\n".join(
-                f"- SAI: {v.get('claim', '')} -> {v.get('note', '')}"
-                for v in fc.get("verdicts", []) if not v.get("ok"))
-            log.warning("Kiểm chứng trượt — trả về Biên kịch viết lại:\n%s", feedback)
-            script = crew.write_script(idea, cfg, feedback=feedback, source_text=source_text)
-            fc = crew.fact_check(script, idea, source_text, cfg)
-        problems = crew.script_problems(script, cfg)
-        if problems:
-            # Ghi lý do vào hồ sơ kiểm chứng để về sau tra được vì sao kịch bản bị giữ lại
-            fc["standard_problems"] = problems
-            log.warning("Kịch bản cho “%s” hụt chuẩn (%s) — giữ ở trạng thái nháp, không dựng",
-                        idea["title"][:50], "; ".join(problems))
-        status = "verified" if fc.get("pass") and not problems else "draft"
+        if not source_text.strip():
+            # Không đọc được nguồn (ví dụ bài Reddit bị chặn) thì không có số để viết và
+            # cũng không có gì để Kiểm chứng đối chiếu -> bỏ, khỏi tốn lượt gọi LLM
+            db.set_status(con, idea["id"], "rejected", reason="Không tải được bài nguồn")
+            log.warning("Bỏ “%s”: không tải được bài nguồn", idea["title"][:50])
+            continue
+        try:
+            script, fc, status = _script_one(crew, idea, source_text, cfg)
+        except Exception as exc:
+            # Một ý tưởng hỏng (LLM trả sai khuôn, mọi model quá tải...) không được kéo
+            # sập cả khâu: ghi lại rồi sang ý tưởng kế tiếp.
+            db.set_status(con, idea["id"], "rejected", reason=f"Lỗi khi viết kịch bản: {exc}"[:300])
+            log.warning("Bỏ “%s”: lỗi khi viết kịch bản (%s: %s)", idea["title"][:50],
+                        type(exc).__name__, str(exc)[:200])
+            continue
         good += status == "verified"
         db.save_script(con, idea["id"], script["hooks"],
                        yaml.safe_dump(script["scenes"], allow_unicode=True),
@@ -130,7 +129,29 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
             sent += 1
         else:
             print("\n" + "=" * 60 + "\n" + msg)
+    log.info("Kịch bản đạt chuẩn trong lượt này: %d/%d", good, want)
     return sent
+
+
+def _script_one(crew, idea: dict, source_text: str, cfg: dict) -> tuple:
+    """Biên kịch -> Kiểm chứng (sai số liệu thì viết lại 1 lần) -> cổng chuẩn.
+    Trả về (kịch bản, hồ sơ kiểm chứng, 'verified' | 'draft')."""
+    script = crew.write_script(idea, cfg, source_text=source_text)
+    fc = crew.fact_check(script, idea, source_text, cfg)
+    if not fc.get("pass"):
+        feedback = "\n".join(
+            f"- SAI: {v.get('claim', '')} -> {v.get('note', '')}"
+            for v in fc.get("verdicts", []) if not v.get("ok"))
+        log.warning("Kiểm chứng trượt — trả về Biên kịch viết lại:\n%s", feedback)
+        script = crew.write_script(idea, cfg, feedback=feedback, source_text=source_text)
+        fc = crew.fact_check(script, idea, source_text, cfg)
+    problems = crew.script_problems(script, cfg)
+    if problems:
+        # Ghi lý do vào hồ sơ kiểm chứng để về sau tra được vì sao kịch bản bị giữ lại
+        fc["standard_problems"] = problems
+        log.warning("Kịch bản cho “%s” hụt chuẩn (%s) — giữ ở trạng thái nháp, không dựng",
+                    idea["title"][:50], "; ".join(problems))
+    return script, fc, "verified" if fc.get("pass") and not problems else "draft"
 
 
 def main():

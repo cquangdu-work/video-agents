@@ -243,9 +243,11 @@ def main():
 
     # ---- 4. Phụ đề từng từ
     from .render.base import brand
-    from .audio.subtitles import build_ass, transcribe_words
+    from .audio.subtitles import build_ass, script_words_timed, transcribe_words
     words = transcribe_words(full_wav)
-    ass = build_ass(words, RENDER / "subs.ass", brand())
+    # Phụ đề dùng chữ của KỊCH BẢN (đúng chính tả, đúng cách viết số), mốc giờ của Whisper
+    script_words = " ".join(_voice(spec[g[0]]) for g in todo).split()
+    ass = build_ass(script_words_timed(script_words, words), RENDER / "subs.ass", brand())
     # Hai con số cho agent Kiểm định (qc.check_narration): đưa TTS đọc bao nhiêu từ,
     # Whisper nghe lại được bao nhiêu -> lệch nhiều là giọng đọc lặp/cụt
     (audio_dir / "meta.json").write_text(json.dumps({
