@@ -26,6 +26,8 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `src/crew.py` | 4 agent CrewAI: Săn ý tưởng (ép phải có "góc"), Biên tập (chấm 5 tiêu chí × trọng số), Biên kịch (3 hook + kịch bản theo cảnh), Kiểm chứng (đối chiếu claim với bài nguồn). |
 | `src/page_text.py` | Tải toàn văn bài nguồn cho agent Kiểm chứng. |
 | `src/telegram_bot.py` | Gửi kịch bản đã kiểm chứng vào Telegram (gọi thẳng Bot API cho nhẹ). |
+| `src/daily.py` | **Chuỗi hằng ngày**: một lệnh chạy cả dây chuyền, bước nào hỏng thì thử kịch bản kế và báo Telegram. |
+| `deploy/` | Script cài VM + 3 file systemd (lịch chạy mỗi sáng, bot chờ duyệt). |
 | `src/review.py` | **Bước Du duyệt + agent Đăng bài**: gửi video kèm nút ✅/❌ vào Telegram, chờ nút bấm, rồi đăng. |
 | `src/publish/metadata.py` | Tiêu đề / mô tả / hashtag: LLM đề xuất, code ép giới hạn YouTube, soát số trong tiêu đề, tự gắn nguồn + khai báo AI. |
 | `src/publish/youtube.py` | Cấp quyền OAuth + upload YouTube (resumable), chỉ dùng `requests`. |
@@ -65,3 +67,36 @@ Hai cái bẫy của chế độ `api`:
 - Tài liệu chính thức của Google ghi: video upload từ project API **chưa qua audit** bị khoá ở chế độ riêng tư,
   muốn gỡ phải nộp đơn audit. Vì vậy mặc định `privacy: private`, và bot luôn báo chế độ hiển thị THỰC TẾ
   YouTube trả về. Upload thử một video trước khi tin vào chế độ này.
+
+## Chạy hằng ngày
+
+```bash
+python -m src.daily --dry-run     # xem sẽ chọn kịch bản nào, chạy bước nào (không chạy gì)
+python -m src.daily --skip-ideas  # dùng kịch bản đã có trong DB
+python -m src.daily               # cả dây chuyền: ý tưởng -> kịch bản -> video -> gửi duyệt
+```
+
+Cách chọn kịch bản: đã qua Kiểm chứng, chưa gửi duyệt, không quá `daily.max_script_age_days` ngày;
+ưu tiên cái đã dựng xong video, rồi tới điểm Biên tập cao. Mỗi ngày `daily.videos_per_day` video;
+chạy lại trong ngày không làm dư. Kịch bản dựng hỏng 2 lần thì bị bỏ qua. Log: `logs/daily_<ngày>.log`.
+
+## Triển khai lên VM Oracle
+
+Chuyển code bằng git qua SSH (không cần GitHub):
+
+```bash
+# trên VM (một lần)
+git init --bare ~/video-agents.git
+# trên laptop
+git remote add vm ssh://<user>@<ip-vm>/~/video-agents.git
+git push vm master
+scp .env <user>@<ip-vm>:~/           # file bí mật không nằm trong git -> chép riêng
+scp data/pipeline.db <user>@<ip-vm>:~/
+# trên VM
+git clone ~/video-agents.git ~/video-agents && cd ~/video-agents
+mv ~/.env . && mv ~/pipeline.db data/
+bash deploy/setup_vm.sh              # kiểm RAM, cài gói, tạo venv, cài systemd; hỏi trước mỗi lệnh sudo
+```
+
+Script không tự bật lịch chạy; nó in ra 3 lệnh để thử tay rồi mới bật. Cập nhật code về sau:
+`git push vm master` trên laptop, `git pull` trên VM, rồi `systemctl --user restart video-agents-review`.

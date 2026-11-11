@@ -73,7 +73,9 @@ Danh sách ý tưởng thô hôm nay:
 {listing}
 
 Chọn tối đa {cfg['daily']['shortlist'] * 3} ý tưởng CÓ GÓC rõ nhất và minh họa được
-bằng biểu đồ/bản đồ/số liệu. Với mỗi ý tưởng, viết góc cụ thể bằng tiếng Việt.""",
+bằng biểu đồ/bản đồ/số liệu. Với mỗi ý tưởng, viết góc cụ thể bằng tiếng Việt.
+CẨN THẬN ĐƠN VỊ khi nhắc số liệu từ nguồn tiếng Hàn/Anh: 만 = 10.000 (54만 = 540.000),
+억 = 100 triệu; million = triệu, billion = tỷ. Không chắc thì đừng ghi con số vào góc.""",
         expected_output="""JSON array, mỗi phần tử:
 {"id": <id gốc>, "angle": "<góc cụ thể, 1-2 câu tiếng Việt>", "reason": "<vì sao chọn>"}""",
     )

@@ -90,8 +90,9 @@ def send_for_review(script_id: int, force: bool = False, skip_qc: bool = False):
         video_path, format_review_caption(video_id, script_id, meta, checks),
         buttons=[[("✅ Duyệt đăng", f"ok:{video_id}"), ("❌ Loại", f"no:{video_id}")]])
     if not mid:
+        # Trả None (lệnh thoát mã 1) để chuỗi hằng ngày biết là CHƯA tới tay Du và thử lại
         print(f"Đã lưu video #{video_id} nhưng KHÔNG gửi được Telegram — chạy lại lệnh send.")
-        return video_id
+        return None
     db.update_video(con, video_id, tg_message_id=mid)
     tg.send_message("Mô tả sẽ đăng kèm:\n\n" + meta["description"], reply_to=mid)
     print(f"Đã gửi video #{video_id} vào Telegram, chờ Du duyệt.")

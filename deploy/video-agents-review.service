@@ -1,0 +1,14 @@
+# Bot chờ Du bấm nút Duyệt/Loại trên Telegram — chạy suốt, tự bật lại nếu sập.
+[Unit]
+Description=video-agents: bot cho duyet Telegram
+
+[Service]
+WorkingDirectory=@REPO@
+ExecStart=@REPO@/venv/bin/python -m src.review listen
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=15
+MemoryMax=400M
+
+[Install]
+WantedBy=default.target

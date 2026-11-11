@@ -67,6 +67,10 @@ angle_rules: >
 daily:
   raw_target: 30        # ~30 ý tưởng thô mỗi sáng
   shortlist: 3          # chọn ra 2-3 ý tưởng tốt nhất
+  # --- chuỗi chạy hằng ngày (python -m src.daily) ---
+  videos_per_day: 1     # số video dựng + gửi duyệt mỗi ngày
+  max_attempts: 2       # kịch bản đầu dựng hỏng thì thử kịch bản kế, tối đa bấy nhiêu lần
+  max_script_age_days: 3   # kịch bản cũ hơn thế thì bỏ (số liệu "mới" đã nguội)
 
 # ---------- Phân tích đối thủ (python -m src.analysis.competitors) ----------
 competitor_analysis:

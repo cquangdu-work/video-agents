@@ -1,0 +1,17 @@
+# Chuỗi sản xuất hằng ngày: ý tưởng -> kịch bản -> video -> gửi Telegram cho Du duyệt.
+# File mẫu: deploy/setup_vm.sh thay @REPO@ bằng đường dẫn thật rồi cài vào
+# ~/.config/systemd/user/ (unit cấp người dùng, không cần quyền root để chạy).
+[Unit]
+Description=video-agents: chuoi san xuat hang ngay
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+ExecStart=@REPO@/venv/bin/python -m src.daily
+Environment=PYTHONUNBUFFERED=1
+# VM còn chạy dịch vụ khác: nhường CPU và chặn trần RAM (Whisper + Manim ngốn nhất)
+Nice=10
+MemoryHigh=5G
+MemoryMax=7G
+# Cả chuỗi (TTS free tier phải chờ giữa các câu) có thể mất hơn 1 giờ
+TimeoutStartSec=4h

@@ -1,0 +1,12 @@
+# Hẹn giờ chạy chuỗi hằng ngày. Đổi giờ: sửa OnCalendar rồi chạy lại deploy/setup_vm.sh
+[Unit]
+Description=video-agents: hen gio chay hang ngay
+
+[Timer]
+# 06:00 giờ Hàn: video tới Telegram trước khi Du thức dậy
+OnCalendar=*-*-* 06:00:00 Asia/Seoul
+# VM tắt đúng giờ hẹn thì chạy bù ngay khi bật lại
+Persistent=true
+
+[Install]
+WantedBy=timers.target
