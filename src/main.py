@@ -26,7 +26,10 @@ CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "channel.yaml"
 
 def load_config() -> dict:
     with open(CONFIG_PATH, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        cfg = yaml.safe_load(f)
+    # Trọng số chấm điểm mà agent Phân tích đã học (data/learned.yaml) đè lên cấu hình gốc
+    from .analysis.learned import apply_learned
+    return apply_learned(cfg)
 
 
 def collect(cfg: dict, con) -> int:

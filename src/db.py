@@ -60,6 +60,20 @@ CREATE TABLE IF NOT EXISTS videos (
     decided_at    TEXT,
     published_at  TEXT
 );
+CREATE TABLE IF NOT EXISTS video_stats (   -- mỗi lần agent Phân tích đo là một dòng
+    id           INTEGER PRIMARY KEY,
+    video_id     INTEGER REFERENCES videos(id),
+    fetched_at   TEXT,
+    source       TEXT,            -- analytics (OAuth, đủ chỉ số) | public (chỉ xem/thích/bình luận)
+    views        INTEGER,
+    likes        INTEGER,
+    comments     INTEGER,
+    shares       INTEGER,
+    subs_gained  INTEGER,
+    avg_view_sec REAL,
+    avg_view_pct REAL,            -- % video được xem trung bình ("tỷ lệ xem hết")
+    retention    TEXT             -- JSON: [[vị trí 0..1, tỷ lệ còn xem], ...]
+);
 CREATE TABLE IF NOT EXISTS state (   -- ô nhớ nhỏ: vị trí đọc Telegram, v.v.
     key   TEXT PRIMARY KEY,
     value TEXT
@@ -218,4 +232,14 @@ def get_state(con, key: str, default: str = None):
 def set_state(con, key: str, value) -> None:
     con.execute("INSERT INTO state (key, value) VALUES (?, ?)"
                 " ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
+    con.commit()
+
+
+def save_video_stats(con, video_id: int, source: str, stats: dict, retention: list = None) -> None:
+    con.execute(
+        "INSERT INTO video_stats (video_id, fetched_at, source, views, likes, comments, shares,"
+        " subs_gained, avg_view_sec, avg_view_pct, retention) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (video_id, _now(), source, stats.get("views"), stats.get("likes"), stats.get("comments"),
+         stats.get("shares"), stats.get("subs_gained"), stats.get("avg_view_sec"),
+         stats.get("avg_view_pct"), json.dumps(retention) if retention else None))
     con.commit()

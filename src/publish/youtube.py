@@ -278,6 +278,69 @@ def whoami() -> dict:
             "country": items[0]["snippet"].get("country")}
 
 
+# -------------------------------------------------- Số liệu (agent Phân tích)
+ANALYTICS_URL = "https://youtubeanalytics.googleapis.com/v2/reports"
+_METRICS_FULL = ("views,engagedViews,averageViewDuration,averageViewPercentage,"
+                 "likes,comments,shares,subscribersGained")
+_METRICS_CORE = "views,averageViewDuration,averageViewPercentage,likes,comments,shares,subscribersGained"
+
+
+def _report(token: str, **params) -> dict:
+    r = requests.get(ANALYTICS_URL, timeout=30, params={"ids": "channel==MINE", **params},
+                     headers={"Authorization": f"Bearer {token}"})
+    if r.status_code != 200:
+        raise YouTubeUploadError(f"Analytics API {r.status_code}: {r.text[:200]}")
+    return r.json()
+
+
+def analytics_video(video_id: str, start: str, end: str, token: str) -> dict:
+    """Số liệu riêng tư của MỘT video trong khoảng ngày (YYYY-MM-DD): lượt xem, % xem
+    trung bình, giây xem trung bình... Chỉ chủ kênh (OAuth) mới lấy được.
+
+    Thử bộ chỉ số đầy đủ trước; API từ chối tổ hợp đó thì lùi về bộ cốt lõi.
+    """
+    for metrics in (_METRICS_FULL, _METRICS_CORE):
+        try:
+            data = _report(token, startDate=start, endDate=end, metrics=metrics,
+                           filters=f"video=={video_id}")
+        except YouTubeUploadError:
+            if metrics == _METRICS_CORE:
+                raise
+            continue
+        rows = data.get("rows") or []
+        if not rows:
+            return {}
+        names = [h["name"] for h in data["columnHeaders"]]
+        return dict(zip(names, rows[0]))
+    return {}
+
+
+def analytics_retention(video_id: str, start: str, end: str, token: str) -> list:
+    """Đường giữ chân người xem: [(vị trí 0..1 trong video, tỷ lệ còn xem), ...].
+    Trống nếu video còn quá ít lượt xem (YouTube không trả đường này)."""
+    data = _report(token, startDate=start, endDate=end, metrics="audienceWatchRatio",
+                   dimensions="elapsedVideoTimeRatio", filters=f"video=={video_id}",
+                   sort="elapsedVideoTimeRatio")
+    return [(float(a), float(b)) for a, b in (data.get("rows") or [])]
+
+
+def public_stats(video_ids: list, api_key: str) -> dict:
+    """Số liệu CÔNG KHAI (xem/thích/bình luận) bằng API key thường — dùng khi chưa cấp
+    quyền OAuth (vd đang đăng tay). Trả về {video_id: {"views", "likes", "comments"}}."""
+    out = {}
+    for i in range(0, len(video_ids), 50):          # API cho tối đa 50 id mỗi lần
+        r = requests.get(f"{API_URL}/videos", timeout=30,
+                         params={"part": "statistics", "id": ",".join(video_ids[i:i + 50]),
+                                 "key": api_key})
+        r.raise_for_status()
+        for item in r.json().get("items", []):
+            st = item.get("statistics", {})
+            out[item["id"]] = {"views": int(st.get("viewCount", 0)),
+                               "likes": int(st.get("likeCount", 0)),
+                               "comments": int(st.get("commentCount", 0))}
+    return out
+
+
 def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")

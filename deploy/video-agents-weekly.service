@@ -1,0 +1,12 @@
+# Agent Phân tích: đọc số liệu kênh, rút bài học, báo cáo Telegram.
+[Unit]
+Description=video-agents: agent Phan tich hang tuan
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+ExecStart=@REPO@/venv/bin/python -m src.analysis.weekly
+Environment=PYTHONUNBUFFERED=1
+Nice=10
+MemoryMax=1G
+TimeoutStartSec=30min

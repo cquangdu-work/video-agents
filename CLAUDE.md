@@ -74,7 +74,8 @@ Python, CrewAI (điều phối agent), cron/systemd timer (lịch chạy), bot T
 - Phần này mới chạy với API giả lập (viết từ xa, máy không có mạng). **Chưa chạy thật** với Telegram/YouTube: việc đầu tiên khi ngồi vào laptop là `python -m src.review send 6` rồi `python -m src.review listen`.
 - Chế độ đăng mặc định là `manual` (bot gửi gói, Du tự đăng). Đây là mặc định tạm, **Du chưa chốt**. Lý do: tài liệu Google ghi project API chưa audit thì video bị khoá riêng tư. Chi tiết trong README.
 - **Xong (4.2):** chuỗi hằng ngày `src/daily.py` (main → produce → assemble → review send, tự thử kịch bản kế khi hỏng, báo Telegram), bộ triển khai `deploy/` (script cài VM + systemd timer 06:00 giờ Hàn + dịch vụ bot chờ duyệt). Cũng **chưa chạy thật**: `deploy/setup_vm.sh` chưa từng chạy trên VM, chưa biết các thư viện (manim, faster-whisper) cài trên ARM64 có trơn không.
-- **Chưa làm:** TikTok, agent Phân tích hằng tuần.
+- **Xong (4.3):** agent Phân tích `src/analysis/weekly.py` (đo số liệu, điểm rời đi theo cảnh, nhích trọng số, bài học cho Biên kịch) ghi vào `data/learned.yaml`; `main.load_config()` và `crew._formula_block()` đọc file đó. Chưa chạy với số liệu thật vì kênh chưa đăng video nào.
+- **Chưa làm:** TikTok (cần Du đăng ký tài khoản developer trước).
 
 ## Cách làm việc
 - Làm từng giai đoạn nhỏ, chạy thử được rồi mới sang bước tiếp. Commit git sau mỗi bước.

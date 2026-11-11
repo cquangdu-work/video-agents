@@ -1,0 +1,10 @@
+# Mỗi Chủ nhật 21:00 giờ Hàn
+[Unit]
+Description=video-agents: hen gio phan tich hang tuan
+
+[Timer]
+OnCalendar=Sun *-*-* 21:00:00 Asia/Seoul
+Persistent=true
+
+[Install]
+WantedBy=timers.target

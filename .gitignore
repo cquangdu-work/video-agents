@@ -10,3 +10,4 @@ logs/
 .pytest_cache/
 data/render/
 .secrets/
+data/learned.yaml

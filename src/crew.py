@@ -111,17 +111,24 @@ Danh sách:
 
 
 def _formula_block() -> str:
-    """Nếu đã chạy phân tích đối thủ thì nhét công thức vào prompt Biên kịch."""
+    """Kiến thức nền cho Biên kịch: công thức rút từ đối thủ (config/formula.yaml)
+    + bài học từ số liệu thật của chính kênh (data/learned.yaml, agent Phân tích ghi)."""
     from .analysis.formula import load_formula
+    from .analysis.learned import load_learned
+    block = ""
     f = load_formula()
-    if not f:
-        return ""
-    return f"""
+    if f:
+        block += f"""
 CÔNG THỨC rút từ video ăn khách của các kênh cùng mảng (áp dụng linh hoạt, không máy móc):
 - Khuôn tiêu đề/hook hay thắng: {'; '.join(f.get('title_patterns', []))}
 - Luật viết hook: {'; '.join(f.get('hook_rules', []))}
 - Độ dài hay thắng: {f.get('length_seconds', {})}
 """
+    insights = load_learned().get("insights") or []
+    if insights:
+        block += ("\nBÀI HỌC TỪ SỐ LIỆU THẬT CỦA CHÍNH KÊNH NÀY (ưu tiên hơn công thức đối thủ):\n"
+                  + "\n".join(f"- {i}" for i in insights) + "\n")
+    return block
 
 
 # ------------------------------------------------------------------ Biên kịch
