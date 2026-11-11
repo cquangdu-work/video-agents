@@ -19,7 +19,7 @@ Một đội agent chạy theo lịch, mỗi ngày tạo video ngắn dọc (60�
 
 ## Đã chốt thêm (11/2026)
 - **Chủ đề kênh: "Thế giới qua con số"** (Du chốt 10/11/2026) — biểu đồ, bản đồ động, cuộc đua số liệu dựng bằng code; nguồn mở (OWID, World Bank, KOSIS...); lồng góc Việt–Hàn.
-- **Giọng đọc: Gemini TTS** (Du chốt 11/11/2026, model gemini-3.8-flash-tts, giọng đặt trong `.env` TTS_VOICE). Muốn đổi sang giọng nhân bản của Du sau này: chỉ thay `src/audio/tts.py`.
+- **Giọng đọc: Gemini TTS** (Du chốt 11/11/2026; model đặt trong `.env` TTS_MODEL — đang dùng bản lite vì quota thoáng hơn, kèm TTS_MODEL_FALLBACKS; giọng đặt trong TTS_VOICE). Muốn đổi sang giọng nhân bản của Du sau này: chỉ thay `src/audio/tts.py`.
 - Nhạc nền: tạm chưa dùng; khi Du tải nhạc từ YouTube Audio Library vào `assets/music/` thì nối vào `src/assemble.py` (đã chừa chỗ, dùng sidechaincompress để nhạc tự hạ khi có giọng).
 
 ## Tiêu chí của "chất liệu" tốt
@@ -69,14 +69,22 @@ Python, CrewAI (điều phối agent), cron/systemd timer (lịch chạy), bot T
 3. **Giai đoạn 3:** Giọng đọc, phụ đề, nhạc, agent Kiểm định.
 4. **Giai đoạn 4:** Đăng bài + agent Phân tích + triển khai lên VM Oracle.
 
-## Tình trạng giai đoạn 4 (cập nhật 11/11/2026)
-- **Xong (4.1):** duyệt hai chiều qua Telegram (`src/review.py`), agent viết tiêu đề/mô tả (`src/publish/metadata.py`), module upload YouTube (`src/publish/youtube.py`), bảng `videos` + `state` trong DB, test offline trong `tests/`.
-- Phần này mới chạy với API giả lập (viết từ xa, máy không có mạng). **Chưa chạy thật** với Telegram/YouTube: việc đầu tiên khi ngồi vào laptop là `python -m src.review send 6` rồi `python -m src.review listen`.
-- Chế độ đăng mặc định là `manual` (bot gửi gói, Du tự đăng). Đây là mặc định tạm, **Du chưa chốt**. Lý do: tài liệu Google ghi project API chưa audit thì video bị khoá riêng tư. Chi tiết trong README.
-- **Xong (4.2):** chuỗi hằng ngày `src/daily.py` (main → produce → assemble → review send, tự thử kịch bản kế khi hỏng, báo Telegram), bộ triển khai `deploy/` (script cài VM + systemd timer 06:00 giờ Hàn + dịch vụ bot chờ duyệt).
-- **Đã chạy thật trên VM (11/11/2026):** code nằm ở `~/video-agents` (remote git `vm`, SSH alias riêng trên laptop), manim + faster-whisper cài và chạy được trên ARM64, chuỗi `src.daily --skip-ideas` dựng và gửi được video vào Telegram, dịch vụ `video-agents-review` đang bật. **Hai timer (hằng ngày, hằng tuần) chưa bật.** Nút thắt thật là **quota TTS free tier** (tính theo ngày cho từng model): một video ~15 câu là gần hết một ngày quota.
-- **Xong (4.3):** agent Phân tích `src/analysis/weekly.py` (đo số liệu, điểm rời đi theo cảnh, nhích trọng số, bài học cho Biên kịch) ghi vào `data/learned.yaml`; `main.load_config()` và `crew._formula_block()` đọc file đó. Chưa chạy với số liệu thật vì kênh chưa đăng video nào.
-- **Chưa làm:** TikTok (cần Du đăng ký tài khoản developer trước).
+## Tình trạng giai đoạn 4 (cập nhật 12/11/2026)
+- **Dây chuyền đang chạy tự động trên VM từ 12/11/2026.** Code ở `~/video-agents` (remote git `vm`, SSH alias riêng trên laptop); DB chính thức là `data/pipeline.db` trên VM (DB laptop chỉ để thử). Bốn unit systemd cấp người dùng đều đã bật: `video-agents-daily.timer` (06:00 giờ Hàn, cả dây chuyền), `video-agents-daily-retry.timer` (17:40, làm tiếp khi sáng hết quota), `video-agents-weekly.timer` (Chủ nhật 21:00), `video-agents-review.service` (bot chờ nút bấm). Tắt hết: xem cuối `deploy/setup_vm.sh`.
+- **Đã chạy thật trọn vẹn** (12/11, qua chính unit systemd): ý tưởng → kịch bản → spec → 1 lần gọi TTS → video 62,9 giây → Kiểm định đạt → Telegram, hết 13 phút. Duyệt hai chiều cũng đã dùng thật: Du bấm ❌ video #1, ✅ video #2.
+- **Xong (4.1):** duyệt hai chiều (`src/review.py`), tiêu đề/mô tả (`src/publish/metadata.py`), upload YouTube (`src/publish/youtube.py`, **chưa chạy thật**). Chế độ đăng vẫn là `manual` (bot gửi gói, Du tự đăng) — mặc định tạm, **Du chưa chốt**; lý do: project API chưa audit thì video bị khoá riêng tư (chi tiết trong README).
+- **Xong (4.2):** chuỗi hằng ngày `src/daily.py` + bộ triển khai `deploy/`.
+- **Xong (4.3):** agent Phân tích `src/analysis/weekly.py`, ghi `data/learned.yaml`. Chưa có số liệu thật vì kênh chưa đăng video nào.
+- **Chưa làm:** TikTok (cần Du đăng ký tài khoản developer); mẫu bản đồ và "cuộc đua số liệu"; nhạc nền; Kiểm chứng 2 nguồn độc lập (cần search API).
+
+## Những điều đã đo/đã học khi chạy thật (đừng làm lại từ đầu)
+- **Quota TTS free tier ~15 lần gọi/ngày mỗi model**, hồi lúc nửa đêm giờ Thái Bình Dương (16–17h giờ Hàn). Vì vậy giọng được đọc **cả bài trong một lần gọi** rồi tự cắt theo câu (`src/audio/batch.py`); đừng quay về đọc từng câu.
+- **Tốc độ đọc thật ≈ 3,4 từ/giây** (giọng Kore, tiếng Việt) → 60–90 giây cần 204–306 từ (`pacing.words_per_second`). Đổi giọng thì đo lại.
+- **Model nhỏ (flash-lite) làm giám khảo rất hay báo nhầm**: mọi phán quyết của nó phải được ép khuôn (phân loại lỗi, JSON) và code đối chiếu lại; đừng cho nó quyền chặn video bằng một nhận xét tự do.
+- **Model dự phòng trả lời sai khuôn** (mảng thay vì object) khi Gemini quá tải 503 — ban đêm giờ Hàn hay gặp. Mọi chỗ đọc JSON từ LLM phải chịu được điều này.
+- **Phụ đề phải lấy chữ từ kịch bản**, Whisper chỉ cho mốc thời gian (Whisper nghe nhầm "phàn nàn" thành "phan an").
+- **Reddit chặn IP của VM** ở đường JSON và trang HTML; chỉ RSS vào được và bị giới hạn tần suất. Bài Reddit vì thế không đọc được nguồn và bị loại trước khi chấm điểm.
+- **Kịch bản phải qua cổng chuẩn** trước khi được dựng: đủ từ, ít nhất 4 con số viết bằng chữ số, Kiểm chứng đạt. Biên kịch được đưa toàn văn bài nguồn chứ không chỉ đoạn tóm tắt RSS.
 
 ## Cách làm việc
 - Làm từng giai đoạn nhỏ, chạy thử được rồi mới sang bước tiếp. Commit git sau mỗi bước.
