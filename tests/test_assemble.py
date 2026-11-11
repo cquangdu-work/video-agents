@@ -34,6 +34,36 @@ class VoiceGroupTest(unittest.TestCase):
         spec = [{"template": "intro"}, {"voice": ""}, {"voice": A}, {"voice": B}, {"voice": A}]
         self.assertEqual(assemble.voice_groups(spec), [[0], [1], [2], [3], [4]])
 
+    def test_sentences_read_in_one_breath_become_one_audio_run(self):
+        spec = [{"template": "intro"}, {"voice": A}, {"voice": A}, {"voice": B}, {"voice": "C c c"}]
+        groups = assemble.voice_groups(spec)                    # [[0], [1, 2], [3], [4]]
+        self.assertEqual(assemble.audio_runs(groups, {}), groups)
+        runs = assemble.audio_runs(groups, {3: 1})              # câu B nằm trong file của câu A
+        self.assertEqual(runs, [[0], [1, 2, 3], [4]])
+        self.assertEqual(assemble.audio_runs(groups, {3: 1, 4: 1}), [[0], [1, 2, 3, 4]])
+        # câu A chiếm len(A) phần, chia đều cho 2 cảnh của nó; câu B chiếm len(B) phần
+        self.assertEqual(assemble.scene_weights(spec, runs[1]), [len(A) / 2, len(A) / 2, len(B)])
+
+    def test_joined_map_survives_reruns_but_not_a_missing_voice_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "joined.json").write_text('{"7": 6, "19": 18}')
+            (d / "v_06.wav").write_bytes(b"x")
+            self.assertEqual(assemble.load_joined(d / "joined.json", d), {7: 6})
+            self.assertEqual(assemble.load_joined(d / "khong_co.json", d), {})
+
+    def test_voice_cache_is_dropped_when_the_spec_text_changes(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "v_01.wav").write_bytes(b"x")
+            self.assertFalse(assemble.drop_stale_voice(d, [A, B]))   # thư mục đời cũ: giữ
+            self.assertFalse(assemble.drop_stale_voice(d, [A, B]))   # spec y nguyên: giữ
+            self.assertTrue((d / "v_01.wav").exists())
+            (d / "joined.json").write_text("{}")
+            self.assertTrue(assemble.drop_stale_voice(d, [B, A]))    # đổi thứ tự câu: xoá
+            self.assertFalse((d / "v_01.wav").exists() or (d / "joined.json").exists())
+            self.assertFalse(assemble.drop_stale_voice(d, [B, A]))
+
     def test_share_seconds_follows_spec_weights_and_keeps_total(self):
         self.assertEqual(assemble.share_seconds(12.0, [4, 4, 4]), [4.0, 4.0, 4.0])
         parts = assemble.share_seconds(9.0, [2, 4])

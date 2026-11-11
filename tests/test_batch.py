@@ -14,6 +14,7 @@ from src.audio import batch, tts
 
 RATE = 24000
 S1, S2, S3 = "Xin chào các bạn.", "Giá đã rớt 38,4% sau 15 ngày.", "Hẹn gặp lại!"
+PAD = batch.KEEP_HEAD + batch.KEEP_TAIL
 
 
 def make_wav(path: Path, plan: list) -> Path:
@@ -73,39 +74,74 @@ class AlignTest(unittest.TestCase):
         self.assertIsNone(batch.sentence_gaps([S1, "…"], spread(S1, 0, 1)))   # câu không có chữ
 
 
+class SubtitleChunkTest(unittest.TestCase):
+    def test_chunks_never_straddle_two_sentences(self):
+        from src.audio.subtitles import chunk_words
+        # Ca thật (video #4): cụm "phòng nữa. Công" hiện chữ của câu sau khi còn đọc câu trước
+        words = (spread("Đừng vội kết nối AI với công việc văn phòng nữa!", 0.0, 2.9)
+                 + spread("Công nghệ AI đang giúp doanh nghiệp.", 3.0, 5.0))
+        texts = [" ".join(w[0] for w in c) for c in chunk_words(words)]
+        self.assertEqual(texts, ["Đừng vội kết", "nối AI với", "công việc văn", "phòng nữa!",
+                                 "Công nghệ AI", "đang giúp doanh", "nghiệp."])
+
+    def test_a_long_pause_also_ends_the_chunk(self):
+        from src.audio.subtitles import chunk_words
+        words = [("một", 0.0, 0.2), ("hai", 0.25, 0.4), ("ba", 1.2, 1.4), ("bốn", 1.45, 1.6)]
+        self.assertEqual([[w[0] for w in c] for c in chunk_words(words)],
+                         [["một", "hai"], ["ba", "bốn"]])
+        self.assertEqual(chunk_words([]), [])
+
+
 class SplitTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.dir = Path(self.tmp.name)
         self.outs = [self.dir / f"v_{i:02d}.wav" for i in (1, 2, 3)]
+        self.texts = [S1, S2, S3]
         # Whisper lệch ~50-80 ms so với tiếng thật — hàm cắt phải tự dời vào khoảng lặng
         self.words = spread(S1, 0.0, 1.08) + spread(S2, 1.22, 2.55) + spread(S3, 2.75, 3.6)
 
+    def split(self, plan, can_join=None):
+        wav = make_wav(self.dir / "b.wav", plan)
+        return batch.split_at_sentences(wav, self.texts, self.words, self.outs, can_join)
+
     def test_cuts_land_in_the_real_silence_and_padding_is_trimmed(self):
-        wav = make_wav(self.dir / "b.wav", [("tone", 1.0), ("quiet", 0.3), ("tone", 1.2),
-                                           ("quiet", 0.3), ("tone", 0.8), ("quiet", 0.4)])
-        self.assertTrue(batch.split_at_sentences(wav, [S1, S2, S3], self.words, self.outs))
-        durs = [tts.wav_duration(p) for p in self.outs]
-        for got, speech in zip(durs, (1.0, 1.2, 0.8)):
+        owner = self.split([("tone", 1.0), ("quiet", 0.3), ("tone", 1.2), ("quiet", 0.3),
+                            ("tone", 0.8), ("quiet", 0.4)])
+        self.assertEqual(owner, [0, 1, 2])
+        for p, speech in zip(self.outs, (1.0, 1.2, 0.8)):
             # đúng phần có tiếng + chút lặng chừa lại, không dính tiếng của câu bên cạnh
-            self.assertAlmostEqual(got, speech + batch.KEEP_HEAD + batch.KEEP_TAIL, delta=0.06)
+            self.assertAlmostEqual(tts.wav_duration(p), speech + PAD, delta=0.06)
         with wave.open(str(self.outs[1]), "rb") as w:
             head = np.frombuffer(w.readframes(int(0.03 * RATE)), dtype=np.int16)
         self.assertEqual(int(np.abs(head).max()), 0)           # mở đầu bằng lặng, không cắt trúng tiếng
 
-    def test_sentences_glued_together_are_not_cut(self):
-        wav = make_wav(self.dir / "b.wav", [("tone", 3.6)])     # đọc một lèo, không nghỉ
-        self.assertFalse(batch.split_at_sentences(wav, [S1, S2, S3], self.words, self.outs))
-        self.assertFalse(any(p.exists() for p in self.outs))
+    def test_sentences_read_in_one_breath_share_one_file(self):
+        # Ca thật (kịch bản #4): model đọc "...từ tháng sáu. Kéo dài liên tục..." liền một hơi
+        plan = [("tone", 1.0), ("quiet", 0.3), ("tone", 2.3)]   # câu 2 và 3 dính nhau
+        self.assertEqual(self.split(plan, can_join=[True, True]), [0, 1, 1])
+        self.assertTrue(self.outs[0].exists() and self.outs[1].exists())
+        self.assertFalse(self.outs[2].exists())                  # câu 3 nằm trong file câu 2
+        # hết file là hết tiếng nên phía sau không còn khoảng lặng nào để chừa lại
+        self.assertAlmostEqual(tts.wav_duration(self.outs[1]), 2.3 + batch.KEEP_HEAD, delta=0.06)
 
-    def test_implausible_sentence_length_is_not_cut(self):
-        wav = make_wav(self.dir / "b.wav", [("tone", 0.3), ("quiet", 0.3), ("tone", 3.0)])
-        words = spread(S1, 0.0, 0.3) + spread("ừ", 0.6, 0.7) + spread("à " * 30, 0.7, 3.6)
-        long, short = "à " * 30, "ừ"
-        self.assertFalse(batch.split_at_sentences(wav, [S1, long, short],
-                                                  spread(S1, 0.0, 0.3) + spread(long, 0.6, 3.5)
-                                                  + spread(short, 3.5, 3.6), self.outs))
-        self.assertFalse(any(p.exists() for p in self.outs))
+    def test_glued_sentences_that_may_not_share_are_left_for_single_reading(self):
+        plan = [("tone", 1.0), ("quiet", 0.3), ("tone", 2.3)]
+        self.assertEqual(self.split(plan), [0, None, None])      # câu 1 vẫn dùng được
+        self.assertTrue(self.outs[0].exists())
+        self.assertFalse(self.outs[1].exists() or self.outs[2].exists())
+
+    def test_a_tiny_gap_between_words_is_not_a_sentence_break(self):
+        # lặng 60 ms là nghỉ giữa hai từ; cắt ở đó dễ phạm vào chữ
+        plan = [("tone", 1.0), ("quiet", 0.3), ("tone", 1.2), ("quiet", 0.06), ("tone", 1.04)]
+        self.assertEqual(self.split(plan), [0, None, None])
+
+    def test_implausible_length_is_not_written(self):
+        self.texts = ["à", "một hai ba bốn năm sáu bảy tám chín mười", "ừ"]
+        self.words = (spread("à", 0.0, 2.0) + spread(self.texts[1], 2.3, 3.3) + spread("ừ", 3.6, 3.9))
+        owner = self.split([("tone", 2.0), ("quiet", 0.3), ("tone", 1.0), ("quiet", 0.3), ("tone", 0.3)])
+        self.assertIsNone(owner[0])                              # 1 chữ mà dài 2 giây
+        self.assertFalse(self.outs[0].exists())
 
 
 class SynthBatchTest(unittest.TestCase):
@@ -114,6 +150,7 @@ class SynthBatchTest(unittest.TestCase):
         self.dir = Path(self.tmp.name)
         self.outs = [self.dir / f"v_{i:02d}.wav" for i in (1, 2, 3)]
         self.sent = []
+        self.words = spread(S1, 0.0, 1.0) + spread(S2, 1.3, 2.5) + spread(S3, 2.8, 3.6)
 
     def synth(self, plan):
         def fake(text, out, timeout=120):
@@ -122,27 +159,42 @@ class SynthBatchTest(unittest.TestCase):
         return fake
 
     def test_one_call_for_the_whole_script(self):
-        words = spread(S1, 0.0, 1.0) + spread(S2, 1.3, 2.5) + spread(S3, 2.8, 3.6)
         plan = [("tone", 1.0), ("quiet", 0.3), ("tone", 1.2), ("quiet", 0.3), ("tone", 0.8)]
-        got = batch.synth_batch([S1, S2, S3], self.outs, self.dir,
-                                synth=self.synth(plan), transcribe=lambda p: words)
-        self.assertEqual(got, 3)
+        owner = batch.synth_batch([S1, S2, S3], self.outs, self.dir,
+                                  synth=self.synth(plan), transcribe=lambda p: self.words)
+        self.assertEqual(owner, [0, 1, 2])
         self.assertEqual(self.sent, [f"{S1}\n\n{S2}\n\n{S3}"])   # đúng MỘT lần gọi TTS
         self.assertTrue(all(p.exists() for p in self.outs))
 
+    def test_owner_indexes_are_global_across_chunks(self):
+        # mỗi mẻ tối đa 12 từ -> mẻ 1 = câu 0,1; mẻ 2 = câu 2,3 (đọc liền hơi)
+        texts = [S1, S2, S3, "Cảm ơn đã xem."]
+        outs = self.outs + [self.dir / "v_04.wav"]
+        plans = [[("tone", 1.0), ("quiet", 0.3), ("tone", 1.2)], [("tone", 2.0)]]
+        heard = [spread(S1, 0.0, 1.0) + spread(S2, 1.3, 2.5),
+                 spread(S3, 0.0, 1.0) + spread(texts[3], 1.0, 2.0)]
+
+        def fake(text, out, timeout=120):
+            make_wav(out, plans[len(self.sent)])
+            self.sent.append(text)
+        with mock.patch.dict("os.environ", {"TTS_BATCH_WORDS": "12"}):
+            owner = batch.synth_batch(texts, outs, self.dir, can_join=[True, True, True],
+                                      synth=fake, transcribe=lambda p: heard[len(self.sent) - 1])
+        self.assertEqual(len(self.sent), 2)
+        self.assertEqual(owner, [0, 1, 2, 2])                    # câu 3 nằm trong file câu 2
+
     def test_untrustworthy_cut_leaves_nothing_so_caller_reads_one_by_one(self):
-        plan = [("tone", 3.6)]
-        got = batch.synth_batch([S1, S2, S3], self.outs, self.dir, synth=self.synth(plan),
-                                transcribe=lambda p: spread("nghe ra chuyện khác hẳn", 0, 3))
-        self.assertEqual(got, 0)
+        owner = batch.synth_batch([S1, S2, S3], self.outs, self.dir, synth=self.synth([("tone", 3.6)]),
+                                  transcribe=lambda p: spread("nghe ra chuyện khác hẳn", 0, 3))
+        self.assertEqual(owner, [None, None, None])
         self.assertFalse(any(p.exists() for p in self.outs))
 
     def test_whisper_crash_is_contained_but_quota_error_propagates(self):
         def boom(p):
             raise OSError("thiếu model")
-        plan = [("tone", 1.0)]
         self.assertEqual(batch.synth_batch([S1, S2], self.outs[:2], self.dir,
-                                           synth=self.synth(plan), transcribe=boom), 0)
+                                           synth=self.synth([("tone", 1.0)]), transcribe=boom),
+                         [None, None])
 
         def no_quota(text, out, timeout=120):
             raise tts.QuotaExhausted("hết quota")

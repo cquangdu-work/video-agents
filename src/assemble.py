@@ -13,6 +13,7 @@ Luồng:
    (chỗ cắm nhạc nền để sẵn: thêm input nhạc + sidechaincompress khi Du có nhạc)
 """
 import argparse
+import hashlib
 import json
 import logging
 import subprocess
@@ -59,9 +60,60 @@ def voice_groups(spec: list) -> list:
 
 
 def share_seconds(total: float, weights: list) -> list:
-    """Chia thời lượng giọng của một nhóm cho từng cảnh, theo tỷ lệ 'seconds' trong spec."""
+    """Chia thời lượng một đoạn giọng cho từng cảnh theo trọng số."""
     weights = [max(float(w or 0), 0.1) for w in weights]
     return [total * w / sum(weights) for w in weights]
+
+
+def audio_runs(groups: list, joined: dict) -> list:
+    """Gộp tiếp các nhóm có giọng nằm chung một file (câu đọc liền hơi — xem
+    src/audio/batch.py) -> [[chỉ số cảnh, ...], ...], mỗi phần tử ứng với MỘT file giọng.
+    joined: {cảnh đầu của nhóm sau: cảnh đầu của nhóm chứa giọng}."""
+    runs = []
+    for g in groups:
+        if runs and joined.get(g[0]) == runs[-1][0]:
+            runs[-1].extend(g)
+        else:
+            runs.append(list(g))
+    return runs
+
+
+def scene_weights(spec: list, run: list) -> list:
+    """Mỗi cảnh trong một run chiếm bao nhiêu phần đoạn giọng: theo độ dài câu của nó.
+    Câu trải trên nhiều cảnh (cùng 'voice') thì chia đều phần của câu cho các cảnh đó."""
+    voices = [_voice(spec[i]) for i in run]
+    return [len(v) / voices.count(v) for v in voices]
+
+
+def drop_stale_voice(audio_dir: Path, voices: list) -> bool:
+    """Giọng đã đọc được giữ lại theo SỐ THỨ TỰ cảnh. Nếu spec được sinh lại (lời hoặc
+    thứ tự cảnh đổi) mà giọng cũ còn đó thì hình một đằng, tiếng một nẻo. Hàm này ghi
+    "dấu vân tay" của toàn bộ lời đọc vào voice.sha1; lần sau thấy khác thì xoá giọng cũ.
+    Trả về True nếu đã xoá. Thư mục giọng đời cũ (chưa có dấu) được giữ nguyên."""
+    mark = audio_dir / "voice.sha1"
+    now = hashlib.sha1("\n".join(voices).encode("utf-8")).hexdigest()
+    try:
+        old = mark.read_text(encoding="utf-8").strip()
+    except OSError:
+        old = None
+    stale = old is not None and old != now
+    if stale:
+        log.warning("Spec đã đổi so với giọng đọc đang lưu — xoá giọng cũ, đọc lại từ đầu")
+        for f in audio_dir.iterdir():
+            if f.suffix in (".wav", ".json") or f.name == "alist.txt":
+                f.unlink()
+    mark.write_text(now, encoding="utf-8")
+    return stale
+
+
+def load_joined(path: Path, audio_dir: Path) -> dict:
+    """Đọc joined.json, bỏ mục nào mà file giọng chứa nó không còn."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {int(k): int(v) for k, v in raw.items()
+            if (audio_dir / f"v_{int(v):02d}.wav").exists()}
 
 
 def ffprobe_duration(path: Path) -> float:
@@ -108,38 +160,55 @@ def main():
                   " (quota ngày của Gemini hồi khoảng 16-17h giờ Hàn).", have, len(todo))
         sys.exit(EXIT_RETRY_LATER)
 
+    drop_stale_voice(audio_dir, [_voice(spec[g[0]]) for g in todo])
+
+    # joined: {cảnh đầu của câu B: cảnh đầu của câu A} = câu B được đọc liền hơi với câu A
+    # nên giọng của B nằm trong file của A. Lưu ra đĩa để lần chạy lại còn biết.
+    joined_path = audio_dir / "joined.json"
+    joined = load_joined(joined_path, audio_dir)
+    covered = lambda g: wav_of(g).exists() or g[0] in joined
+
     # Đọc CẢ BÀI bằng một lần gọi rồi cắt theo câu (src/audio/batch.py) — tiết kiệm
     # quota gấp ~10 lần. Câu nào cắt không chắc ăn thì vòng lặp bên dưới đọc lẻ.
-    missing = [g for g in todo if not wav_of(g).exists()]
+    missing = [g for g in todo if not covered(g)]
     if len(missing) >= 2 and batch_words() > 0:
+        # hai câu chỉ được chung một đoạn giọng nếu cảnh của chúng nằm sát nhau
+        adjacent = [a[-1] + 1 == b[0] for a, b in zip(missing, missing[1:])]
         try:
-            got = synth_batch([_voice(spec[g[0]]) for g in missing],
-                              [wav_of(g) for g in missing], audio_dir)
-            log.info("Đọc gộp: có giọng cho %d/%d câu còn thiếu", got, len(missing))
+            owner = synth_batch([_voice(spec[g[0]]) for g in missing],
+                                [wav_of(g) for g in missing], audio_dir, adjacent)
         except QuotaExhausted as exc:
             pause_for_quota(exc, len(todo) - len(missing))
+        for i, o in enumerate(owner):
+            if o is not None and o != i:
+                joined[missing[i][0]] = missing[o][0]
+        joined_path.write_text(json.dumps(joined), encoding="utf-8")
+        log.info("Đọc gộp: có giọng cho %d/%d câu còn thiếu",
+                 sum(o is not None for o in owner), len(missing))
 
-    wavs = {}                                      # cảnh đầu nhóm -> file giọng của cả nhóm
-    for n, g in enumerate(todo, 1):
-        voice = _voice(spec[g[0]])
-        wav = wav_of(g)
+    runs = audio_runs(groups, joined)              # mỗi run = các cảnh dùng chung MỘT file giọng
+    voiced = [r for r in runs if _voice(spec[r[0]])]
+    wavs = {}                                      # cảnh đầu run -> file giọng của cả run
+    for n, r in enumerate(voiced, 1):
+        voice = _voice(spec[r[0]])
+        wav = wav_of(r)
         if not wav.exists():                      # chạy lại không tốn TTS lần nữa
-            log.info("TTS câu %d/%d (cảnh %d-%d): %s...", n, len(todo), g[0] + 1, g[-1] + 1,
+            log.info("TTS câu %d/%d (cảnh %d-%d): %s...", n, len(voiced), r[0] + 1, r[-1] + 1,
                      voice[:40])
             try:
                 synth(voice, wav)
             except QuotaExhausted as exc:
-                pause_for_quota(exc, sum(1 for x in todo if wav_of(x).exists()))
-            if n < len(todo):
+                pause_for_quota(exc, sum(1 for g in todo if covered(g)))
+            if n < len(voiced):
                 time.sleep(30)                    # free tier TTS giới hạn số lần/phút
-        wavs[g[0]] = wav
-        # KHÔNG cắt lời: nhóm dài đúng bằng giọng (trước đây kẹp 9s -> câu dài bị cụt)
-        total = max(wav_duration(wav) + VOICE_TAIL, MIN_SCENE * len(g))
-        for i, secs in zip(g, share_seconds(total, [spec[i].get("seconds", 3) for i in g])):
+        wavs[r[0]] = wav
+        # KHÔNG cắt lời: run dài đúng bằng giọng (trước đây kẹp 9s -> câu dài bị cụt)
+        total = max(wav_duration(wav) + VOICE_TAIL, MIN_SCENE * len(r))
+        for i, secs in zip(r, share_seconds(total, scene_weights(spec, r))):
             spec[i]["seconds"] = round(secs, 3)
-        if total / len(g) > LONG_SCENE:
+        if total / len(r) > LONG_SCENE:
             log.warning("Câu %d dài %.1fs mà chỉ có %d cảnh hình — cảnh đứng yên hơi lâu",
-                        n, total, len(g))
+                        n, total, len(r))
 
     # Lưu spec với thời lượng THẬT theo giọng — agent Kiểm định đối chiếu mốc này
     (spec_path.parent / f"script_{args.script_id}_final.yaml").write_text(
@@ -152,9 +221,9 @@ def main():
         files.append(render_scene(sc, i))
     silent = concat(files, RENDER / f"silent_{args.script_id}.mp4")
 
-    # ---- 3. Ghép audio: mỗi nhóm một đoạn, dài đúng bằng tổng các cảnh video của nhóm
+    # ---- 3. Ghép audio: mỗi run một đoạn, dài đúng bằng tổng các cảnh video của run
     parts = []
-    for g in groups:
+    for g in runs:
         vdur = sum(ffprobe_duration(files[i]) for i in g)
         part = audio_dir / f"pad_{g[0]:02d}.wav"
         if g[0] in wavs:

@@ -115,6 +115,24 @@ def check_narration(script_id: int) -> dict:
             "ok": not problems}
 
 
+def real_issue(verdict: dict, voice: str) -> bool:
+    """Lời phán của model nhìn ảnh có phải LỖI THẬT không.
+
+    Model nhỏ hay chê những thứ không phải lỗi ("hình thiếu chữ 'nữa'", "chữ bị đảo").
+    Nên: chỉ nhận 3 loại lỗi đã định nghĩa, và loại "sai số" thì code tự đối chiếu lại
+    chữ số — con số model đọc trên hình mà CÓ trong lời đọc thì không phải sai số.
+    """
+    from .utils import digit_set
+    if verdict.get("ok", True):
+        return False
+    kind = str(verdict.get("kind", "")).strip().lower()
+    if kind == "number":
+        on_image, in_voice = digit_set(str(verdict.get("image_number", ""))), digit_set(voice)
+        # lời không có chữ số nào (số viết bằng chữ) thì không đủ căn cứ để kết luận
+        return bool(on_image) and bool(in_voice) and not (on_image & in_voice)
+    return kind in ("opposite", "clipped")
+
+
 def check_visuals_match(video: Path, spec: list, duration: float) -> dict:
     """Trích khung gần cuối các cảnh có lời, hỏi model vision: hình có khớp/mâu thuẫn lời?"""
     key = os.getenv("GEMINI_API_KEY")
@@ -127,6 +145,34 @@ def check_visuals_match(video: Path, spec: list, duration: float) -> dict:
             voiced.append((min(t + secs * 0.85, duration - 0.2), sc["voice"]))
         t += secs
     samples = spread(voiced, MAX_VISION_SAMPLES)
+
+    def ask(img: str, voice: str) -> dict:
+        """Một lần hỏi model nhìn ảnh -> {"ok": bool, "note": str}."""
+        r = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+            params={"key": key},
+            json={"contents": [{"parts": [
+                {"inline_data": {"mime_type": "image/png", "data": img}},
+                {"text": "Đây là một khung hình video dạng chữ/biểu đồ tối giản, "
+                         f"lời đọc lúc này là: \"{voice}\". "
+                         "Chữ trên hình là bản TÓM TẮT rút gọn của lời đọc: thiếu từ, viết gọn, "
+                         "đổi cách diễn đạt đều là ĐẠT. Chỉ có 3 loại lỗi: "
+                         "\"number\" = một CON SỐ trên hình khác con số trong lời; "
+                         "\"opposite\" = hình nói NGƯỢC lại lời (lời nói tăng, hình ghi giảm); "
+                         "\"clipped\" = chữ bị tràn hoặc bị cắt ở mép khung. "
+                         "Dòng chữ nhỏ 1-3 từ ở nửa dưới là PHỤ ĐỀ chạy theo giọng "
+                         "(chỉ hiện vài từ đang đọc) và dòng 'Nguồn: ...' — không xét hai dòng này. "
+                         "Không có lỗi thuộc 3 loại trên thì trả {\"ok\": true}. Có thì trả "
+                         "{\"ok\": false, \"kind\": \"number|opposite|clipped\", "
+                         "\"image_number\": \"<số trên hình, nếu kind=number>\", "
+                         "\"note\": \"<mô tả ngắn>\"}"}]}],
+                  # Ép model trả JSON thuần (trước đây thỉnh thoảng trả văn xuôi -> không đọc được)
+                  "generationConfig": {"responseMimeType": "application/json"}},
+            timeout=60)
+        r.raise_for_status()
+        txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+        return json.loads(re.search(r"\{.*\}", txt, re.S).group(0))
+
     issues, unchecked = [], 0
     for ts, voice in samples:
         frame = ROOT / "data" / "render" / "qc_frame.png"
@@ -134,26 +180,17 @@ def check_visuals_match(video: Path, spec: list, duration: float) -> dict:
                         "-frames:v", "1", str(frame)], check=True)
         img = base64.b64encode(frame.read_bytes()).decode()
         try:
-            r = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                params={"key": key},
-                json={"contents": [{"parts": [
-                    {"inline_data": {"mime_type": "image/png", "data": img}},
-                    {"text": "Đây là một khung hình video dạng chữ/biểu đồ tối giản, "
-                             f"lời đọc lúc này là: \"{voice}\". CHỈ báo lỗi khi: "
-                             "(a) con số trên hình KHÁC con số trong lời, "
-                             "(b) nội dung hình NGƯỢC nghĩa với lời, "
-                             "(c) chữ bị tràn/cắt mép khung. "
-                             "Hình ít chữ hơn lời, hình chỉ tóm ý — vẫn là ĐẠT. "
-                             "Trả lời JSON: {\"ok\": true/false, \"note\": \"...\"}"}]}],
-                      # Ép model trả JSON thuần (trước đây thỉnh thoảng trả văn xuôi -> không đọc được)
-                      "generationConfig": {"responseMimeType": "application/json"}},
-                timeout=60)
-            r.raise_for_status()
-            txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-            verdict = json.loads(re.search(r"\{.*\}", txt, re.S).group(0))
-            if not verdict.get("ok"):
-                issues.append(f"{ts:.0f}s: {verdict.get('note', '')[:80]}")
+            verdict = ask(img, voice)
+            if real_issue(verdict, voice):
+                # Model nhỏ hay bắt bẻ nhầm. Lỗi thật thì hỏi lại vẫn ra lỗi; báo nhầm thì
+                # hiếm khi nhầm hai lần liền.
+                log.warning("Vision %.0fs nghi có lỗi: %s — hỏi lại lần 2", ts, verdict.get("note", ""))
+                again = ask(img, voice)
+                if real_issue(again, voice):
+                    issues.append(f"{ts:.0f}s: {str(again.get('note', ''))[:80]}")
+            elif not verdict.get("ok", True):
+                log.info("Vision %.0fs: bỏ qua nhận xét không thuộc loại lỗi nào (%s)",
+                         ts, verdict.get("note", ""))
         except Exception as exc:
             unchecked += 1       # không soát được thì phải NÓI RA, không tính là đã soát
             log.warning("Vision check %.0fs lỗi: %s", ts, type(exc).__name__)

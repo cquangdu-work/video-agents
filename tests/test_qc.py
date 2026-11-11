@@ -92,10 +92,36 @@ class VisionTest(unittest.TestCase):
         self.assertIn("đã soát 4/6 cảnh", c["value"])
         self.assertIn("2 cảnh model không trả lời", c["value"])
 
-    def test_mismatch_blocks_the_video(self):
-        self.answers({"ok": False, "note": "hình ghi 54.000, lời nói 540.000"}, *[{"ok": True}] * 5)
+    def test_mismatch_confirmed_twice_blocks_the_video(self):
+        bad = {"ok": False, "kind": "number", "image_number": "54.000",
+               "note": "hình ghi 54.000, lời nói 540.000"}
+        self.answers(bad, bad, *[{"ok": True}] * 5)
         c = qc.check_visuals_match(Path("v.mp4"), self.spec, 49.2)
         self.assertFalse(c["ok"]); self.assertIn("54.000", c["value"])
+        self.assertEqual(self.post.call_count, 7)        # cảnh bị nghi được hỏi 2 lần
+
+    def test_one_off_false_alarm_does_not_block_the_video(self):
+        self.answers({"ok": False, "kind": "clipped", "note": "chữ bị cắt"}, {"ok": True},
+                     *[{"ok": True}] * 5)
+        c = qc.check_visuals_match(Path("v.mp4"), self.spec, 49.2)
+        self.assertEqual(c["value"], "đã soát 6/6 cảnh"); self.assertTrue(c["ok"])
+
+    def test_nitpicks_outside_the_three_error_kinds_are_ignored(self):
+        # Ca thật (video #4): "lời đọc có thêm từ 'nữa'", "chữ bị đảo" — hình chỉ tóm ý, không phải lỗi
+        self.answers({"ok": False, "note": "lời đọc có thêm từ 'nữa'"},
+                     {"ok": False, "kind": "other", "note": "chữ bị đảo"}, *[{"ok": True}] * 4)
+        c = qc.check_visuals_match(Path("v.mp4"), self.spec, 49.2)
+        self.assertTrue(c["ok"]); self.assertEqual(self.post.call_count, 6)   # không cần hỏi lại
+
+    def test_number_claims_are_rechecked_by_code(self):
+        voice = "Có trung bình 540.000 người tử vong mỗi năm, tăng 38,4%."
+        claim = lambda n: {"ok": False, "kind": "number", "image_number": n, "note": "số khác"}
+        self.assertTrue(qc.real_issue(claim("54.000"), voice))       # sai thật
+        self.assertFalse(qc.real_issue(claim("540.000"), voice))     # model đọc nhầm: số có trong lời
+        self.assertFalse(qc.real_issue(claim("38,4%"), voice))
+        self.assertFalse(qc.real_issue(claim("8.030"), "Có đúng tám nghìn không trăm ba mươi hệ thống."))
+        self.assertTrue(qc.real_issue({"ok": False, "kind": "opposite"}, voice))
+        self.assertFalse(qc.real_issue({"ok": True, "kind": "clipped"}, voice))
 
 
 if __name__ == "__main__":

@@ -44,8 +44,31 @@ def _ts(sec: float) -> str:
     return f"{int(h)}:{int(m):02d}:{s:05.2f}"
 
 
+SENTENCE_END = (".", "!", "?", "…", ":", ";")
+
+
+def chunk_words(words: list, chunk_size: int = 3, pause: float = 0.35) -> list:
+    """Chia các từ thành cụm phụ đề tối đa chunk_size từ, và LUÔN ngắt cụm ở cuối câu
+    (từ kết thúc bằng . ! ? …) hoặc chỗ nghỉ dài hơn `pause` giây.
+
+    Trước đây cứ đếm đủ 3 từ là ngắt nên cụm hay vắt ngang hai câu ("phòng nữa. Công"):
+    chữ của câu sau hiện ra khi người xem còn đang nghe câu trước.
+    """
+    chunks = []
+    for i, w in enumerate(words):
+        prev = words[i - 1] if i else None
+        new = (not chunks or len(chunks[-1]) >= chunk_size
+               or prev[0].rstrip('"”’)').endswith(SENTENCE_END)
+               or w[1] - prev[2] > pause)
+        if new:
+            chunks.append([])
+        chunks[-1].append(w)
+    return chunks
+
+
 def build_ass(words: list, out_path: Path, brand: dict, chunk_size: int = 3) -> Path:
-    """Gom 3 từ một cụm; từ đang đọc tô màu accent — đúng 'phụ đề theo từng từ'."""
+    """Gom tối đa 3 từ một cụm (không vắt qua câu khác); từ đang đọc tô màu accent —
+    đúng 'phụ đề theo từng từ'."""
     c = brand["colors"]
 
     def ass_color(hex_color: str) -> str:              # #RRGGBB -> &H00BBGGRR
@@ -67,8 +90,7 @@ Style: Word,{font},76,{ass_color(c['text'])},{ass_color(c['accent'])},&H00101010
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     lines = []
-    for i in range(0, len(words), chunk_size):
-        chunk = words[i:i + chunk_size]
+    for chunk in chunk_words(words, chunk_size):
         start, end = chunk[0][1], chunk[-1][2]
         # mỗi từ trong cụm đổi sang màu accent đúng lúc nó được đọc
         for j, (word, ws, we) in enumerate(chunk):
