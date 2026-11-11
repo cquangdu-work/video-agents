@@ -71,6 +71,7 @@ daily:
   videos_per_day: 1     # số video dựng + gửi duyệt mỗi ngày
   max_attempts: 2       # kịch bản đầu dựng hỏng thì thử kịch bản kế, tối đa bấy nhiêu lần
   max_script_age_days: 3   # kịch bản cũ hơn thế thì bỏ (số liệu "mới" đã nguội)
+  min_script_words: 150    # lời đọc ít hơn thế (~45 giây) thì bỏ: video sẽ rớt Kiểm định độ dài
 
 # ---------- Phân tích đối thủ (python -m src.analysis.competitors) ----------
 competitor_analysis:

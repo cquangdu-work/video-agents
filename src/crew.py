@@ -268,6 +268,10 @@ Yêu cầu:
 - "title" ngắn <= 9 từ, tiếng Việt; "source" ghi nguồn của cảnh đó.
 - Mỗi cảnh có trường "voice": lời đọc NGUYÊN VĂN của (các) cảnh kịch bản tương ứng,
   không sửa chữ; cảnh gộp thì nối các câu lại.
+- Câu lời DÀI (đọc lâu hơn {pacing['scene_seconds_max']} giây) thì chia thành nhiều cảnh
+  đồ họa LIỀN NHAU, mỗi cảnh minh họa một ý của câu theo đúng thứ tự ý đó được đọc.
+  Các cảnh ấy ghi CÙNG một "voice" nguyên văn cả câu: máy chỉ đọc câu đó MỘT lần
+  rồi chia thời lượng cho các cảnh. Không chép "voice" của câu này sang cảnh của câu khác.
 - KHÔNG thêm template "intro" (engine tự thêm)."""
     expected = """JSON array, mỗi phần tử:
 {"template": "<tên template>", "seconds": <số>, "voice": "<lời đọc nguyên văn>", "params": {...}}"""

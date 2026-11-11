@@ -36,17 +36,20 @@ class DailyCase(unittest.TestCase):
         self.addCleanup(self.con.close)
         self.ran = []
 
-    def script(self, sid, total, status="verified", days_ago=0.0):
+    def script(self, sid, total, status="verified", days_ago=0.0, words=200):
         self.con.execute("INSERT INTO ideas (id,title,title_norm,source_url,scores) VALUES (?,?,?,?,?)",
                          (sid, f"t{sid}", f"t{sid}", f"https://s/{sid}", json.dumps({"total": total})))
-        self.con.execute("INSERT INTO scripts (id,idea_id,status,created_at) VALUES (?,?,?,?)",
-                         (sid, sid, status, iso(days_ago)))
+        body = json.dumps([{"voice": "từ " * 10} for _ in range(words // 10)])   # JSON cũng là YAML
+        self.con.execute("INSERT INTO scripts (id,idea_id,status,created_at,body) VALUES (?,?,?,?,?)",
+                         (sid, sid, status, iso(days_ago), body))
         self.con.commit()
 
-    def runner(self, fail=()):
+    def runner(self, fail=(), out_of_quota=()):
         """Hàm giả thay run_step: ghi lại bước đã chạy; 'gửi duyệt' thì tạo bản ghi video."""
         def run(name, key, args, log_file):
             self.ran.append((key, args[-1] if key != "ideas" else "-"))
+            if (key, args[-1]) in out_of_quota:
+                return False, f"mã thoát {daily.EXIT_RETRY_LATER}\nERROR assemble: TẠM DỪNG"
             if (key, args[-1]) in fail or (key == "ideas" and "ideas" in fail):
                 return False, "mã thoát 1\nTraceback: lỗi giả lập"
             if key == "review":
@@ -72,6 +75,15 @@ class PickTest(DailyCase):
         self.script(8, 10.0)
         db.upsert_video(self.con, 8, "f", "T", "D", [], [])   # gửi Telegram hụt -> vẫn được thử lại
         self.assertEqual([c["id"] for c in daily.pick_candidates(self.con, CFG)], [5, 1, 2, 8])
+
+    def test_too_short_legacy_script_is_skipped_before_spending_tts(self):
+        # Ca thật trên VM: kịch bản đời cũ 3 cảnh ~115 từ có điểm CAO NHẤT nên bị chọn trước
+        self.script(1, 26.5, words=110)
+        self.script(6, 24.0, words=200)
+        self.assertEqual(daily.script_words(None), 0)
+        self.assertEqual([c["id"] for c in daily.pick_candidates(self.con, CFG)], [6])
+        loose = {"daily": {**CFG["daily"], "min_script_words": 100}}
+        self.assertEqual([c["id"] for c in daily.pick_candidates(self.con, loose)], [1, 6])
 
     def test_plan_skips_done_work(self):
         names = lambda sid: [s[1] for s in daily.plan_steps(sid)]
@@ -118,6 +130,20 @@ class RunTest(DailyCase):
         self.assertEqual(sum(1 for k, _ in self.ran if k == "assemble"), 2)   # max_attempts = 2
         self.assertIn("chưa có video", self.msgs[0])
         self.assertIn("Bước ý tưởng/kịch bản lỗi", self.msgs[0])
+
+    def test_tts_quota_pauses_without_blaming_the_script(self):
+        self.script(1, 26.5); self.script(2, 25.5)
+        made = daily.run_daily(skip_ideas=True, runner=self.runner(out_of_quota={("assemble", "1")}))
+        self.assertEqual(made, 0)
+        self.assertEqual(db.get_state(self.con, "prod_fail_1", "0"), "0")   # không tính lần hỏng
+        self.assertNotIn(("assemble", "2"), self.ran)   # kịch bản kế cũng cần TTS -> không đốt thêm
+        self.assertEqual(len(self.msgs), 1)
+        self.assertIn("hết quota giọng đọc", self.msgs[0])
+        self.assertNotIn("hỏng ở bước", self.msgs[0])
+
+    def test_exit_codes_agree_between_assemble_and_daily(self):
+        from src import assemble
+        self.assertEqual(assemble.EXIT_RETRY_LATER, daily.EXIT_RETRY_LATER)
 
     def test_nothing_verified(self):
         self.assertEqual(daily.run_daily(skip_ideas=True, runner=self.runner()), 0)

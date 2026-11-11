@@ -82,6 +82,18 @@ Cách chọn kịch bản: đã qua Kiểm chứng, chưa gửi duyệt, không 
 ưu tiên cái đã dựng xong video, rồi tới điểm Biên tập cao. Mỗi ngày `daily.videos_per_day` video;
 chạy lại trong ngày không làm dư. Kịch bản dựng hỏng 2 lần thì bị bỏ qua. Log: `logs/daily_<ngày>.log`.
 
+Ba điều rút ra từ lần chạy thử đầu trên VM (11/11/2026):
+
+- **Kịch bản quá ngắn bị bỏ qua từ đầu** (`daily.min_script_words`, mặc định 150 từ ≈ 45 giây):
+  kịch bản đời cũ 3 cảnh có điểm cao nên bị chọn trước, dựng xong mới lộ ra là hụt độ dài.
+- **Một câu lời đọc dài trải trên nhiều cảnh hình:** spec ghi cùng một `voice` ở các cảnh liền nhau,
+  `src/assemble.py` gom lại, gọi TTS **một lần** rồi chia thời lượng cho các cảnh (`voice_groups`).
+- **Hết quota giọng đọc không tính là kịch bản hỏng:** `src/audio/tts.py` đọc lý do trong lỗi 429
+  (quota phút thì chờ đúng số giây API báo, quota ngày thì nhảy sang `TTS_MODEL_FALLBACKS`); hết sạch
+  thì `assemble` thoát mã 75, `daily` báo "tạm dừng" qua Telegram. Giọng đã đọc nằm trong
+  `data/render/audio_<id>/`, chạy lại là làm tiếp. Quota ngày của Gemini hồi lúc nửa đêm giờ
+  Thái Bình Dương (16–17h giờ Hàn).
+
 ## Triển khai lên VM Oracle
 
 Chuyển code bằng git qua SSH (không cần GitHub):

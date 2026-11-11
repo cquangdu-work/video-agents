@@ -3,7 +3,8 @@
     python -m src.assemble 6                 # từ data/specs/script_6.yaml
 
 Luồng:
-1. TTS từng cảnh (Gemini) -> thời lượng cảnh = thời lượng giọng (hình khớp lời)
+1. TTS từng CÂU lời (Gemini). Các cảnh liền nhau ghi cùng một câu lời = một nhóm:
+   đọc MỘT lần, thời lượng giọng chia cho các cảnh trong nhóm (hình khớp lời)
 2. Render từng cảnh Manim theo thời lượng đó, nối thành video câm
 3. Ghép audio các cảnh (đệm im lặng cho khớp từng cảnh video)
 4. Whisper lấy mốc từng từ -> phụ đề .ass kiểu cụm 3 từ
@@ -14,6 +15,7 @@ import argparse
 import logging
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import yaml
@@ -24,6 +26,40 @@ log = logging.getLogger("assemble")
 ROOT = Path(__file__).resolve().parent.parent
 RENDER = ROOT / "data" / "render"
 OUTPUT = ROOT / "output"
+
+EXIT_RETRY_LATER = 75    # mã thoát "lỗi tạm thời" (hết quota TTS) — src/daily.py đọc mã này
+MIN_SCENE = 2.0          # giây — cảnh ngắn hơn thế thì mắt không kịp đọc
+LONG_SCENE = 9.0         # giây — cảnh đứng yên lâu hơn thế thì cảnh báo (nhịp chậm)
+VOICE_TAIL = 0.35        # giây — khoảng lặng sau mỗi câu cho giọng khỏi dính nhau
+
+
+def _voice(sc: dict) -> str:
+    """Lời đọc của cảnh, đã gọt khoảng trắng thừa (để so trùng không bị lệch vì dấu cách)."""
+    return " ".join(str(sc.get("voice") or "").split())
+
+
+def voice_groups(spec: list) -> list:
+    """Gom các cảnh LIỀN NHAU có cùng lời đọc thành nhóm -> [[chỉ số cảnh, ...], ...].
+
+    Một câu lời dài 10-15 giây cần 3-4 cảnh hình (luật đổi cảnh mỗi 2-4 giây), nên
+    spec ghi cùng một 'voice' ở các cảnh đó. Câu ấy chỉ được ĐỌC MỘT LẦN và phát
+    xuyên suốt cả nhóm. (Trước đây mỗi cảnh tự gọi TTS: câu bị đọc lặp 3 lần và
+    tốn gấp 3 quota.) Cảnh không lời (intro) luôn đứng riêng.
+    """
+    groups = []
+    for i, sc in enumerate(spec):
+        v = _voice(sc)
+        if groups and v and v == _voice(spec[groups[-1][0]]):
+            groups[-1].append(i)
+        else:
+            groups.append([i])
+    return groups
+
+
+def share_seconds(total: float, weights: list) -> list:
+    """Chia thời lượng giọng của một nhóm cho từng cảnh, theo tỷ lệ 'seconds' trong spec."""
+    weights = [max(float(w or 0), 0.1) for w in weights]
+    return [total * w / sum(weights) for w in weights]
 
 
 def ffprobe_duration(path: Path) -> float:
@@ -48,34 +84,48 @@ def main():
     spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
 
     from . import assets_db
-    from .audio.tts import synth, wav_duration
+    from .audio.tts import QuotaExhausted, synth, wav_duration
     from .render.engine import concat, render_scene
 
-    # ---- 1. TTS từng cảnh, chỉnh thời lượng cảnh theo giọng
-    voiced = sum(1 for sc in spec if (sc.get("voice") or "").strip())
-    if voiced == 0:
+    # ---- 1. TTS từng câu lời (nhóm cảnh), chỉnh thời lượng cảnh theo giọng
+    groups = voice_groups(spec)
+    todo = [g for g in groups if _voice(spec[g[0]])]
+    if not todo:
         sys.exit(f"Spec {spec_path.name} không có trường 'voice' ở cảnh nào (spec đời cũ)."
                  f" Sinh lại: python -m src.produce {args.script_id} --spec-only")
     audio_dir = RENDER / f"audio_{args.script_id}"
     audio_dir.mkdir(parents=True, exist_ok=True)   # cảnh không lời vẫn cần ghi file đệm
-    for i, sc in enumerate(spec):
-        voice = (sc.get("voice") or "").strip()
-        if not voice:
-            sc["_wav"] = None
-            continue
-        wav = audio_dir / f"v_{i:02d}.wav"
+    wavs = {}                                      # cảnh đầu nhóm -> file giọng của cả nhóm
+    for n, g in enumerate(todo, 1):
+        voice = _voice(spec[g[0]])
+        wav = audio_dir / f"v_{g[0]:02d}.wav"
         if not wav.exists():                      # chạy lại không tốn TTS lần nữa
-            log.info("TTS cảnh %d/%d: %s...", i + 1, len(spec), voice[:40])
-            synth(voice, wav)
-            import time
-            time.sleep(30)                        # free tier TTS giới hạn số lần/phút
-        sc["_wav"] = wav
-        sc["seconds"] = max(2.0, min(wav_duration(wav) + 0.35, 9.0))
+            log.info("TTS câu %d/%d (cảnh %d-%d): %s...", n, len(todo), g[0] + 1, g[-1] + 1,
+                     voice[:40])
+            try:
+                synth(voice, wav)
+            except QuotaExhausted as exc:
+                # Không phải lỗi của kịch bản: giọng đã đọc xong vẫn nằm trong cache,
+                # chạy lại sau khi quota hồi là làm tiếp từ câu này.
+                log.error("%s", exc)
+                log.error("TẠM DỪNG: đã có giọng cho %d/%d câu. Chạy lại lệnh này sau"
+                          " (quota ngày của Gemini hồi khoảng 16-17h giờ Hàn).",
+                          n - 1, len(todo))
+                sys.exit(EXIT_RETRY_LATER)
+            if n < len(todo):
+                time.sleep(30)                    # free tier TTS giới hạn số lần/phút
+        wavs[g[0]] = wav
+        # KHÔNG cắt lời: nhóm dài đúng bằng giọng (trước đây kẹp 9s -> câu dài bị cụt)
+        total = max(wav_duration(wav) + VOICE_TAIL, MIN_SCENE * len(g))
+        for i, secs in zip(g, share_seconds(total, [spec[i].get("seconds", 3) for i in g])):
+            spec[i]["seconds"] = round(secs, 3)
+        if total / len(g) > LONG_SCENE:
+            log.warning("Câu %d dài %.1fs mà chỉ có %d cảnh hình — cảnh đứng yên hơi lâu",
+                        n, total, len(g))
 
     # Lưu spec với thời lượng THẬT theo giọng — agent Kiểm định đối chiếu mốc này
-    final_spec = [{k: v for k, v in sc.items() if k != "_wav"} for sc in spec]
     (spec_path.parent / f"script_{args.script_id}_final.yaml").write_text(
-        yaml.safe_dump(final_spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
     # ---- 2. Render hình theo thời lượng giọng
     files = []
@@ -84,13 +134,13 @@ def main():
         files.append(render_scene(sc, i))
     silent = concat(files, RENDER / f"silent_{args.script_id}.mp4")
 
-    # ---- 3. Ghép audio khớp đúng thời lượng THẬT của từng cảnh video
+    # ---- 3. Ghép audio: mỗi nhóm một đoạn, dài đúng bằng tổng các cảnh video của nhóm
     parts = []
-    for i, (sc, f) in enumerate(zip(spec, files)):
-        vdur = ffprobe_duration(f)
-        part = audio_dir / f"pad_{i:02d}.wav"
-        if sc["_wav"]:
-            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(sc["_wav"]),
+    for g in groups:
+        vdur = sum(ffprobe_duration(files[i]) for i in g)
+        part = audio_dir / f"pad_{g[0]:02d}.wav"
+        if g[0] in wavs:
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(wavs[g[0]]),
                             "-af", "apad", "-t", f"{vdur:.3f}",
                             "-ar", "24000", "-ac", "1", str(part)], check=True)
         else:                                      # cảnh không lời (intro) -> im lặng

@@ -38,6 +38,8 @@ OUTPUT = ROOT / "output"
 LOG_DIR = ROOT / "logs"
 
 MAX_FAILS_PER_SCRIPT = 2          # kịch bản dựng hỏng 2 lần thì thôi không thử nữa
+EXIT_RETRY_LATER = 75             # bước con thoát mã này = "lỗi tạm thời của dịch vụ ngoài"
+                                  # (assemble: hết quota TTS) — khớp src/assemble.py
 STEP_TIMEOUT = {"ideas": 3600, "produce": 1800, "assemble": 5400, "review": 1200}  # giây
 
 
@@ -57,16 +59,27 @@ def videos_made_since(con, hours: float = 20, now: datetime = None) -> int:
                        " AND tg_message_id IS NOT NULL", (since,)).fetchone()[0]
 
 
+def script_words(body: str) -> int:
+    """Tổng số từ lời đọc của một kịch bản (cột scripts.body là YAML danh sách cảnh)."""
+    try:
+        scenes = yaml.safe_load(body or "") or []
+        return sum(len(str(s.get("voice", "")).split()) for s in scenes)
+    except Exception:
+        return 0
+
+
 def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     """Kịch bản đủ điều kiện dựng, theo thứ tự ưu tiên. Trả về [{"id", "score", "has_final"}].
 
-    Điều kiện: đã qua Kiểm chứng, chưa gửi duyệt lần nào, còn mới, chưa hỏng quá số lần.
+    Điều kiện: đã qua Kiểm chứng, chưa gửi duyệt lần nào, còn mới, chưa hỏng quá số lần,
+    lời đọc đủ dài.
     Ưu tiên: cái đã dựng xong video (khỏi tốn công) -> điểm Biên tập cao -> mới hơn.
     """
     max_age = cfg["daily"].get("max_script_age_days", 3)
+    min_words = cfg["daily"].get("min_script_words", 150)
     since = ((now or datetime.now(timezone.utc)) - timedelta(days=max_age)).isoformat(timespec="seconds")
     rows = con.execute(
-        "SELECT s.id, i.scores FROM scripts s JOIN ideas i ON i.id = s.idea_id"
+        "SELECT s.id, s.body, i.scores FROM scripts s JOIN ideas i ON i.id = s.idea_id"
         " WHERE s.status = 'verified' AND s.created_at >= ?"
         # video gửi Telegram hụt (chưa có tg_message_id) vẫn được thử gửi lại
         " AND s.id NOT IN (SELECT script_id FROM videos WHERE tg_message_id IS NOT NULL"
@@ -74,6 +87,12 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     out = []
     for r in rows:
         if int(db.get_state(con, f"prod_fail_{r['id']}", "0")) >= MAX_FAILS_PER_SCRIPT:
+            continue
+        words = script_words(r["body"])
+        if words < min_words:
+            # Chặn TRƯỚC khi tốn quota giọng đọc + công dựng: kịch bản đời cũ (3 cảnh,
+            # ~115 từ) cho ra video ~40 giây, kiểu gì cũng rớt Kiểm định độ dài.
+            log.info("Bỏ qua kịch bản #%d: lời đọc chỉ %d từ (cần ≥ %d)", r["id"], words, min_words)
             continue
         try:
             score = float(json.loads(r["scores"] or "{}").get("total", 0))
@@ -173,12 +192,23 @@ def _run_daily(cfg, con, skip_ideas, dry_run, runner) -> int:
         if made >= want - already or attempts >= int(cfg["daily"].get("max_attempts", 2)):
             break
         attempts += 1
-        failed = None
+        failed, retry_later = None, False
         for name, key, args in plan_steps(c["id"]):
             ok, tail = runner(name, key, args, log_file)
             if not ok:
+                retry_later = tail.splitlines()[:1] == [f"mã thoát {EXIT_RETRY_LATER}"]
                 failed = f"Kịch bản #{c['id']} hỏng ở bước “{name}”: {tail}"
                 break
+        if retry_later:
+            # Hết quota giọng đọc: KHÔNG phải lỗi của kịch bản -> không tính lần hỏng
+            # (kẻo 2 hôm hết quota là kịch bản bị loại oan), và không thử kịch bản kế
+            # (nó cũng cần TTS, chỉ đốt thêm quota rồi hỏng y hệt).
+            msg = (f"Kịch bản #{c['id']} tạm dừng ở bước “{name}”: hết quota giọng đọc (TTS)."
+                   " Phần giọng đã đọc xong được giữ lại. Quota hồi khoảng 16-17h giờ Hàn;"
+                   " sau đó chạy lại `python -m src.daily --skip-ideas` là làm tiếp.")
+            problems.append(msg)
+            log.warning(msg)
+            break
         if failed:
             fails = int(db.get_state(con, f"prod_fail_{c['id']}", "0")) + 1
             db.set_state(con, f"prod_fail_{c['id']}", fails)
