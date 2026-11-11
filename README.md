@@ -102,6 +102,12 @@ Mỗi ngày (tính theo giờ Hàn) đúng một lượt `daily` được phép 
   và dây chuyền viết ý tưởng kế tiếp (`daily.extra_script_tries`).
 - **Độ dài kịch bản tính từ tốc độ đọc đo thật:** `pacing.words_per_second` = 3,4 →
   60–90 giây cần 204–306 từ. Đổi giọng (`TTS_VOICE`) thì đo lại con số này.
+- **Mọi con số trong lời đọc phải có trong bài nguồn:** agent Kiểm chứng (LLM) chỉ soát các
+  "claims" Biên kịch tự khai, nên `crew.unsourced_numbers()` đối chiếu bằng code từng con số
+  với toàn văn bài nguồn. Thiếu căn cứ thì trả về viết lại một lần; vẫn còn thì kịch bản ở
+  lại `draft`. (Đã bắt được câu mở đầu tự chế "Sai lầm 99% người ăn chay mắc phải...".)
+- **Ý tưởng không đọc được bài nguồn bị loại trước khi chấm điểm** (ví dụ bài Reddit bị chặn).
+- **Lời đọc được gỡ hashtag, emoji, đuôi "| tên kênh"** trước khi tới giọng đọc.
 
 ### Giọng đọc và quota
 
