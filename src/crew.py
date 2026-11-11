@@ -58,8 +58,14 @@ def _run_single_task(role: str, goal: str, description: str, expected_output: st
 # ---------------------------------------------------------------- Săn ý tưởng
 def hunt_ideas(raw_items: list, cfg: dict) -> list:
     """Nhận ~30-60 ý tưởng thô, trả về các ứng viên có 'góc' rõ ràng."""
+    from .utils import digit_set
+
+    def numbers_in(i: dict) -> int:     # đếm con số có sẵn trong tiêu đề + tóm tắt
+        return len(digit_set(f"{i['title']} {i['summary']}"))
+
     listing = "\n".join(
-        f"- [{i['id']}] ({i['source_name']}, {i['lang']}) {i['title']} — {i['summary'][:150]}"
+        f"- [{i['id']}] ({i['source_name']}, {i['lang']}, {numbers_in(i)} con số)"
+        f" {i['title']} — {i['summary'][:150]}"
         for i in raw_items
     )
     out = _run_single_task(
@@ -74,6 +80,9 @@ Danh sách ý tưởng thô hôm nay:
 
 Chọn tối đa {cfg['daily']['shortlist'] * 3} ý tưởng CÓ GÓC rõ nhất và minh họa được
 bằng biểu đồ/bản đồ/số liệu. Với mỗi ý tưởng, viết góc cụ thể bằng tiếng Việt.
+KÊNH DỰNG HÌNH BẰNG SỐ LIỆU: ưu tiên rõ rệt ý tưởng mà nguồn đã có sẵn nhiều con số cụ
+thể (số lượng, tỷ lệ, số tiền, mốc năm — xem "N con số" ghi ở mỗi dòng). Ý tưởng thuần
+quan điểm, định tính, không đo đếm được gì thì LOẠI dù nghe hay.
 CẨN THẬN ĐƠN VỊ khi nhắc số liệu từ nguồn tiếng Hàn/Anh: 만 = 10.000 (54만 = 540.000),
 억 = 100 triệu; million = triệu, billion = tỷ. Không chắc thì đừng ghi con số vào góc.""",
         expected_output="""JSON array, mỗi phần tử:
@@ -159,14 +168,37 @@ def _script_stats(script: dict) -> tuple:
     return len(scenes), words, len(digit_set(voice_all))
 
 
-def write_script(idea: dict, cfg: dict, feedback: str = None) -> dict:
+def script_problems(script: dict, cfg: dict) -> list:
+    """Kịch bản hụt chuẩn ở đâu -> danh sách lý do (rỗng = đạt). Dùng chung cho vòng
+    viết lại của Biên kịch và cho main (kịch bản còn lỗi thì KHÔNG được đem đi dựng)."""
+    lo_words, hi_words = word_budget(cfg)
+    n, words, numbers = _script_stats(script)
+    problems = []
+    if not SCRIPT_MIN_SCENES <= n <= SCRIPT_MAX_SCENES:
+        problems.append(f"{n} cảnh (cần {SCRIPT_MIN_SCENES}-{SCRIPT_MAX_SCENES})")
+    # Cho lệch một chút quanh ngân sách từ: hụt 10% hay dư 5% vẫn ra video đúng cỡ
+    if not 0.9 * lo_words <= words <= 1.05 * hi_words:
+        problems.append(f"{words} từ (cần {lo_words}-{hi_words})")
+    if numbers < SCRIPT_MIN_NUMBERS:
+        problems.append(f"chỉ {numbers} con số trong lời đọc (cần ít nhất {SCRIPT_MIN_NUMBERS})")
+    return problems
+
+
+def write_script(idea: dict, cfg: dict, feedback: str = None, source_text: str = "") -> dict:
     """Viết kịch bản 60-90 giây + 3 phương án câu mở đầu.
 
-    Tự kiểm số cảnh/số từ; hụt chuẩn thì trả lại cho LLM viết lại 1 lần.
+    Tự kiểm số cảnh/số từ/số con số; hụt chuẩn thì trả lại cho LLM viết lại, cuối cùng
+    giữ bản ÍT LỖI NHẤT (bản viết lại có khi còn tệ hơn bản đầu).
     feedback: lỗi từ agent Kiểm chứng (luồng "sai thì trả về Biên kịch").
+    source_text: toàn văn bài nguồn. Trước đây Biên kịch chỉ thấy đoạn tóm tắt RSS
+    vài dòng nên không có số mà dùng — kịch bản ra 1-2 con số, toàn câu chữ.
     """
     ch = cfg["channel"]
     lo_words, hi_words = word_budget(cfg)
+    excerpt = (source_text or "").strip()[:5000]
+    source_block = (f"\nTRÍCH BÀI NGUỒN (mọi con số trong kịch bản phải lấy từ đây hoặc từ tóm tắt"
+                    f" bên trên, tuyệt đối không tự nghĩ ra):\n\"\"\"\n{excerpt}\n\"\"\"\n"
+                    if excerpt else "")
     base_description = f"""Viết kịch bản video dọc {ch['video_seconds_min']}-{ch['video_seconds_max']} giây
 cho kênh "{ch['name']}". Tốc độ đọc ~{words_per_second(cfg) * 60:.0f} từ/phút -> TỔNG LỜI ĐỌC PHẢI ĐẠT {lo_words}-{hi_words} từ.
 
@@ -174,7 +206,7 @@ cho kênh "{ch['name']}". Tốc độ đọc ~{words_per_second(cfg) * 60:.0f} t
 Góc: {idea['angle']}
 Nguồn gốc: {idea['source_url']}
 Tóm tắt nguồn: {idea.get('summary', '')}
-
+{source_block}
 Luật chính sách (bắt buộc tuân thủ): {cfg['policy_rules']}
 {_formula_block()}
 
@@ -202,27 +234,28 @@ AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — 
  "scenes": [{"voice": "<1 câu lời đọc>", "visual": "<mô tả hình/biểu đồ>", "data_source": "<nguồn>"}],
  "claims": [{"claim": "<khẳng định có số liệu>", "source": "<nguồn/link>"}]}"""
 
-    description, script = base_description, None
-    for attempt in range(2):
+    description, best, best_problems = base_description, None, None
+    tries = 2
+    for attempt in range(tries):
         script = extract_json(_run_single_task(
             role="Biên kịch video ngắn tiếng Việt",
             goal="Kịch bản cuốn hút, chính xác, dựng được bằng biểu đồ",
             description=description, expected_output=expected))
-        n, words, numbers = _script_stats(script)
-        # Cho lệch một chút quanh ngân sách từ: hụt 10% hay dư 5% vẫn ra video đúng cỡ
-        if (SCRIPT_MIN_SCENES <= n <= SCRIPT_MAX_SCENES
-                and 0.9 * lo_words <= words <= 1.05 * hi_words
-                and numbers >= SCRIPT_MIN_NUMBERS):
+        problems = script_problems(script, cfg)
+        if best is None or len(problems) <= len(best_problems):
+            best, best_problems = script, problems
+        if not problems:
             return script
-        log.warning("Kịch bản hụt chuẩn (%d cảnh, %d từ, %d con số) — trả lại viết lần %d",
-                    n, words, numbers, attempt + 2)
+        log.warning("Kịch bản hụt chuẩn (%s) — lần viết %d/%d", "; ".join(problems),
+                    attempt + 1, tries)
         description = base_description + f"""
 
-BẢN NHÁP TRƯỚC BỊ TRẢ LẠI: {n} cảnh, {words} từ, chỉ {numbers} con số trong lời đọc.
-Phải đạt 16-26 cảnh, {lo_words}-{hi_words} từ, và ÍT NHẤT 6 con số cụ thể viết bằng chữ số.
-Tách mỗi ý thành một cảnh riêng, mỗi con số một cảnh, đừng gộp."""
-    log.warning("Vẫn hụt chuẩn sau 2 lần — dùng bản cuối")
-    return script
+BẢN NHÁP TRƯỚC BỊ TRẢ LẠI vì: {'; '.join(problems)}.
+Phải đạt 16-26 cảnh, {lo_words}-{hi_words} từ, và ÍT NHẤT 6 con số cụ thể viết bằng chữ số
+(lấy từ TRÍCH BÀI NGUỒN). Tách mỗi ý thành một cảnh riêng, mỗi con số một cảnh, đừng gộp."""
+    log.warning("Vẫn hụt chuẩn sau %d lần viết — giữ bản ít lỗi nhất (%s)", tries,
+                "; ".join(best_problems))
+    return best
 
 
 # ---------------------------------------------------------------- Sản xuất

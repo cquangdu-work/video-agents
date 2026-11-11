@@ -40,8 +40,8 @@ sources:
     categories: ["econ.GN", "physics.soc-ph", "cs.CY"]   # kinh tế, xã hội định lượng
     max_results: 15
 
-  # Lưu ý: Reddit chặn truy cập JSON công khai (403) — cần đăng ký app API
-  # chính thức (miễn phí) rồi thêm key vào .env ở bước sau. Hiện tại bỏ qua.
+  # Reddit chặn đường JSON công khai (403) với nhiều IP, nhất là IP đám mây của VM;
+  # src/sources/reddit.py tự chuyển sang đường RSS (vẫn vào được, không cần key).
   reddit:
     subreddits: ["askscience", "explainlikeimfive", "dataisbeautiful"]
     listing: "top"
@@ -67,6 +67,7 @@ angle_rules: >
 daily:
   raw_target: 30        # ~30 ý tưởng thô mỗi sáng
   shortlist: 3          # chọn ra 2-3 ý tưởng tốt nhất
+  extra_script_tries: 2 # kịch bản hụt chuẩn thì viết thêm tối đa bấy nhiêu ý tưởng kế tiếp
   # --- chuỗi chạy hằng ngày (python -m src.daily) ---
   videos_per_day: 1     # số video dựng + gửi duyệt mỗi ngày
   utc_offset_hours: 9   # "mỗi ngày" tính theo giờ nơi Du ở (Hàn Quốc = +9)

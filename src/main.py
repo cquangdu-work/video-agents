@@ -89,23 +89,37 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
             selected.append(dict(idea, score=s["total"]))
         else:
             db.set_status(con, idea["id"], "rejected", reason=f"Điểm thấp ({s['total']})", scores=s)
-    selected = sorted(selected, key=lambda i: -i["score"])[: cfg["daily"]["shortlist"]]
-    log.info("Biên tập chọn %d ý tưởng", len(selected))
+    want = cfg["daily"]["shortlist"]
+    selected = sorted(selected, key=lambda i: -i["score"])
+    # Kịch bản hụt chuẩn (thiếu số, quá ngắn) không được tính -> thử thêm ý tưởng kế
+    # tiếp theo điểm, nhưng có trần để không đốt quota LLM vô hạn.
+    selected = selected[: want + int(cfg["daily"].get("extra_script_tries", 2))]
+    log.info("Biên tập chọn %d ý tưởng (cần %d kịch bản đạt)", len(selected), want)
 
     # --- Biên kịch + Kiểm chứng từng ý tưởng (sai số liệu thì trả về viết lại 1 lần)
-    sent = 0
+    sent = good = 0
     for idea in selected:
-        script = crew.write_script(idea, cfg)
+        if good >= want:
+            break
+        # Tải bài nguồn TRƯỚC: Biên kịch cần toàn văn để có số liệu mà viết
         source_text = fetch_page_text(idea["source_url"])
+        script = crew.write_script(idea, cfg, source_text=source_text)
         fc = crew.fact_check(script, idea, source_text, cfg)
         if not fc.get("pass"):
             feedback = "\n".join(
                 f"- SAI: {v.get('claim', '')} -> {v.get('note', '')}"
                 for v in fc.get("verdicts", []) if not v.get("ok"))
             log.warning("Kiểm chứng trượt — trả về Biên kịch viết lại:\n%s", feedback)
-            script = crew.write_script(idea, cfg, feedback=feedback)
+            script = crew.write_script(idea, cfg, feedback=feedback, source_text=source_text)
             fc = crew.fact_check(script, idea, source_text, cfg)
-        status = "verified" if fc.get("pass") else "draft"
+        problems = crew.script_problems(script, cfg)
+        if problems:
+            # Ghi lý do vào hồ sơ kiểm chứng để về sau tra được vì sao kịch bản bị giữ lại
+            fc["standard_problems"] = problems
+            log.warning("Kịch bản cho “%s” hụt chuẩn (%s) — giữ ở trạng thái nháp, không dựng",
+                        idea["title"][:50], "; ".join(problems))
+        status = "verified" if fc.get("pass") and not problems else "draft"
+        good += status == "verified"
         db.save_script(con, idea["id"], script["hooks"],
                        yaml.safe_dump(script["scenes"], allow_unicode=True),
                        factcheck=fc, status=status)

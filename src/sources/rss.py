@@ -2,15 +2,22 @@
 import logging
 
 import feedparser
+import requests
 
 log = logging.getLogger(__name__)
+
+HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; video-agents-rss-reader/0.1)"}
 
 
 def fetch_rss_sources(rss_list: list) -> list:
     items = []
     for src in rss_list:
         try:
-            feed = feedparser.parse(src["url"], agent="video-agents-rss-reader/0.1")
+            # Tự tải bằng requests (có timeout, báo lỗi HTTP rõ ràng) rồi mới đưa feedparser
+            # đọc: để feedparser tự tải thì trên VM nguồn Hankyoreh trả về rỗng không rõ lý do.
+            resp = requests.get(src["url"], headers=HEADERS, timeout=20)
+            resp.raise_for_status()
+            feed = feedparser.parse(resp.content)
             if feed.bozo and not feed.entries:
                 log.warning("RSS lỗi/rỗng: %s (%s)", src["name"], src["url"])
                 continue
