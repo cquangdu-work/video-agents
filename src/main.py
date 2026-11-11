@@ -76,6 +76,23 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
             continue
         survivors.append(idea)
 
+    # --- Loại sớm ý tưởng không đọc được bài nguồn (bài Reddit bị chặn, link chết...):
+    # không có nguồn thì Biên kịch không có số để viết, Kiểm chứng không có gì để đối
+    # chiếu. Loại TRƯỚC khi chấm điểm để chúng không chiếm suất viết kịch bản
+    # (lần chạy 12/11: 3 trong 5 suất bị phí như vậy).
+    readable = []
+    for idea in survivors:
+        text = fetch_page_text(idea["source_url"])
+        if not text.strip():
+            db.set_status(con, idea["id"], "rejected", reason="Không tải được bài nguồn")
+            log.warning("Bỏ “%s”: không tải được bài nguồn", idea["title"][:50])
+            continue
+        readable.append(dict(idea, source_text=text))
+    survivors = readable
+    if not survivors:
+        log.warning("Không còn ý tưởng nào đọc được nguồn — dừng.")
+        return 0
+
     # --- Agent Biên tập: chấm điểm, lấy top
     scored = crew.score_ideas(survivors, cfg)
     scores_by_id = {s["id"]: s for s in scored}
@@ -101,14 +118,8 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
     for idea in selected:
         if good >= want:
             break
-        # Tải bài nguồn TRƯỚC: Biên kịch cần toàn văn để có số liệu mà viết
-        source_text = fetch_page_text(idea["source_url"])
-        if not source_text.strip():
-            # Không đọc được nguồn (ví dụ bài Reddit bị chặn) thì không có số để viết và
-            # cũng không có gì để Kiểm chứng đối chiếu -> bỏ, khỏi tốn lượt gọi LLM
-            db.set_status(con, idea["id"], "rejected", reason="Không tải được bài nguồn")
-            log.warning("Bỏ “%s”: không tải được bài nguồn", idea["title"][:50])
-            continue
+        # Biên kịch nhận toàn văn bài nguồn (đã tải ở bước lọc trên) để có số liệu mà viết
+        source_text = idea["source_text"]
         try:
             script, fc, status = _script_one(crew, idea, source_text, cfg)
         except Exception as exc:
