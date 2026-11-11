@@ -1,10 +1,12 @@
-"""5 template cảnh có tham số. Mỗi class = một loại chất liệu trong kho.
+"""Các template cảnh có tham số. Mỗi class = một loại chất liệu trong kho.
 
 Quy ước: params là dict thuần (đến từ YAML/JSON do agent Sản xuất tạo),
 mỗi template tự vẽ trong (seconds) giây — nằm trong nhịp 2-4s/cảnh.
 """
-from manim import (DOWN, LEFT, ORIGIN, RIGHT, UP, Create, FadeIn, GrowFromEdge,
-                   Line, Rectangle, Text, VGroup, ValueTracker, always_redraw,
+import re
+
+from manim import (DOWN, LEFT, ORIGIN, PI, RIGHT, TAU, UP, Arc, Circle, Create, FadeIn,
+                   GrowFromEdge, Line, Rectangle, Text, VGroup, ValueTracker, always_redraw,
                    Axes, Dot, linear)
 
 from .base import BrandScene, fit_width, fmt_num, pick_font
@@ -149,23 +151,94 @@ class LineChart(BrandScene):
         self.wait(max(self.seconds * 0.4 - 0.3, 0.1))
 
 
+def highlights(text: str) -> list:
+    """Những mẩu chữ đáng tô màu nhấn trong một câu: con số ('8.030', '38,4%') và
+    chữ viết tắt in hoa ('AI', 'GDP'). Kênh tên là "qua con số" nên số luôn phát sáng."""
+    found = re.findall(r"\d[\d.,]*\d%?|\d%?|\b[A-ZĐ]{2,}\b", text)
+    return sorted(set(found), key=len, reverse=True)
+
+
+STATEMENT_STYLES = 3
+
+
 class Statement(BrandScene):
-    """Câu dẫn/chuyển tiếp KHÔNG có số liệu — params: {text, source?}
-    Chữ lớn giữa màn + gạch nhấn màu accent. Dùng cho cảnh không có con số thật."""
+    """Câu dẫn/chuyển tiếp KHÔNG có biểu đồ — params: {text, source?, style?, n?}
+
+    Một video có thể có 10-18 cảnh chữ; cùng một bố cục lặp mãi là "nội dung theo
+    mẫu". Nên có 3 kiểu, produce.validate_spec xoay vòng (params.style):
+      0  chữ giữa màn + gạch nhấn bên dưới
+      1  chữ canh trái + thanh dọc màu nhấn chạy từ trên xuống
+      2  số thứ tự khổng lồ mờ phía sau (params.n) + chữ bên dưới
+    Con số và chữ viết tắt trong câu luôn được tô màu nhấn.
+    """
 
     def construct(self):
         import textwrap
         p, c = self.params, self.b["colors"]
         self.add_signature(p.get("source"))
-        body = "\n".join(textwrap.wrap(p["text"], 20))
-        t = Text(body, font=pick_font(), font_size=58, color=c["text"],
-                 weight="BOLD", line_spacing=1.05).move_to(ORIGIN)
-        fit_width(t, 7.9)
-        bar = Line(ORIGIN, RIGHT * 1.6, color=c["accent"], stroke_width=8)
-        bar.next_to(t, DOWN, buff=0.7)
-        self.play(FadeIn(t, shift=UP * 0.4), GrowFromEdge(bar, LEFT),
-                  run_time=min(self.seconds * 0.4, 0.8))
-        self.wait(max(self.seconds - min(self.seconds * 0.4, 0.8), 0.1))
+        text = str(p["text"])
+        style = p.get("style")
+        if style is None:                       # spec đời cũ chưa gắn kiểu: suy từ chính câu chữ
+            style = sum(map(ord, text)) % 2     # (kiểu 2 cần params.n nên không tự chọn)
+        if style == 2 and not p.get("n"):
+            style = 0
+        body = "\n".join(textwrap.wrap(text, 20 if style != 1 else 18))
+        t = Text(body, font=pick_font(), font_size=58, color=c["text"], weight="BOLD",
+                 line_spacing=1.05, t2c={h: c["accent"] for h in highlights(text)})
+        intro = min(self.seconds * 0.4, 0.8)
+        if style == 1:
+            fit_width(t, 7.0)
+            t.move_to(ORIGIN).align_to([-3.3, 0, 0], LEFT)
+            bar = Line([-3.85, t.get_top()[1] + 0.15, 0], [-3.85, t.get_bottom()[1] - 0.15, 0],
+                       color=c["accent"], stroke_width=10)
+            self.play(GrowFromEdge(bar, UP), FadeIn(t, shift=RIGHT * 0.5), run_time=intro)
+        elif style == 2:
+            fit_width(t, 7.9)
+            ghost = Text(f"{int(p['n']):02d}", font=pick_font("number"), font_size=400,
+                         color=c["surface"], weight="BOLD").move_to([0, 2.7, 0])
+            t.next_to(ghost, DOWN, buff=0.9)
+            dot = Dot(t.get_corner(UP + LEFT) + UP * 0.45 + RIGHT * 0.12, radius=0.11,
+                      color=c["accent"])
+            self.play(FadeIn(ghost, scale=1.15), FadeIn(t, shift=UP * 0.4), FadeIn(dot),
+                      run_time=intro)
+        else:
+            fit_width(t, 7.9)
+            t.move_to(ORIGIN)
+            bar = Line(ORIGIN, RIGHT * 1.6, color=c["accent"], stroke_width=8)
+            bar.next_to(t, DOWN, buff=0.7)
+            self.play(FadeIn(t, shift=UP * 0.4), GrowFromEdge(bar, LEFT), run_time=intro)
+        self.wait(max(self.seconds - intro, 0.1))
+
+
+class PercentRing(BrandScene):
+    """Vòng tròn tô dần tới X% — params: {title, value (0-100), label?, source, decimals(=0)}
+    Dùng cho MỘT tỷ lệ phần trăm; mắt thấy ngay "phần đó to cỡ nào" thay vì chỉ đọc số."""
+
+    def construct(self):
+        p, c = self.params, self.b["colors"]
+        self.add_signature(p.get("source"))
+        self.add(self.title_text(p["title"]))
+        value = max(0.0, min(float(p["value"]), 100.0))
+        dec = p.get("decimals", 0)
+        center, radius, width = [0, -0.3, 0], 2.5, 46
+        track = Circle(radius=radius, color=c["surface"], stroke_width=width).move_to(center)
+        tr = ValueTracker(0)
+        arc = always_redraw(lambda: Arc(
+            radius=radius, start_angle=PI / 2, angle=-TAU * max(tr.get_value(), 0.05) / 100,
+            arc_center=center, color=c["accent"], stroke_width=width))
+        probe = Text(fmt_num(value, dec) + "%", font=pick_font("number"), font_size=110,
+                     weight="BOLD")
+        fsize = 110 * min(3.5 / probe.width, 1)
+        num = always_redraw(lambda: Text(
+            fmt_num(tr.get_value(), dec) + "%", font=pick_font("number"), font_size=fsize,
+            color=c["accent"], weight="BOLD").move_to(center))
+        self.add(track, arc, num)
+        if p.get("label"):
+            lbl = Text(p["label"], font=pick_font(), font_size=40, color=c["text"])
+            fit_width(lbl, 7.6)
+            self.add(lbl.move_to([0, -3.9, 0]))
+        self.play(tr.animate.set_value(value), run_time=self.seconds * 0.7)
+        self.wait(self.seconds * 0.3)
 
 
 TEMPLATES = {
@@ -175,4 +248,5 @@ TEMPLATES = {
     "bar_chart": BarChart,
     "versus": Versus,
     "line_chart": LineChart,
+    "percent": PercentRing,
 }

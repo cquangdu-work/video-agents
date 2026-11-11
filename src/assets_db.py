@@ -37,7 +37,8 @@ BUILTIN_TEMPLATES = [
     ("template", "bar_chart",  "so sánh,xếp hạng,biểu đồ",   "own-code", "Thanh ngang mọc dần theo giá trị"),
     ("template", "versus",     "việt-hàn,đối đầu,so sánh",   "own-code", "Hai cột số đối đầu (VN đỏ - KR xanh)"),
     ("template", "line_chart", "xu hướng,thời gian,biểu đồ", "own-code", "Đường xu hướng tự vẽ dần"),
-    ("template", "statement",  "câu dẫn,chuyển tiếp,chữ",    "own-code", "Câu chữ lớn cho cảnh không có số liệu"),
+    ("template", "statement",  "câu dẫn,chuyển tiếp,chữ",    "own-code", "Câu chữ lớn cho cảnh không có số liệu (3 kiểu bố cục xoay vòng)"),
+    ("template", "percent",    "tỷ lệ,phần trăm,vòng tròn",  "own-code", "Vòng tròn tô dần tới X%"),
 ]
 
 

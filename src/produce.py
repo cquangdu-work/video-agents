@@ -30,14 +30,28 @@ REQUIRED = {
     "versus": ["title", "left", "right"],
     "bar_chart": ["title", "items"],
     "line_chart": ["title", "xs", "ys"],
+    "percent": ["title", "value"],
 }
+STATEMENT_STYLES = 3      # số kiểu bố cục của cảnh chữ (src/render/templates.py)
+
+
+def _decimals_for(value) -> int:
+    """Số chữ số thập phân cần hiện để KHÔNG làm tròn mất số liệu: 38.4 -> 1, 0.25 -> 2."""
+    try:
+        frac = f"{float(value):.6f}".rstrip("0").split(".")[1]
+    except (TypeError, ValueError, IndexError):
+        return 0
+    return min(len(frac), 2)
 
 
 def validate_spec(raw: list, cfg: dict) -> list:
-    """Loại cảnh hỏng, kẹp thời lượng về nhịp 2-4s, tự thêm intro đầu video."""
+    """Loại cảnh hỏng, kẹp thời lượng về nhịp 2-4s, tự thêm intro đầu video.
+    Tự sửa những thứ LLM hay quên: số lẻ thiếu 'decimals' (38.4 hiện thành 38),
+    'percent' ngoài 0-100, và xoay vòng kiểu bố cục của các cảnh chữ."""
     pacing = cfg.get("pacing", {"scene_seconds_min": 2, "scene_seconds_max": 4})
     lo, hi = pacing["scene_seconds_min"], pacing["scene_seconds_max"]
     ok = [{"template": "intro", "seconds": 1.2, "params": {}}]
+    statements = 0
     for i, sc in enumerate(raw):
         tpl, params = sc.get("template"), sc.get("params", {})
         if tpl not in REQUIRED:
@@ -47,6 +61,27 @@ def validate_spec(raw: list, cfg: dict) -> list:
         if missing:
             log.warning("Cảnh %d (%s): thiếu %s — bỏ", i + 1, tpl, missing)
             continue
+        if tpl == "percent":
+            try:
+                in_range = 0 <= float(params["value"]) <= 100
+            except (TypeError, ValueError):
+                in_range = False
+            if not in_range:      # "tăng 250%" không vẽ được bằng vòng tròn -> số lớn
+                log.warning("Cảnh %d: percent=%s ngoài 0-100 — đổi sang big_number",
+                            i + 1, params["value"])
+                tpl = sc["template"] = "big_number"
+                params.setdefault("suffix", "%")
+        if tpl in ("big_number", "percent", "versus"):
+            values = ([params.get("value")] if tpl != "versus"
+                      else [params["left"].get("value"), params["right"].get("value")])
+            need = max(_decimals_for(v) for v in values)
+            if need > int(params.get("decimals") or 0):
+                params["decimals"] = need
+        if tpl == "statement":
+            # xoay vòng 3 kiểu bố cục để hai cảnh chữ liền nhau không giống hệt nhau
+            params["style"] = statements % STATEMENT_STYLES
+            params["n"] = statements + 1
+            statements += 1
         if tpl == "line_chart":
             if len(params["xs"]) != len(params["ys"]):
                 log.warning("Cảnh %d: xs/ys lệch độ dài — bỏ", i + 1)

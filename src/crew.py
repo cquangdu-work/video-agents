@@ -238,6 +238,10 @@ TEMPLATE_GUIDE = """Các template có sẵn và tham số (CHỈ dùng đúng c�
    "decimals": int} — xu hướng theo thời gian, xs/ys cùng độ dài.
 5. "statement": {"text": str (<= 14 từ), "source": str} — câu chữ lớn giữa màn,
    KHÔNG có số. Dùng cho hook, câu dẫn, câu chuyển, câu kết.
+6. "percent": {"title": str, "value": số từ 0 đến 100, "label": str, "source": str,
+   "decimals": int} — vòng tròn tô dần tới X%. Dùng khi lời đọc xoay quanh MỘT tỷ lệ
+   phần trăm nằm trong khoảng 0-100% ("hơn 60% số ca", "chiếm 38,4%"). Phần trăm
+   TĂNG/GIẢM vượt 100% thì dùng "big_number" với suffix "%".
 """
 
 
