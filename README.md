@@ -26,9 +26,42 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `src/crew.py` | 4 agent CrewAI: Săn ý tưởng (ép phải có "góc"), Biên tập (chấm 5 tiêu chí × trọng số), Biên kịch (3 hook + kịch bản theo cảnh), Kiểm chứng (đối chiếu claim với bài nguồn). |
 | `src/page_text.py` | Tải toàn văn bài nguồn cho agent Kiểm chứng. |
 | `src/telegram_bot.py` | Gửi kịch bản đã kiểm chứng vào Telegram (gọi thẳng Bot API cho nhẹ). |
+| `src/review.py` | **Bước Du duyệt + agent Đăng bài**: gửi video kèm nút ✅/❌ vào Telegram, chờ nút bấm, rồi đăng. |
+| `src/publish/metadata.py` | Tiêu đề / mô tả / hashtag: LLM đề xuất, code ép giới hạn YouTube, soát số trong tiêu đề, tự gắn nguồn + khai báo AI. |
+| `src/publish/youtube.py` | Cấp quyền OAuth + upload YouTube (resumable), chỉ dùng `requests`. |
+| `tests/` | Test không cần mạng: `python -m unittest discover -s tests` |
 | `src/utils.py` | Chuẩn hóa tiêu đề, đo độ giống (Jaccard), móc JSON từ câu trả lời LLM. |
 
 ## Giới hạn hiện tại (sẽ nâng ở bước sau)
 - Kiểm chứng mới đối chiếu **1 nguồn** (bài gốc); thiết kế yêu cầu 2 nguồn độc lập → cần thêm search API.
 - Chưa có nguồn KOSIS/World Bank chuyên dụng (mới có OWID qua RSS).
 - Duyệt Telegram mới một chiều (gửi); nút bấm duyệt/loại làm ở giai đoạn sau.
+
+## Giai đoạn 4 — duyệt và đăng
+
+```bash
+python -m src.assemble 6        # dựng bản phát hành output/final_6.mp4
+python -m src.review send 6     # kiểm định -> viết tiêu đề/mô tả -> gửi Telegram kèm nút
+python -m src.review listen     # chạy nền, chờ Du bấm ✅ Duyệt đăng / ❌ Loại
+```
+
+Vòng đời video (bảng `videos`): `pending_review → approved → published` hoặc `→ rejected`.
+Không có đường nào tới bước đăng mà không qua nút ✅. Bấm trùng hai lần cũng chỉ đăng một lần.
+Trả lời (reply) tin nhắn video để ghi chú/lý do loại; gửi link YouTube để lưu lại cho agent Phân tích.
+
+Hai chế độ đăng, đổi ở `config/channel.yaml` → `publish.youtube.mode`:
+
+- **`manual` (mặc định):** sau khi duyệt, bot gửi file gốc + tiêu đề/mô tả chạm-để-copy; Du tự đăng bằng app.
+- **`api`:** bot tự upload. Cần làm một lần:
+  1. Google Cloud Console → tạo project → bật *YouTube Data API v3* và *YouTube Analytics API*.
+  2. OAuth consent screen (External) → thêm chính mình làm test user → tạo *OAuth client ID* loại **Desktop app**.
+  3. Điền `YT_CLIENT_ID`, `YT_CLIENT_SECRET` vào `.env`, chạy `python -m src.publish.youtube auth` trên laptop
+     (chọn đúng kênh Brand Account), kiểm tra bằng `python -m src.publish.youtube whoami`.
+  4. Lên VM: chép `.secrets/youtube_token.json` sang.
+
+Hai cái bẫy của chế độ `api`:
+
+- App OAuth ở trạng thái **Testing** → refresh token chết sau 7 ngày. Chuyển *Publishing status* sang **In production**.
+- Tài liệu chính thức của Google ghi: video upload từ project API **chưa qua audit** bị khoá ở chế độ riêng tư,
+  muốn gỡ phải nộp đơn audit. Vì vậy mặc định `privacy: private`, và bot luôn báo chế độ hiển thị THỰC TẾ
+  YouTube trả về. Upload thử một video trước khi tin vào chế độ này.

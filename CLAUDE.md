@@ -69,6 +69,12 @@ Python, CrewAI (điều phối agent), cron/systemd timer (lịch chạy), bot T
 3. **Giai đoạn 3:** Giọng đọc, phụ đề, nhạc, agent Kiểm định.
 4. **Giai đoạn 4:** Đăng bài + agent Phân tích + triển khai lên VM Oracle.
 
+## Tình trạng giai đoạn 4 (cập nhật 11/11/2026)
+- **Xong (4.1):** duyệt hai chiều qua Telegram (`src/review.py`), agent viết tiêu đề/mô tả (`src/publish/metadata.py`), module upload YouTube (`src/publish/youtube.py`), bảng `videos` + `state` trong DB, test offline trong `tests/`.
+- Phần này mới chạy với API giả lập (viết từ xa, máy không có mạng). **Chưa chạy thật** với Telegram/YouTube: việc đầu tiên khi ngồi vào laptop là `python -m src.review send 6` rồi `python -m src.review listen`.
+- Chế độ đăng mặc định là `manual` (bot gửi gói, Du tự đăng). Đây là mặc định tạm, **Du chưa chốt**. Lý do: tài liệu Google ghi project API chưa audit thì video bị khoá riêng tư. Chi tiết trong README.
+- **Chưa làm:** TikTok, agent Phân tích hằng tuần, file chạy hằng ngày nối cả chuỗi (main → produce → assemble → review send), triển khai lên VM Oracle (systemd).
+
 ## Cách làm việc
 - Làm từng giai đoạn nhỏ, chạy thử được rồi mới sang bước tiếp. Commit git sau mỗi bước.
 - Hỏi Du trước khi: cài dịch vụ trả phí, tạo tài khoản, đăng bất cứ thứ gì công khai, xoá dữ liệu.

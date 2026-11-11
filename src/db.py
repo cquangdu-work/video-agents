@@ -3,6 +3,11 @@
 Vòng đời một ý tưởng (cột status):
     raw -> candidate -> selected -> scripted -> verified -> sent
     (bị loại ở bước nào thì thành 'rejected', kèm lý do)
+
+Vòng đời một video (bảng videos, giai đoạn 4):
+    pending_review -> approved -> published
+                   -> rejected
+    Chỉ Du bấm nút trên Telegram mới chuyển được pending_review -> approved.
 """
 import json
 import sqlite3
@@ -36,6 +41,28 @@ CREATE TABLE IF NOT EXISTS scripts (
     factcheck   TEXT,            -- JSON: [{"claim":..., "sources":[...], "ok":true}]
     status      TEXT DEFAULT 'draft',
     created_at  TEXT
+);
+CREATE TABLE IF NOT EXISTS videos (
+    id            INTEGER PRIMARY KEY,
+    script_id     INTEGER UNIQUE REFERENCES scripts(id),
+    file          TEXT NOT NULL,   -- đường dẫn tương đối tới bản phát hành
+    title         TEXT,
+    description   TEXT,
+    tags          TEXT,            -- JSON: ["dữ liệu", ...]
+    qc            TEXT,            -- JSON: kết quả agent Kiểm định lúc gửi duyệt
+    status        TEXT DEFAULT 'pending_review',
+    review_note   TEXT,            -- Du trả lời tin nhắn video -> ghi chú/lý do loại
+    tg_message_id INTEGER,         -- tin nhắn Telegram chứa video (để khớp câu trả lời)
+    youtube_id    TEXT,
+    youtube_url   TEXT,
+    youtube_privacy TEXT,          -- chế độ hiển thị YouTube THỰC TẾ trả về
+    created_at    TEXT,
+    decided_at    TEXT,
+    published_at  TEXT
+);
+CREATE TABLE IF NOT EXISTS state (   -- ô nhớ nhỏ: vị trí đọc Telegram, v.v.
+    key   TEXT PRIMARY KEY,
+    value TEXT
 );
 """
 
@@ -103,3 +130,92 @@ def save_script(con, idea_id: int, hooks, body: str, factcheck=None, status: str
     )
     con.commit()
     return cur.lastrowid
+
+
+# ------------------------------------------------------------ Giai đoạn 4
+def get_script_with_idea(con, script_id: int):
+    """Kịch bản + ý tưởng gốc của nó (tiêu đề, góc, nguồn) — agent Đăng bài cần cả hai."""
+    row = con.execute(
+        "SELECT s.id, s.idea_id, s.body, s.hooks, s.status AS script_status,"
+        " i.title, i.angle, i.summary, i.source_url, i.source_name"
+        " FROM scripts s JOIN ideas i ON i.id = s.idea_id WHERE s.id = ?", (script_id,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+_VIDEO_FIELDS = {
+    "file", "title", "description", "tags", "qc", "status", "review_note",
+    "tg_message_id", "youtube_id", "youtube_url", "youtube_privacy",
+    "decided_at", "published_at",
+}
+
+
+def upsert_video(con, script_id: int, file: str, title: str, description: str,
+                 tags: list, qc: list) -> int:
+    """Tạo (hoặc làm mới) bản ghi video ở trạng thái chờ duyệt.
+
+    Dựng lại cùng một kịch bản thì ghi đè bản cũ và đưa về pending_review —
+    TRỪ KHI bản cũ đã đăng: lúc đó từ chối, tránh đăng trùng.
+    """
+    old = con.execute("SELECT id, status FROM videos WHERE script_id=?", (script_id,)).fetchone()
+    payload = (file, title, description, json.dumps(tags, ensure_ascii=False),
+               json.dumps(qc, ensure_ascii=False))
+    if old:
+        if old["status"] == "published":
+            raise ValueError(f"Kịch bản #{script_id} đã đăng rồi — không gửi duyệt lại.")
+        con.execute(
+            "UPDATE videos SET file=?, title=?, description=?, tags=?, qc=?,"
+            " status='pending_review', review_note=NULL, tg_message_id=NULL,"
+            " decided_at=NULL, created_at=? WHERE id=?", payload + (_now(), old["id"]))
+        con.commit()
+        return old["id"]
+    cur = con.execute(
+        "INSERT INTO videos (script_id, file, title, description, tags, qc, created_at)"
+        " VALUES (?,?,?,?,?,?,?)", (script_id,) + payload + (_now(),))
+    con.commit()
+    return cur.lastrowid
+
+
+def get_video(con, video_id: int):
+    row = con.execute("SELECT * FROM videos WHERE id=?", (video_id,)).fetchone()
+    if not row:
+        return None
+    v = dict(row)
+    v["tags"] = json.loads(v["tags"] or "[]")
+    v["qc"] = json.loads(v["qc"] or "[]")
+    return v
+
+
+def update_video(con, video_id: int, **fields):
+    bad = set(fields) - _VIDEO_FIELDS
+    if bad:
+        raise ValueError(f"Cột không hợp lệ: {bad}")
+    sets = ", ".join(f"{k}=?" for k in fields)
+    con.execute(f"UPDATE videos SET {sets} WHERE id=?", (*fields.values(), video_id))
+    con.commit()
+
+
+def transition_video(con, video_id: int, from_status: str, to_status: str) -> bool:
+    """Đổi trạng thái CHỈ KHI video đang ở đúng from_status. Trả về True nếu đổi được.
+
+    Đây là cái chốt chống đăng trùng: bấm nút Duyệt hai lần (hoặc Telegram gửi
+    lặp một sự kiện) thì lần thứ hai thấy trạng thái đã khác -> không làm gì.
+    """
+    stamp = {"approved": "decided_at", "rejected": "decided_at",
+             "published": "published_at"}.get(to_status)
+    sql = "UPDATE videos SET status=?" + (f", {stamp}=?" if stamp else "") + " WHERE id=? AND status=?"
+    args = (to_status,) + ((_now(),) if stamp else ()) + (video_id, from_status)
+    cur = con.execute(sql, args)
+    con.commit()
+    return cur.rowcount == 1
+
+
+def get_state(con, key: str, default: str = None):
+    row = con.execute("SELECT value FROM state WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_state(con, key: str, value) -> None:
+    con.execute("INSERT INTO state (key, value) VALUES (?, ?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
+    con.commit()

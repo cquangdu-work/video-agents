@@ -101,7 +101,9 @@ def check_visuals_match(video: Path, spec: list, duration: float) -> dict:
             "ok": not issues}
 
 
-def run_qc(script_id: int) -> bool:
+def collect_checks(script_id: int) -> list:
+    """Chạy toàn bộ phép kiểm, trả về danh sách {"name", "value", "ok"}.
+    Tách khỏi run_qc để bước gửi duyệt (src/review.py) đính kèm được báo cáo."""
     video = ROOT / "output" / f"final_{script_id}.mp4"
     # Ưu tiên spec *_final (thời lượng thật theo giọng do assemble ghi lại)
     spec_dir = ROOT / "data" / "specs"
@@ -112,6 +114,11 @@ def run_qc(script_id: int) -> bool:
     d = check_duration(video)
     checks = [d, check_black_frames(video), check_loudness(video), check_licenses(),
               check_visuals_match(video, spec, d["_duration"])]
+    return [{k: v for k, v in c.items() if not k.startswith("_")} for c in checks]
+
+
+def run_qc(script_id: int) -> bool:
+    checks = collect_checks(script_id)
     print(f"\n===== KIỂM ĐỊNH final_{script_id}.mp4 =====")
     ok_all = True
     for c in checks:

@@ -100,3 +100,24 @@ policy_rules: >
   - Không giật tít gây sợ hãi hay thao túng cảm xúc.
   - Mọi con số phải có nguồn kèm link.
   - Giọng văn tự nhiên, có quan điểm, không đọc đều đều như máy.
+
+# ---------- Đăng bài (giai đoạn 4) ----------
+publish:
+  youtube:
+    # manual: sau khi Du bấm Duyệt, bot gửi file gốc + tiêu đề/mô tả để Du tự đăng
+    #         bằng app YouTube (~1 phút). An toàn, không cần Google duyệt gì.
+    # api:    bot tự upload qua YouTube Data API. LƯU Ý: tài liệu chính thức của
+    #         Google ghi video upload từ dự án API CHƯA qua "audit" sẽ bị khoá ở
+    #         chế độ riêng tư -> chỉ bật "api" sau khi đã upload thử 1 video kiểm tra.
+    mode: manual
+    privacy: private            # api: private | unlisted | public
+    category_id: "27"           # 27 = Giáo dục
+    made_for_kids: false
+    contains_synthetic_media: true   # khai báo nội dung AI (giọng đọc AI) theo CLAUDE.md
+    notify_subscribers: true
+    # Hẹn giờ công khai (chỉ áp dụng mode api + privacy private). null = không hẹn.
+    publish_time_local: null    # ví dụ "19:00"
+    utc_offset_hours: 7         # múi giờ của người xem chính (Việt Nam = +7)
+  hashtags_fixed: ["#thegioiquaconso", "#Shorts"]   # luôn có ở mọi video
+  max_hashtags: 5               # YouTube bỏ qua toàn bộ hashtag nếu nhét quá nhiều
+  disclosure: "Giọng đọc được tạo bằng AI. Số liệu được đối chiếu với nguồn trước khi đăng."

@@ -1,4 +1,4 @@
-"""Bốn agent của Giai đoạn 1, điều phối bằng CrewAI (chạy tuần tự).
+"""Các agent dùng LLM, điều phối bằng CrewAI (chạy tuần tự).
 
 Luồng: Săn ý tưởng -> Biên tập -> Biên kịch -> Kiểm chứng.
 Mỗi bước nhận đầu ra JSON của bước trước. Import crewai để trong hàm
@@ -353,5 +353,48 @@ không? Khẳng định nào không tìm thấy trong nguồn thì đánh dấu 
         expected_output="""JSON object:
 {"verdicts": [{"claim": "...", "ok": true/false, "note": "<giải thích ngắn>"}],
  "pass": true/false}""",
+    )
+    return extract_json(out)
+
+
+# ------------------------------------------------------------------ Đăng bài
+def write_metadata(idea: dict, scenes: list, hooks: list, cfg: dict,
+                   feedback: str = None) -> dict:
+    """Agent Đăng bài: đề xuất tiêu đề, mô tả, hashtag, thẻ cho video đã dựng.
+
+    Chỉ là ĐỀ XUẤT thô — src/publish/metadata.py sẽ ép giới hạn YouTube, soát số
+    trong tiêu đề và tự gắn nguồn + dòng khai báo AI (LLM không cần viết các phần đó).
+    """
+    from .analysis.formula import load_formula
+    f = load_formula() or {}
+    voice = " ".join(str(s.get("voice", "")) for s in scenes)
+    description = f"""Viết thông tin đăng bài cho một video ngắn dọc (YouTube Shorts + TikTok)
+của kênh "{cfg['channel']['name']}" — {cfg['channel']['description']}
+
+TOÀN BỘ LỜI ĐỌC của video (đã kiểm chứng):
+{voice}
+
+Các câu mở đầu đã viết: {'; '.join(hooks or [])}
+Khuôn tiêu đề hay thắng ở kênh cùng mảng (tham khảo, không bắt buộc):
+{'; '.join(f.get('title_patterns', []))}
+
+Luật chính sách (ƯU TIÊN CAO HƠN khuôn tiêu đề): {cfg['policy_rules']}
+
+Yêu cầu:
+- "title": tiếng Việt, <= 70 ký tự, gây tò mò nhưng TRUNG THỰC với nội dung.
+  Không viết hoa cả câu, không doạ dẫm. Nếu dùng con số thì phải là con số có
+  NGUYÊN VĂN trong lời đọc ở trên, viết bằng chữ số. Không tự thêm hashtag vào title.
+- "description": 1-2 câu tiếng Việt tóm tắt video nói gì, có 1 con số đắt nhất.
+  KHÔNG ghi nguồn, KHÔNG ghi hashtag (hệ thống tự thêm).
+- "hashtags": 3 hashtag chủ đề, không dấu, viết liền (vd "#khihau").
+- "tags": 8-12 từ khoá tìm kiếm tiếng Việt có dấu (vd "biến đổi khí hậu")."""
+    if feedback:
+        description += f"\n\nBẢN TRƯỚC BỊ TRẢ LẠI vì: {feedback}"
+    out = _run_single_task(
+        role="Biên tập viên đăng bài video ngắn",
+        goal="Tiêu đề khiến người ta dừng lại xem mà không sai một con số nào",
+        description=description,
+        expected_output="""JSON object:
+{"title": "...", "description": "...", "hashtags": ["#...", "#...", "#..."], "tags": ["...", "..."]}""",
     )
     return extract_json(out)
