@@ -150,7 +150,7 @@ class AssembleQuotaExitTest(unittest.TestCase):
             encoding="utf-8")
         asked = []
 
-        def fake_synth(text, wav):
+        def fake_synth(text, wav, timeout=120):
             asked.append(text)
             if len(asked) == 2:
                 raise tts.QuotaExhausted("hết quota")
@@ -158,6 +158,7 @@ class AssembleQuotaExitTest(unittest.TestCase):
 
         engine = types.SimpleNamespace(concat=None, render_scene=None)   # khỏi cần cài manim
         with mock.patch.object(assemble, "ROOT", root), \
+                mock.patch.dict("os.environ", {"TTS_BATCH_WORDS": "0"}), \
                 mock.patch.object(assemble, "RENDER", root / "data" / "render"), \
                 mock.patch.dict(sys.modules, {"src.render.engine": engine}), \
                 mock.patch.object(tts, "synth", fake_synth), \
@@ -169,6 +170,35 @@ class AssembleQuotaExitTest(unittest.TestCase):
         self.assertEqual(cm.exception.code, assemble.EXIT_RETRY_LATER)
         self.assertEqual(asked, [A, B])                # câu lặp ở 2 cảnh chỉ đọc MỘT lần
         self.assertTrue((root / "data" / "render" / "audio_9" / "v_01.wav").exists())
+
+    def test_quota_exhausted_during_batch_reading_also_exits_retry_later(self):
+        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        (root / "data" / "specs").mkdir(parents=True)
+        (root / "data" / "specs" / "script_9.yaml").write_text(
+            "- {template: intro, seconds: 1.2, params: {}}\n"
+            f"- {{template: statement, seconds: 4, voice: '{A}', params: {{text: x}}}}\n"
+            f"- {{template: statement, seconds: 4, voice: '{B}', params: {{text: z}}}}\n",
+            encoding="utf-8")
+        asked = []
+
+        def fake_synth(text, wav, timeout=120):
+            asked.append(text)
+            raise tts.QuotaExhausted("hết quota")
+
+        engine = types.SimpleNamespace(concat=None, render_scene=None)
+        patches = [mock.patch.object(assemble, "ROOT", root),
+                   mock.patch.object(assemble, "RENDER", root / "data" / "render"),
+                   mock.patch.dict(sys.modules, {"src.render.engine": engine}),
+                   mock.patch.dict("os.environ", {"TTS_BATCH_WORDS": "300"}),
+                   mock.patch.object(tts, "synth", fake_synth),
+                   mock.patch.object(sys, "argv", ["assemble", "9"])]
+        for p in patches:
+            p.start(); self.addCleanup(p.stop)
+        with self.assertRaises(SystemExit) as cm:
+            assemble.main()
+        self.assertEqual(cm.exception.code, assemble.EXIT_RETRY_LATER)
+        self.assertEqual(asked, [A + "\n\n" + B])      # cả bài trong MỘT lần gọi
 
 
 if __name__ == "__main__":

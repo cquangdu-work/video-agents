@@ -3,8 +3,9 @@
     python -m src.assemble 6                 # từ data/specs/script_6.yaml
 
 Luồng:
-1. TTS từng CÂU lời (Gemini). Các cảnh liền nhau ghi cùng một câu lời = một nhóm:
-   đọc MỘT lần, thời lượng giọng chia cho các cảnh trong nhóm (hình khớp lời)
+1. TTS (Gemini): đọc CẢ BÀI một lần gọi rồi cắt theo câu (src/audio/batch.py); câu
+   nào cắt không chắc thì đọc lẻ. Các cảnh liền nhau ghi cùng một câu lời = một nhóm:
+   dùng chung một đoạn giọng, thời lượng chia cho các cảnh trong nhóm (hình khớp lời)
 2. Render từng cảnh Manim theo thời lượng đó, nối thành video câm
 3. Ghép audio các cảnh (đệm im lặng cho khớp từng cảnh video)
 4. Whisper lấy mốc từng từ -> phụ đề .ass kiểu cụm 3 từ
@@ -12,6 +13,7 @@ Luồng:
    (chỗ cắm nhạc nền để sẵn: thêm input nhạc + sidechaincompress khi Du có nhạc)
 """
 import argparse
+import json
 import logging
 import subprocess
 import sys
@@ -84,6 +86,7 @@ def main():
     spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
 
     from . import assets_db
+    from .audio.batch import batch_words, synth_batch, tokens
     from .audio.tts import QuotaExhausted, synth, wav_duration
     from .render.engine import concat, render_scene
 
@@ -95,23 +98,38 @@ def main():
                  f" Sinh lại: python -m src.produce {args.script_id} --spec-only")
     audio_dir = RENDER / f"audio_{args.script_id}"
     audio_dir.mkdir(parents=True, exist_ok=True)   # cảnh không lời vẫn cần ghi file đệm
+    wav_of = lambda g: audio_dir / f"v_{g[0]:02d}.wav"
+
+    def pause_for_quota(exc, have: int):
+        # Không phải lỗi của kịch bản: giọng đã đọc xong vẫn nằm trong cache,
+        # chạy lại sau khi quota hồi là làm tiếp từ câu còn thiếu.
+        log.error("%s", exc)
+        log.error("TẠM DỪNG: đã có giọng cho %d/%d câu. Chạy lại lệnh này sau"
+                  " (quota ngày của Gemini hồi khoảng 16-17h giờ Hàn).", have, len(todo))
+        sys.exit(EXIT_RETRY_LATER)
+
+    # Đọc CẢ BÀI bằng một lần gọi rồi cắt theo câu (src/audio/batch.py) — tiết kiệm
+    # quota gấp ~10 lần. Câu nào cắt không chắc ăn thì vòng lặp bên dưới đọc lẻ.
+    missing = [g for g in todo if not wav_of(g).exists()]
+    if len(missing) >= 2 and batch_words() > 0:
+        try:
+            got = synth_batch([_voice(spec[g[0]]) for g in missing],
+                              [wav_of(g) for g in missing], audio_dir)
+            log.info("Đọc gộp: có giọng cho %d/%d câu còn thiếu", got, len(missing))
+        except QuotaExhausted as exc:
+            pause_for_quota(exc, len(todo) - len(missing))
+
     wavs = {}                                      # cảnh đầu nhóm -> file giọng của cả nhóm
     for n, g in enumerate(todo, 1):
         voice = _voice(spec[g[0]])
-        wav = audio_dir / f"v_{g[0]:02d}.wav"
+        wav = wav_of(g)
         if not wav.exists():                      # chạy lại không tốn TTS lần nữa
             log.info("TTS câu %d/%d (cảnh %d-%d): %s...", n, len(todo), g[0] + 1, g[-1] + 1,
                      voice[:40])
             try:
                 synth(voice, wav)
             except QuotaExhausted as exc:
-                # Không phải lỗi của kịch bản: giọng đã đọc xong vẫn nằm trong cache,
-                # chạy lại sau khi quota hồi là làm tiếp từ câu này.
-                log.error("%s", exc)
-                log.error("TẠM DỪNG: đã có giọng cho %d/%d câu. Chạy lại lệnh này sau"
-                          " (quota ngày của Gemini hồi khoảng 16-17h giờ Hàn).",
-                          n - 1, len(todo))
-                sys.exit(EXIT_RETRY_LATER)
+                pause_for_quota(exc, sum(1 for x in todo if wav_of(x).exists()))
             if n < len(todo):
                 time.sleep(30)                    # free tier TTS giới hạn số lần/phút
         wavs[g[0]] = wav
@@ -159,6 +177,11 @@ def main():
     from .audio.subtitles import build_ass, transcribe_words
     words = transcribe_words(full_wav)
     ass = build_ass(words, RENDER / "subs.ass", brand())
+    # Hai con số cho agent Kiểm định (qc.check_narration): đưa TTS đọc bao nhiêu từ,
+    # Whisper nghe lại được bao nhiêu -> lệch nhiều là giọng đọc lặp/cụt
+    (audio_dir / "meta.json").write_text(json.dumps({
+        "spoken_words": sum(len(tokens(_voice(spec[g[0]]))) for g in todo),
+        "heard_words": sum(len(tokens(w[0])) for w in words)}), encoding="utf-8")
 
     # ---- 5. Đốt phụ đề + trộn tiếng + chuẩn âm lượng phát hành
     OUTPUT.mkdir(exist_ok=True)

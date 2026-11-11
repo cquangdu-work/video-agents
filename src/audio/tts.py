@@ -71,7 +71,7 @@ def _quota_info(resp) -> tuple:
     return daily, delay, note
 
 
-def synth(text: str, out_path: Path) -> Path:
+def synth(text: str, out_path: Path, timeout: int = 120) -> Path:
     """Một câu/đoạn -> file WAV. Thử lại khi quá tải; cạn quota thì đổi model dự phòng.
 
     Các model cùng tên giọng (TTS_VOICE) nghe gần nhau nhưng không giống hệt —
@@ -97,7 +97,7 @@ def synth(text: str, out_path: Path) -> Path:
         for attempt in range(MAX_TRIES):
             wait = 45 * (attempt + 1)
             try:
-                r = requests.post(url, params={"key": key}, json=body, timeout=120)
+                r = requests.post(url, params={"key": key}, json=body, timeout=timeout)
             except requests.RequestException as exc:      # rớt mạng, quá giờ
                 # Chỉ ghi TÊN lỗi: nội dung lỗi của requests chứa cả URL kèm khoá API
                 why = type(exc).__name__
