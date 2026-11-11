@@ -67,6 +67,11 @@ def main():
         sc["_wav"] = wav
         sc["seconds"] = max(2.0, min(wav_duration(wav) + 0.35, 9.0))
 
+    # Lưu spec với thời lượng THẬT theo giọng — agent Kiểm định đối chiếu mốc này
+    final_spec = [{k: v for k, v in sc.items() if k != "_wav"} for sc in spec]
+    (spec_path.parent / f"script_{args.script_id}_final.yaml").write_text(
+        yaml.safe_dump(final_spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
     # ---- 2. Render hình theo thời lượng giọng
     files = []
     for i, sc in enumerate(spec):

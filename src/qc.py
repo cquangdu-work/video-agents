@@ -67,7 +67,8 @@ def check_visuals_match(video: Path, spec: list, duration: float) -> dict:
     for sc in spec:
         secs = float(sc.get("seconds", 3))
         if sc.get("voice") and len(samples) < 5:
-            samples.append((min(t + secs / 2, duration - 0.2), sc["voice"]))
+            # Lấy mẫu ở 85% cảnh: hoạt hình đếm số đã chạy xong, số trên hình là số cuối
+            samples.append((min(t + secs * 0.85, duration - 0.2), sc["voice"]))
         t += secs
     issues = []
     for ts, voice in samples:
@@ -81,9 +82,12 @@ def check_visuals_match(video: Path, spec: list, duration: float) -> dict:
                 params={"key": key},
                 json={"contents": [{"parts": [
                     {"inline_data": {"mime_type": "image/png", "data": img}},
-                    {"text": "Đây là một khung hình video, lời đọc lúc này là: "
-                             f"\"{voice}\". Hình có MÂU THUẪN với lời không (số khác, "
-                             "nội dung ngược)? Chữ có bị tràn/cắt mép không? "
+                    {"text": "Đây là một khung hình video dạng chữ/biểu đồ tối giản, "
+                             f"lời đọc lúc này là: \"{voice}\". CHỈ báo lỗi khi: "
+                             "(a) con số trên hình KHÁC con số trong lời, "
+                             "(b) nội dung hình NGƯỢC nghĩa với lời, "
+                             "(c) chữ bị tràn/cắt mép khung. "
+                             "Hình ít chữ hơn lời, hình chỉ tóm ý — vẫn là ĐẠT. "
                              "Trả lời JSON: {\"ok\": true/false, \"note\": \"...\"}"}]}]},
                 timeout=60)
             r.raise_for_status()
@@ -99,8 +103,12 @@ def check_visuals_match(video: Path, spec: list, duration: float) -> dict:
 
 def run_qc(script_id: int) -> bool:
     video = ROOT / "output" / f"final_{script_id}.mp4"
-    spec = yaml.safe_load((ROOT / "data" / "specs" / f"script_{script_id}.yaml")
-                          .read_text(encoding="utf-8"))
+    # Ưu tiên spec *_final (thời lượng thật theo giọng do assemble ghi lại)
+    spec_dir = ROOT / "data" / "specs"
+    p = spec_dir / f"script_{script_id}_final.yaml"
+    if not p.exists():
+        p = spec_dir / f"script_{script_id}.yaml"
+    spec = yaml.safe_load(p.read_text(encoding="utf-8"))
     d = check_duration(video)
     checks = [d, check_black_frames(video), check_loudness(video), check_licenses(),
               check_visuals_match(video, spec, d["_duration"])]

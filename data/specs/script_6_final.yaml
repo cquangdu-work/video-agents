@@ -1,0 +1,80 @@
+- template: intro
+  seconds: 1.2
+  params: {}
+- template: statement
+  seconds: 4.35
+  voice: Đừng phớt lờ những con số này sau 10 năm Thỏa thuận Paris!
+  params:
+    text: 10 năm Thỏa thuận Paris
+    source: Hankyoreh
+- template: statement
+  seconds: 7.31
+  voice: Thế giới từng đặt nhiều kỳ vọng vào hiệp ước lịch sử này. Nhưng thực tế đằng
+    sau các bản cam kết lại rất khắc nghiệt.
+  params:
+    text: Kỳ vọng và thực tế khắc nghiệt
+    source: Hankyoreh
+- template: statement
+  seconds: 7.59
+  voice: Một thống kê mới vừa công bố khiến nhiều người phải giật mình. Tính từ mốc
+    10 năm trước, Trái Đất đã chứng kiến điều tồi tệ.
+  params:
+    text: Thống kê gây giật mình về khí hậu
+    source: Hankyoreh
+- template: big_number
+  seconds: 7.909999999999999
+  voice: Cụ thể, có trung bình 540.000 người tử vong mỗi năm. Con số này xuất phát
+    trực tiếp từ các đợt nắng nóng cực đoan.
+  params:
+    title: Tử vong mỗi năm do nắng nóng
+    value: 540000
+    suffix: người
+    source: Hankyoreh
+    decimals: 0
+- template: big_number
+  seconds: 5.75
+  voice: Quy đổi ra, mỗi ngày có khoảng 1.479 sinh mạng bị đe dọa.
+  params:
+    title: Số ca tử vong trung bình mỗi ngày
+    value: 1479
+    suffix: người
+    source: Hankyoreh
+    decimals: 0
+- template: statement
+  seconds: 3.47
+  voice: Các quốc gia thu nhập thấp chịu ảnh hưởng nặng nề nhất.
+  params:
+    text: Quốc gia thu nhập thấp chịu ảnh hưởng
+    source: Hankyoreh
+- template: big_number
+  seconds: 5.109999999999999
+  voice: Hơn 60% số ca tử vong tập trung ở các vùng khí hậu nhiệt đới.
+  params:
+    title: Tử vong ở vùng khí hậu nhiệt đới
+    value: 60
+    suffix: '%'
+    source: Hankyoreh
+    decimals: 0
+- template: big_number
+  seconds: 4.869999999999999
+  voice: Trong khi đó, mức tăng nhiệt toàn cầu đã vượt quá 1,2 độ C.
+  params:
+    title: Mức tăng nhiệt độ toàn cầu
+    value: 1.2
+    suffix: °C
+    source: Hankyoreh
+    decimals: 1
+- template: statement
+  seconds: 7.79
+  voice: Khoảng cách giữa cam kết trên giấy và thực tế vẫn rất lớn. Liệu trong 10
+    năm tới, con số này có tiếp tục leo thang?
+  params:
+    text: Cam kết và thực tế chênh lệch
+    source: Hankyoreh
+- template: statement
+  seconds: 8.629999999999999
+  voice: Nắng nóng không chỉ là thời tiết, mà là một thảm họa thầm lặng. Hãy nhìn
+    vào dữ liệu để thấy sự thật đằng sau khí hậu.
+  params:
+    text: Thảm họa thầm lặng từ nắng nóng
+    source: Hankyoreh
