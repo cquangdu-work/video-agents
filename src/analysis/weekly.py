@@ -296,6 +296,13 @@ def run_weekly(dry_run: bool = False, use_telegram: bool = True, now: datetime =
     cfg = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
     learned_mod.apply_learned(cfg)                  # bắt đầu từ trọng số đang dùng thật
     con = db.connect()
+    try:
+        return _run_weekly(cfg, con, dry_run, use_telegram, now)
+    finally:
+        con.close()      # Windows: kết nối mở giữ khóa file DB
+
+
+def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
     now = now or datetime.now(timezone.utc)
     videos = published_videos(con)
     source = "stored" if dry_run else fetch_and_store(con, videos, now)

@@ -18,6 +18,7 @@ bước in ra được ghi vào logs/daily_<ngày>.log.
 import argparse
 import json
 import logging
+import os
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -104,8 +105,11 @@ def run_step(name: str, key: str, args: list, log_file: Path) -> tuple:
         fh.write(f"\n===== {datetime.now().isoformat(timespec='seconds')} {name}: {' '.join(args)}\n")
         fh.flush()
         try:
+            # PYTHONUTF8: stdout của tiến trình con trỏ vào file -> Windows sẽ mã hóa
+            # cp949 và sập với tiếng Việt nếu không ép UTF-8 (Linux không ảnh hưởng)
             proc = subprocess.run([sys.executable, *args], cwd=ROOT, stdout=fh,
-                                  stderr=subprocess.STDOUT, timeout=STEP_TIMEOUT[key])
+                                  stderr=subprocess.STDOUT, timeout=STEP_TIMEOUT[key],
+                                  env={**os.environ, "PYTHONUTF8": "1"})
             ok, why = proc.returncode == 0, f"mã thoát {proc.returncode}"
         except subprocess.TimeoutExpired:
             ok, why = False, f"quá {STEP_TIMEOUT[key] // 60} phút"
@@ -118,6 +122,13 @@ def run_step(name: str, key: str, args: list, log_file: Path) -> tuple:
 def run_daily(skip_ideas: bool = False, dry_run: bool = False, runner=run_step) -> int:
     """Trả về số video đã gửi duyệt trong lượt chạy này."""
     cfg, con = load_config(), db.connect()
+    try:
+        return _run_daily(cfg, con, skip_ideas, dry_run, runner)
+    finally:
+        con.close()      # Windows: kết nối mở giữ khóa file DB
+
+
+def _run_daily(cfg, con, skip_ideas, dry_run, runner) -> int:
     want = int(cfg["daily"].get("videos_per_day", 1))
     LOG_DIR.mkdir(exist_ok=True)
     log_file = LOG_DIR / f"daily_{datetime.now():%Y-%m-%d}.log"

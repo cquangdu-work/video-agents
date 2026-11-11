@@ -54,9 +54,16 @@ def format_review_caption(video_id: int, script_id: int, meta: dict, checks: lis
 
 def send_for_review(script_id: int, force: bool = False, skip_qc: bool = False):
     """Kiểm định + viết metadata + gửi Telegram. Trả về id video, hoặc None nếu bị chặn."""
+    cfg, con = load_config(), db.connect()
+    try:
+        return _send_for_review(cfg, con, script_id, force, skip_qc)
+    finally:
+        con.close()      # Windows: kết nối mở giữ khóa file DB
+
+
+def _send_for_review(cfg, con, script_id, force, skip_qc):
     from .publish import metadata
 
-    cfg, con = load_config(), db.connect()
     row = db.get_script_with_idea(con, script_id)
     if not row:
         print(f"Không có kịch bản #{script_id} trong DB.")
@@ -252,23 +259,26 @@ def handle_update(con, upd: dict, cfg: dict) -> None:
 def listen(once: bool = False) -> None:
     """Vòng lặp chờ sự kiện. Vị trí đã đọc lưu trong DB nên khởi động lại không xử lý lặp."""
     cfg, con = load_config(), db.connect()
-    offset = int(db.get_state(con, "tg_offset", "0"))
-    log.info("Đang chờ Du bấm nút trên Telegram… (Ctrl+C để dừng)")
-    while True:
-        updates = tg.get_updates(offset, timeout=0 if once else 50)
-        for upd in updates or []:
-            offset = upd["update_id"] + 1
-            # Ghi vị trí TRƯỚC khi xử lý: một sự kiện gây lỗi không kẹt lại lặp vô hạn
-            db.set_state(con, "tg_offset", offset)
-            try:
-                handle_update(con, upd, cfg)
-            except Exception as exc:
-                log.exception("Lỗi xử lý sự kiện %s", upd.get("update_id"))
-                tg.send_message(f"⚠️ Bot gặp lỗi khi xử lý thao tác vừa rồi: {exc}")
-        if once:
-            return
-        if updates is None:        # mất mạng / Telegram lỗi -> nghỉ rồi thử lại
-            time.sleep(10)
+    try:
+        offset = int(db.get_state(con, "tg_offset", "0"))
+        log.info("Đang chờ Du bấm nút trên Telegram… (Ctrl+C để dừng)")
+        while True:
+            updates = tg.get_updates(offset, timeout=0 if once else 50)
+            for upd in updates or []:
+                offset = upd["update_id"] + 1
+                # Ghi vị trí TRƯỚC khi xử lý: một sự kiện gây lỗi không kẹt lại lặp vô hạn
+                db.set_state(con, "tg_offset", offset)
+                try:
+                    handle_update(con, upd, cfg)
+                except Exception as exc:
+                    log.exception("Lỗi xử lý sự kiện %s", upd.get("update_id"))
+                    tg.send_message(f"⚠️ Bot gặp lỗi khi xử lý thao tác vừa rồi: {exc}")
+            if once:
+                return
+            if updates is None:        # mất mạng / Telegram lỗi -> nghỉ rồi thử lại
+                time.sleep(10)
+    finally:
+        con.close()      # Windows: kết nối mở giữ khóa file DB
 
 
 def main():
