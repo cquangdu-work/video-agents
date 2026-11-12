@@ -422,6 +422,10 @@ def static_scenes(spec: list, max_words: int) -> list:
     return out
 
 
+FOCUS_LABELS = {"việt nam", "hàn quốc"}
+MAX_LINES = 4              # biểu đồ đường trên khung dọc: quá 4 đường là không đọc nổi
+
+
 def fill_series_from_data(spec: list, data_series: list) -> int:
     """Điền số liệu THẬT vào mọi cảnh line_chart / bar_race từ bảng gốc của ý tưởng (nếu có).
 
@@ -451,7 +455,11 @@ def fill_series_from_data(spec: list, data_series: list) -> int:
             continue
         wanted = {str(s.get("label", "")).strip().lower()
                   for s in p.get("series") or [] if isinstance(s, dict)}
-        chosen = [s for s in data_series if s["label"].lower() in wanted] or data_series
+        # Không ghi rõ nước nào: vẽ Việt Nam và Hàn Quốc (góc của kênh), không phải cả 10
+        # nước của một cuộc đua — 10 đường trên một khung dọc là mớ bòng bong (ca thật #18)
+        chosen = ([s for s in data_series if s["label"].lower() in wanted]
+                  or [s for s in data_series if s["label"].lower() in FOCUS_LABELS]
+                  or data_series)[:MAX_LINES]
         p["series"] = [{"label": s["label"], "xs": list(s["xs"]), "ys": list(s["ys"])} for s in chosen]
         p["xs"] = sorted({x for s in chosen for x in s["xs"]})
         p.pop("ys", None)

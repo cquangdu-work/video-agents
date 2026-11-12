@@ -76,7 +76,8 @@ Python, CrewAI (điều phối agent), cron/systemd timer (lịch chạy), bot T
 - **Xong (4.2):** chuỗi hằng ngày `src/daily.py` + bộ triển khai `deploy/`.
 - **Xong (4.3):** agent Phân tích `src/analysis/weekly.py`, ghi `data/learned.yaml`. Chưa có số liệu thật vì kênh chưa đăng video nào.
 - **Xong (12/11):** nguồn World Bank (25 chỉ số Việt–Hàn, xoay vòng 2 chỉ số/ngày) + biểu đồ đường hai nước trên cùng trục, số liệu do code chép từ bảng gốc. Video đầu tiên dạng này (kịch bản #17, điện tiêu thụ) đã dựng xong trên VM, đạt Kiểm định, chờ lượt 06:00 ngày 13/11 gửi duyệt.
-- **Chưa làm:** TikTok (cần Du đăng ký tài khoản developer); mẫu bản đồ và "cuộc đua số liệu" (bar chart race); nhạc nền; Kiểm chứng 2 nguồn độc lập (cần search API); KOSIS (cần key).
+- **Xong (12/11, chiều):** "cuộc đua số liệu" (`bar_race`) 10 nền kinh tế châu Á từ World Bank, số do code điền từ bảng. Video đầu tiên (kịch bản #18, GDP đầu người) dựng trên VM.
+- **Chưa làm:** TikTok (cần Du đăng ký tài khoản developer); mẫu bản đồ; nhạc nền; Kiểm chứng 2 nguồn độc lập (cần search API); KOSIS (cần key).
 
 ## Những điều đã đo/đã học khi chạy thật (đừng làm lại từ đầu)
 - **Quota TTS free tier ~15 lần gọi/ngày mỗi model**, hồi lúc nửa đêm giờ Thái Bình Dương (16–17h giờ Hàn). Vì vậy giọng được đọc **cả bài trong một lần gọi** rồi tự cắt theo câu (`src/audio/batch.py`); đừng quay về đọc từng câu.
@@ -87,6 +88,8 @@ Python, CrewAI (điều phối agent), cron/systemd timer (lịch chạy), bot T
 - **Reddit chặn IP của VM** ở đường JSON và trang HTML; chỉ RSS vào được và bị giới hạn tần suất. Bài Reddit vì thế không đọc được nguồn và bị loại trước khi chấm điểm.
 - **Kịch bản phải qua cổng chuẩn** trước khi được dựng: đủ từ, ít nhất 4 con số viết bằng chữ số, Kiểm chứng đạt. Biên kịch được đưa toàn văn bài nguồn chứ không chỉ đoạn tóm tắt RSS.
 - **Nguồn World Bank (12/11)** cho ý tưởng giàu số nhất; ý tưởng từ bảng số phải được kể thành chuyện (luật `DATA_STORY`, chặn kịch bản nhắc quá 5 mốc năm) — bản đầu tiên đọc 9 mốc năm x 2 nước như đọc bảng.
+- **Render chậm thường do tạo chữ mỗi khung hình**: `pick_font()` từng liệt kê font cả máy ở mỗi khung của cảnh đếm số (cảnh số lớn 10 giây mất 327 giây). Đã lưu kết quả; mẫu mới đừng gọi hàm nặng bên trong `always_redraw`.
+- **Model chép chuỗi số rất hay sai**: biểu đồ đường và cuộc đua phải lấy số bằng code từ bảng gốc (`crew.fill_series_from_data`), model chỉ chọn vẽ gì.
 - **Lớp chống trùng YouTube phải xét cùng đề tài**: đếm mọi video view cao trong kết quả tìm kiếm thì "…Việt Nam và Hàn Quốc…" ra toàn video bóng đá, ý tưởng bị loại oan.
 - **Agent Kiểm chứng bằng LLM không đủ để chặn số bịa**: nó chỉ soát danh sách "claims" Biên kịch tự khai. Đã lọt câu mở đầu "Sai lầm 99% người ăn chay..." (kịch bản #10) và ba con số không có trong nguồn ở kịch bản #6 (video #2, Du đã duyệt trước khi có cổng này). Từ 12/11 code đối chiếu TỪNG con số trong lời đọc với bài nguồn (`crew.unsourced_numbers`); đừng gỡ cổng này.
 

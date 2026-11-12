@@ -208,6 +208,19 @@ class DesignScenesTest(unittest.TestCase):
         self.assertEqual(spec2[1]["template"], "bar_race")
         self.assertEqual(spec2[1]["params"]["decimals"], 1)          # 98,8 không bị làm tròn
 
+    def test_line_chart_from_a_race_table_defaults_to_vietnam_and_korea(self):
+        from src import crew
+        data = [{"label": n, "xs": [1990, 2025], "ys": [k, k + 1]} for k, n in enumerate(
+            ["Singapore", "Hàn Quốc", "Nhật Bản", "Trung Quốc", "Việt Nam", "Ấn Độ"])]
+        spec = [{"template": "line_chart", "params": {"title": "Hành trình của Việt Nam"}},
+                {"template": "line_chart", "params": {"title": "Ba nước", "series": [
+                    {"label": "Nhật Bản"}, {"label": "Ấn Độ"}, {"label": "Việt Nam"}]}}]
+        crew.fill_series_from_data(spec, data)
+        self.assertEqual([s["label"] for s in spec[0]["params"]["series"]], ["Hàn Quốc", "Việt Nam"])
+        self.assertEqual([s["label"] for s in spec[1]["params"]["series"]], ["Nhật Bản", "Việt Nam", "Ấn Độ"])
+        crew.fill_series_from_data(spec[:1], [d for d in data if d["label"] not in ("Việt Nam", "Hàn Quốc")])
+        self.assertEqual(len(spec[0]["params"]["series"]), crew.MAX_LINES)    # không bao giờ quá 4 đường
+
     def test_race_needs_three_countries_with_full_data(self):
         bad = {"template": "bar_race", "params": {"title": "t", "years": [1990, 2000], "items": [
             {"label": "A", "values": [1, 2]}, {"label": "B", "values": [3, 4]}, {"label": "C", "values": [5]}]}}
