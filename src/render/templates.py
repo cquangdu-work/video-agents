@@ -12,6 +12,15 @@ from manim import (DOWN, LEFT, ORIGIN, PI, RIGHT, TAU, UP, Arc, Circle, Create, 
 from .base import BrandScene, fit_width, fmt_num, pick_font
 
 
+def label_decimals(value: float, decimals: int) -> int:
+    """Ít chữ số thập phân nhất mà vẫn KHÔNG làm tròn mất giá trị (tối đa `decimals`):
+    2756.0 -> 0 ("2.756", không phải "2.756,0"), 98.9 -> 1, 0.75 -> 2."""
+    d = 0
+    while d < decimals and round(value, d) != round(value, decimals):
+        d += 1
+    return d
+
+
 class Intro(BrandScene):
     """Intro 1 giây: '0' nhảy thành '1' rồi hiện tên kênh — rẻ mà nhớ được."""
 
@@ -77,7 +86,8 @@ class BarChart(BrandScene):
             bar.move_to([-4.2, y, 0], aligned_edge=LEFT)
             label = Text(it["label"], font=pick_font(), font_size=30, color=c["text"])
             label.next_to([-4.2, y + bar_h, 0], UP + RIGHT, buff=0.08).align_to(bar, LEFT)
-            val = Text(fmt_num(it["value"], dec), font=pick_font("number"), font_size=32,
+            val = Text(fmt_num(it["value"], label_decimals(float(it["value"]), dec)),
+                       font=pick_font("number"), font_size=32,
                        color=c["text"], weight="BOLD").next_to(bar, RIGHT, buff=0.15)
             rows.add(label, val)
             anims.append(GrowFromEdge(bar, LEFT))
@@ -99,18 +109,21 @@ class Versus(BrandScene):
         dec = p.get("decimals", 0)
         trL, trR = ValueTracker(0), ValueTracker(0)
         sides = [(p["left"], c["vietnam"], -2.2, trL), (p["right"], c["korea"], 2.2, trR)]
+        # Mỗi bên chỉ hiện số lẻ khi giá trị của CHÍNH nó có phần lẻ (98,9 bên này không được
+        # biến 2.462 bên kia thành "2.462,0" — Kiểm định đã bắt lỗi này)
+        side_dec = [label_decimals(float(s["value"]), dec) for s in (p["left"], p["right"])]
         # Cỡ chữ chung cho 2 bên, dò theo số DÀI nhất để không tràn cột (~3.9 đơn vị)
         widest = max(
-            Text(fmt_num(s["value"], dec), font=pick_font("number"), font_size=72,
-                 weight="BOLD").width for s in (p["left"], p["right"]))
+            Text(fmt_num(s["value"], d), font=pick_font("number"), font_size=72,
+                 weight="BOLD").width for s, d in zip((p["left"], p["right"]), side_dec))
         fsize = 72 * min(3.9 / widest, 1)
-        for side, color, x, tr in sides:
+        for (side, color, x, tr), d in zip(sides, side_dec):
             lbl = Text(side["label"], font=pick_font(), font_size=40, color=color,
                        weight="BOLD").move_to([x, 2.2, 0])
             fit_width(lbl, 4.0)
             self.add(lbl)
-            self.add(always_redraw(lambda tr=tr, color=color, x=x: Text(
-                fmt_num(tr.get_value(), dec), font=pick_font("number"), font_size=fsize,
+            self.add(always_redraw(lambda tr=tr, color=color, x=x, d=d: Text(
+                fmt_num(tr.get_value(), d), font=pick_font("number"), font_size=fsize,
                 color=color, weight="BOLD").move_to([x, 0.6, 0])))
         self.add(Line([0, 2.6, 0], [0, -0.4, 0], color=c["muted"], stroke_width=2))
         if p.get("suffix"):
@@ -144,15 +157,6 @@ def chart_series(p: dict, colors: dict) -> list:
         return out
     return [("", list(p["xs"]), list(p["ys"]),
              colors.get(p.get("color", "accent"), colors["accent"]))]
-
-
-def label_decimals(value: float, decimals: int) -> int:
-    """Ít chữ số thập phân nhất mà vẫn KHÔNG làm tròn mất giá trị (tối đa `decimals`):
-    2756.0 -> 0 ("2.756", không phải "2.756,0"), 98.9 -> 1, 0.75 -> 2."""
-    d = 0
-    while d < decimals and round(value, d) != round(value, decimals):
-        d += 1
-    return d
 
 
 class LineChart(BrandScene):
