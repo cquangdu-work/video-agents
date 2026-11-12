@@ -371,9 +371,10 @@ class BarRace(BrandScene):
         self.wait(max(self.seconds - 0.4 - race_time, 0.1))
 
 
-class AsiaMap(BrandScene):
-    """Bản đồ châu Á tô màu theo số liệu (choropleth) — params:
-    {title, year?, items: [{label, value}], unit, source, decimals}
+class MapScene(BrandScene):
+    """Bản đồ tô màu theo số liệu (choropleth) — params:
+    {title, year?, items: [{label, value, code?, rank?}], unit, source, decimals,
+     region: "asia" | "world" (cửa kiểm spec tự chọn: mọi nước ở châu Á -> bản đồ châu Á)}
     Nước có số: tô từ màu nền phụ (thấp) tới màu nhấn (cao) THEO THỨ HẠNG (một nước vượt trội
     như Singapore không làm cả bản đồ nhạt đi). Nước không có số: chỉ vẽ viền mờ.
     Việt Nam và Hàn Quốc: viền màu riêng + nhãn số. Nước quá nhỏ (Singapore): thêm chấm tròn."""
@@ -381,19 +382,158 @@ class AsiaMap(BrandScene):
     MAP_W, MAP_H, MAP_CENTER = 8.4, 6.6, (0.0, 0.3)
 
     def construct(self):
-        from manim import Polygon, interpolate_color, ManimColor, LaggedStart
-        from .geo import code_of, country_box, load_map, projector
+        from manim import interpolate_color, ManimColor
+        from .geo import code_of
         p, c = self.params, self.b["colors"]
         self.add_signature(p.get("source"))
         self.add(self.title_text(p["title"]))
-        dec = p.get("decimals", 0)
-        to_xy = projector(self.MAP_W, self.MAP_H, self.MAP_CENTER)
-        data = {code_of(it["label"]): (it["label"], float(it["value"]))
-                for it in p["items"] if code_of(it["label"])}
+        from ..sources.datatable import ranks_desc
+        data, given_rank = {}, {}
+        for it in p["items"]:
+            code = it.get("code") or code_of(it["label"])
+            if code:
+                data[code] = (it["label"], float(it["value"]))
+                if isinstance(it.get("rank"), int):
+                    given_rank[code] = it["rank"]
+        # thứ hạng từ cao xuống thấp: lấy hạng đã điền sẵn (khớp lời đọc), thiếu thì tự tính
+        self.rank = {**ranks_desc({k: v[1] for k, v in data.items()}), **given_rank}
         order = sorted(data, key=lambda k: data[k][1])
         low, high = ManimColor(c["surface"]), ManimColor(c["accent"])
         shade = {k: interpolate_color(low, high, 0.15 + 0.85 * r / max(len(order) - 1, 1))
                  for r, k in enumerate(order)}
+        if p.get("region") == "world":
+            return self.world(data, order, shade, low, high)
+        self.asia(data, order, shade, low, high)
+
+    def legend(self, data, order, low, high, y: float):
+        """Thang màu thấp -> cao kèm số hai đầu và dòng "năm · đơn vị"."""
+        from manim import interpolate_color
+        p, c, dec = self.params, self.b["colors"], self.params.get("decimals", 0)
+        if not order:
+            return VGroup()
+        bar = VGroup(*[Rectangle(width=0.32, height=0.18, stroke_width=0,
+                                 fill_color=interpolate_color(low, high, 0.15 + 0.85 * i / 9),
+                                 fill_opacity=1) for i in range(10)]).arrange(RIGHT, buff=0)
+        lo_v, hi_v = data[order[0]][1], data[order[-1]][1]
+        lo_t = Text(fmt_num(lo_v, label_decimals(lo_v, dec)), font=pick_font("number"),
+                    font_size=24, color=c["text"]).next_to(bar, LEFT, buff=0.15)
+        hi_t = Text(fmt_num(hi_v, label_decimals(hi_v, dec)), font=pick_font("number"),
+                    font_size=24, color=c["text"]).next_to(bar, RIGHT, buff=0.15)
+        caption = " · ".join(x for x in (str(p.get("year") or ""), p.get("unit", "")) if x)
+        cap = Text(caption, font=pick_font(), font_size=24, color=c["muted"])
+        return VGroup(VGroup(lo_t, bar, hi_t), cap).arrange(DOWN, buff=0.12).move_to([0, y, 0])
+
+    # ---------------------------------------------------------------- bản đồ thế giới
+    # Tiêu đề hai dòng kết thúc ở y≈4,1 -> mép trên bản đồ (cao 3,76) phải thấp hơn mức đó
+    WORLD_W, WORLD_H, WORLD_CENTER = 8.6, 4.6, (0.0, 1.85)
+    INSET_W, INSET_CENTER = 2.6, (2.8, -1.6)
+
+    def world(self, data, order, shade, low, high):
+        """Thế giới + ô phóng to Việt Nam/Biển Đông (đủ chỗ ghi tên Hoàng Sa, Trường Sa) +
+        khung số: Việt Nam, Hàn Quốc (giá trị, thứ hạng) và nơi cao nhất."""
+        from manim import Polygon, LaggedStart
+        from .geo import INSET_BBOX, VN_ISLANDS, clip_ring, display_name, load_map, projector
+        p, c, dec = self.params, self.b["colors"], self.params.get("decimals", 0)
+        to_xy = projector(self.WORLD_W, self.WORLD_H, self.WORLD_CENTER, "world")
+        world = load_map("world")["countries"]
+
+        def shapes(rings, project, **style):
+            return VGroup(*[Polygon(*[project(lon, lat) for lon, lat in ring[:-1]], **style)
+                            for ring in rings if len(ring) >= 4])
+
+        base = VGroup()
+        bands = [VGroup() for _ in range(10)]        # tô theo 10 nhóm thứ hạng (nhẹ hơn 200 hiệu ứng)
+        n = len(order)
+        rank_of = {k: r for r, k in enumerate(order)}
+        for code, country in world.items():
+            outline = shapes(country["rings"], to_xy, stroke_color=c["muted"], stroke_width=0.6,
+                             stroke_opacity=0.5, fill_opacity=0)
+            base.add(outline)
+            if code not in data:
+                continue
+            band = bands[min(int(10 * rank_of[code] / max(n, 1)), 9)]
+            band.add(outline.copy().set_fill(shade[code], opacity=1)
+                     .set_stroke(c["background"], width=0.5, opacity=1))
+            xs = [q[0] for ring in country["rings"] for q in ring]
+            ys = [q[1] for ring in country["rings"] for q in ring]
+            if max(xs) - min(xs) < 1.5 and max(ys) - min(ys) < 1.5:   # nhỏ quá: thêm chấm
+                band.add(Dot(to_xy((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2),
+                             radius=0.035, color=shade[code]))
+        vn_color = shade.get("VNM", c["muted"])
+        for _, spots, _, _ in VN_ISLANDS:            # hai quần đảo luôn có, cùng màu Việt Nam
+            base.add(*[Dot(to_xy(lon, lat), radius=0.012, color=vn_color) for lon, lat in spots])
+
+        # Ô phóng to: vẽ từ bản đồ châu Á (chi tiết hơn), cắt đa giác theo khung ô
+        lon0, lat0, lon1, lat1 = INSET_BBOX
+        to_in = projector(self.INSET_W, self.INSET_W, self.INSET_CENTER, "asia", bbox=INSET_BBOX)
+        frame_pts = [to_in(lon0, lat0), to_in(lon1, lat0), to_in(lon1, lat1), to_in(lon0, lat1)]
+        inset = VGroup(Polygon(*frame_pts, stroke_color=c["muted"], stroke_width=1.5,
+                               fill_color=c["background"], fill_opacity=1))
+        for code, country in load_map("asia")["countries"].items():
+            rings = [r for r in (clip_ring(ring, INSET_BBOX) for ring in country["rings"]) if len(r) >= 3]
+            if not rings:
+                continue
+            filled = code in data
+            edge = (c["vietnam"], 2) if code == "VNM" else (c["background"], 1) if filled else (c["muted"], 0.8)
+            inset.add(VGroup(*[Polygon(*[to_in(lon, lat) for lon, lat in ring],
+                                       stroke_color=edge[0], stroke_width=edge[1],
+                                       stroke_opacity=1 if filled else 0.5,
+                                       fill_color=shade.get(code, c["background"]),
+                                       fill_opacity=1 if filled else 0) for ring in rings]))
+        for name, spots, (lab_lon, lab_lat), align in VN_ISLANDS:
+            inset.add(*[Dot(to_in(lon, lat), radius=0.03, color=vn_color) for lon, lat in spots])
+            label = Text(name, font=pick_font(), font_size=14, color=c["vietnam"])
+            label.move_to(to_in(lab_lon, lab_lat), aligned_edge=LEFT if align == "left" else ORIGIN)
+            overflow = label.get_right()[0] - (frame_pts[1][0] - 0.06)   # chữ không chạm mép ô
+            if overflow > 0:
+                label.shift(LEFT * overflow)
+            inset.add(label)
+        # khung nhỏ trên bản đồ thế giới + hai tia nối xuống ô phóng to
+        mark = [to_xy(lon0, lat0), to_xy(lon1, lat0), to_xy(lon1, lat1), to_xy(lon0, lat1)]
+        zoom = VGroup(Polygon(*mark, stroke_color=c["text"], stroke_width=1.5, fill_opacity=0),
+                      Line(mark[0], frame_pts[3], color=c["muted"], stroke_width=1),
+                      Line(mark[1], frame_pts[2], color=c["muted"], stroke_width=1))
+
+        # Viền Việt Nam, Hàn Quốc trên bản đồ thế giới + khung số bên trái
+        outlines, rows = VGroup(), []
+        for code, key in (("VNM", "vietnam"), ("KOR", "korea")):
+            if code not in data:
+                continue
+            outlines.add(shapes(world[code]["rings"], to_xy, stroke_color=c[key], stroke_width=2.5,
+                                fill_opacity=0))
+            rows.append((data[code][0], data[code][1], c[key], self.rank[code]))
+        if order and order[-1] not in ("VNM", "KOR"):
+            top = order[-1]
+            rows.append((f"Cao nhất: {display_name(top)}", data[top][1], c["accent"], self.rank[top]))
+        n = int(p.get("total") or n)
+        panel = VGroup()
+        for label, value, color, rank in rows:
+            head = Text(label, font=pick_font(), font_size=24, color=color, weight="BOLD")
+            fit_width(head, 4.6)
+            num = Text(fmt_num(value, label_decimals(value, dec)), font=pick_font("number"),
+                       font_size=36, color=color, weight="BOLD")
+            pos = Text(f"cao thứ {rank}/{n}", font=pick_font(), font_size=20, color=c["text"])
+            panel.add(VGroup(head, VGroup(num, pos).arrange(RIGHT, buff=0.2, aligned_edge=DOWN))
+                      .arrange(DOWN, aligned_edge=LEFT, buff=0.08))
+        if len(panel):
+            panel.arrange(DOWN, aligned_edge=LEFT, buff=0.32)
+            panel.move_to([0, self.INSET_CENTER[1], 0]).align_to([-4.25, 0, 0], LEFT)
+        legend = self.legend(data, order, low, high, self.INSET_CENTER[1] - self.INSET_W / 2 - 0.75)
+
+        self.play(FadeIn(base), run_time=0.5)
+        fill_time = max(self.seconds * 0.4, 0.6)
+        self.play(LaggedStart(*[FadeIn(b) for b in bands if len(b)], lag_ratio=0.3), run_time=fill_time)
+        self.play(FadeIn(zoom), FadeIn(inset), FadeIn(outlines), FadeIn(panel), FadeIn(legend),
+                  run_time=0.5)
+        self.wait(max(self.seconds - 0.5 - fill_time - 0.5, 0.1))
+
+    # ---------------------------------------------------------------- bản đồ châu Á
+    def asia(self, data, order, shade, low, high):
+        from manim import Polygon, LaggedStart
+        from .geo import country_box, load_map, projector
+        p, c = self.params, self.b["colors"]
+        dec = p.get("decimals", 0)
+        to_xy = projector(self.MAP_W, self.MAP_H, self.MAP_CENTER)
 
         base, fills, marks = VGroup(), [], []
         for code, country in load_map()["countries"].items():
@@ -452,20 +592,7 @@ class AsiaMap(BrandScene):
                         color=c[key], stroke_width=2, buff=0.08)
             callouts.add(outline, lead, tag)
 
-        legend = VGroup()
-        if order:
-            bar = VGroup(*[Rectangle(width=0.32, height=0.18, stroke_width=0,
-                                     fill_color=interpolate_color(low, high, 0.15 + 0.85 * i / 9),
-                                     fill_opacity=1) for i in range(10)]).arrange(RIGHT, buff=0)
-            lo_v, hi_v = data[order[0]][1], data[order[-1]][1]
-            lo_t = Text(fmt_num(lo_v, label_decimals(lo_v, dec)), font=pick_font("number"),
-                        font_size=24, color=c["text"]).next_to(bar, LEFT, buff=0.15)
-            hi_t = Text(fmt_num(hi_v, label_decimals(hi_v, dec)), font=pick_font("number"),
-                        font_size=24, color=c["text"]).next_to(bar, RIGHT, buff=0.15)
-            caption = " · ".join(x for x in (str(p.get("year") or ""), p.get("unit", "")) if x)
-            cap = Text(caption, font=pick_font(), font_size=24, color=c["muted"])
-            legend = VGroup(VGroup(lo_t, bar, hi_t), cap).arrange(DOWN, buff=0.12)
-            legend.move_to([0, self.MAP_CENTER[1] - self.MAP_H / 2 - 0.55, 0])
+        legend = self.legend(data, order, low, high, self.MAP_CENTER[1] - self.MAP_H / 2 - 0.55)
         self.play(FadeIn(callouts), FadeIn(legend), run_time=0.4)
         self.wait(max(self.seconds - 0.5 - fill_time - 0.4, 0.1))
 
@@ -510,5 +637,6 @@ TEMPLATES = {
     "line_chart": LineChart,
     "percent": PercentRing,
     "bar_race": BarRace,
-    "map": AsiaMap,
+    "map": MapScene,
 }
+AsiaMap = MapScene          # tên cũ

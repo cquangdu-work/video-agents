@@ -73,18 +73,28 @@ def _check_scene(i: int, sc: dict):
         if need > int(params.get("decimals") or 0):
             params["decimals"] = need       # tỷ suất sinh 0,75 từng hiện thành "1"
     if tpl == "map":
-        from .render.geo import code_of
+        from .render.geo import code_of, load_map, has_map, region_for
+        known = set(load_map("asia")["countries"]) | (set(load_map("world")["countries"])
+                                                      if has_map("world") else set())
         good = []
         for it in params["items"]:
             try:
-                if isinstance(it, dict) and code_of(it.get("label")):
-                    good.append({"label": it["label"], "value": float(it["value"])})
+                code = isinstance(it, dict) and (it.get("code") or code_of(it.get("label")))
+                if code in known:
+                    item = {"label": it["label"], "value": float(it["value"]), "code": code}
+                    if isinstance(it.get("rank"), int):
+                        item["rank"] = it["rank"]
+                    good.append(item)
             except (KeyError, TypeError, ValueError):
                 pass
         if len(good) < 3:
-            log.warning("Cảnh %d: bản đồ cần >= 3 nước châu Á có số — bỏ", i + 1)
+            log.warning("Cảnh %d: bản đồ cần >= 3 nước có số — bỏ", i + 1)
             return None
         params["items"] = good
+        # mọi nước đều ở châu Á -> bản đồ châu Á (chi tiết hơn); có nước ngoài châu Á -> thế giới
+        params["region"] = region_for([it["code"] for it in good])
+        if params["region"] == "world":
+            params["total"] = len(good)
     if tpl == "bar_race":
         years = params["years"]
         good = [it for it in params["items"] if isinstance(it, dict) and it.get("label")

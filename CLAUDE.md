@@ -55,7 +55,7 @@ Ba loại nội dung không được kiếm tiền:
 
 Vì vậy: không tự động hoá 100% (giữ bước Du duyệt), không dùng giọng máy đều đều không chỉnh, chủ đề sức khoẻ/tài chính chỉ giải thích dữ liệu, không khuyên người xem làm gì. Mọi chất liệu phải rõ giấy phép.
 
-**Bản đồ** (Claude đặt 12/11/2026, Du có thể đổi): bản đồ nào có Việt Nam cũng phải thể hiện quần đảo Hoàng Sa và Trường Sa thuộc Việt Nam (cùng màu Việt Nam, có tên) — luật Đo đạc và Bản đồ của Việt Nam yêu cầu, và khán giả Việt sẽ phản ứng ngay nếu thiếu. Natural Earth 1:50m không vẽ hai quần đảo nên `src/render/geo.py` (`VN_ISLANDS`) tự vẽ; có test chốt chặn.
+**Bản đồ** (Claude đặt 12/11/2026, Du có thể đổi): bản đồ nào có Việt Nam cũng phải thể hiện quần đảo Hoàng Sa và Trường Sa thuộc Việt Nam (cùng màu Việt Nam, có tên) — luật Đo đạc và Bản đồ của Việt Nam yêu cầu, và khán giả Việt sẽ phản ứng ngay nếu thiếu. Natural Earth 1:50m không vẽ hai quần đảo nên `src/render/geo.py` (`VN_ISLANDS`) tự vẽ; có test chốt chặn. Bản đồ thế giới quá nhỏ để ghi tên nên có ô phóng to (`geo.INSET_BBOX`). Ranh giới thế giới theo góc nhìn Việt Nam (Kosovo trong Serbia, Bắc Síp trong Síp...); Hồng Kông, Ma Cao, Đài Loan ghi kèm "(Trung Quốc)".
 
 ## Hạ tầng
 - Phát triển trên máy Windows này; triển khai chạy thật trên **VM Oracle Cloud Free Tier (ARM64, Linux, tối đa 4 OCPU / 24GB RAM, không GPU)**. VM đang chạy sẵn một số dịch vụ khác: kiểm tra RAM trước khi cài thêm.
@@ -81,7 +81,8 @@ Python, CrewAI (điều phối agent), cron/systemd timer (lịch chạy), bot T
 - **Xong (12/11, chiều):** "cuộc đua số liệu" (`bar_race`) 10 nền kinh tế châu Á từ World Bank, số do code điền từ bảng. Hai video đã dựng sẵn trên VM, đạt Kiểm định, xếp hàng gửi duyệt: #18 (cuộc đua GDP đầu người) sáng 13/11, #17 (điện tiêu thụ Việt–Hàn) sáng 14/11. Cả hai đi tắt (bỏ qua Săn ý tưởng/Biên tập nên điểm = 0).
 - **Xong (12/11):** mẫu bản đồ châu Á (`map`, choropleth từ Natural Earth), tự dùng cho ý tưởng có bảng từ 3 nước.
 - **Xong (12/11):** nguồn KOSIS (`src/sources/kosis.py`, key đã có trong `.env` laptop + VM): người nước ngoài ở Hàn theo quốc tịch (cuộc đua) và người Việt ở Hàn theo loại visa. Cảnh hỏng có lời đọc giờ thành cảnh chữ giữ lời thay vì bị bỏ.
-- **Chưa làm:** TikTok (cần Du đăng ký tài khoản developer); file nhạc nền (code đã xong); Kiểm chứng 2 nguồn độc lập (cần search API); bản đồ ngoài châu Á.
+- **Xong (12/11, tối):** bản đồ thế giới (`assets/geo/world.json`, ranh giới theo góc nhìn Việt Nam qua cột `ADM0_A3_VN` của Natural Earth, ô phóng to Biển Đông ghi tên Hoàng Sa/Trường Sa) + dạng ý tưởng World Bank "Việt Nam đứng thứ mấy thế giới" (`sources.worldbank.world`, 1 chỉ số/ngày). Bảng mọi nước nằm cuối tóm tắt, code đọc lại để tô bản đồ; thứ hạng trên hình và trong lời cùng một hàm `datatable.ranks_desc`.
+- **Chưa làm:** TikTok (cần Du đăng ký tài khoản developer); file nhạc nền (code đã xong); Kiểm chứng 2 nguồn độc lập (cần search API); bản đồ một nước theo tỉnh.
 
 ## Những điều đã đo/đã học khi chạy thật (đừng làm lại từ đầu)
 - **Quota TTS free tier ~15 lần gọi/ngày mỗi model**, hồi lúc nửa đêm giờ Thái Bình Dương (16–17h giờ Hàn). Vì vậy giọng được đọc **cả bài trong một lần gọi** rồi tự cắt theo câu (`src/audio/batch.py`); đừng quay về đọc từng câu.

@@ -40,9 +40,11 @@ BUILTIN_TEMPLATES = [
     ("template", "statement",  "câu dẫn,chuyển tiếp,chữ",    "own-code", "Câu chữ lớn cho cảnh không có số liệu (3 kiểu bố cục xoay vòng)"),
     ("template", "percent",    "tỷ lệ,phần trăm,vòng tròn",  "own-code", "Vòng tròn tô dần tới X%"),
     ("template", "bar_race",   "cuộc đua,xếp hạng,nhiều nước", "own-code", "Cuộc đua số liệu: thanh ngang đổi chỗ qua các năm"),
-    ("template", "map",        "bản đồ,châu Á,khu vực",      "own-code", "Bản đồ châu Á tô màu theo số liệu (choropleth)"),
+    ("template", "map",        "bản đồ,châu Á,thế giới",     "own-code", "Bản đồ châu Á hoặc thế giới tô màu theo số liệu (choropleth)"),
     ("map",      "asia_map",   "bản đồ,châu Á,ranh giới",    "public-domain (Natural Earth, naturalearthdata.com)",
      "assets/geo/asia.json — Natural Earth 1:50m, cắt bằng tools/build_asia_map.py"),
+    ("map",      "world_map",  "bản đồ,thế giới,ranh giới",  "public-domain (Natural Earth, naturalearthdata.com)",
+     "assets/geo/world.json — Natural Earth 1:50m, góc nhìn Việt Nam, dựng bằng tools/build_world_map.py"),
 ]
 
 

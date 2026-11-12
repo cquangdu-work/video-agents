@@ -21,7 +21,7 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `config/channel.yaml` | Toàn bộ "não" cấu hình: chủ đề, nguồn, luật góc, trọng số chấm điểm. Sửa kênh = sửa file này, không đụng code. |
 | `src/main.py` | Nhạc trưởng: gọi lần lượt các bước, có cờ `--dry-run`. |
 | `src/sources/` | Lấy ý tưởng thô: RSS (OWID, ScienceDaily, Hankyoreh, Donga...), arXiv API, Reddit (JSON, bị chặn thì tự sang RSS) — đều **không cần API key**. Nguồn chết thì bỏ qua, không sập pipeline. |
-| `src/sources/worldbank.py` | Kho dữ liệu mở World Bank, không cần key. Hai dạng ý tưởng: "Việt Nam – Hàn Quốc qua một con số" (25 chỉ số, kèm góc "Việt Nam hôm nay bằng Hàn Quốc năm nào") và "cuộc đua" 10 nền kinh tế châu Á (7 chỉ số, kèm xếp hạng và "ai vượt ai" tính sẵn). Tóm tắt chính là bảng số liệu thật. |
+| `src/sources/worldbank.py` | Kho dữ liệu mở World Bank, không cần key. Ba dạng ý tưởng: "Việt Nam – Hàn Quốc qua một con số" (25 chỉ số, kèm góc "Việt Nam hôm nay bằng Hàn Quốc năm nào"), "cuộc đua" 10 nền kinh tế châu Á (7 chỉ số, kèm xếp hạng và "ai vượt ai" tính sẵn), và **"bản đồ thế giới"** (12 chỉ số: Việt Nam đứng thứ mấy trong ~210 nước và vùng lãnh thổ, nơi cao nhất/thấp nhất, thứ hạng trong Đông Nam Á). Tóm tắt chính là bảng số liệu thật. |
 | `src/sources/kosis.py` | KOSIS — thống kê quốc gia Hàn Quốc (cần `KOSIS_API_KEY`). Hai dạng ý tưởng: cuộc đua các cộng đồng người nước ngoài ở Hàn theo quốc tịch, và người Việt ở Hàn theo loại visa. Tự đọc cấu trúc bảng (không mã hoá cứng mã phân loại); ghi chú sẵn những chỗ dễ kể sai (KOSIS tách "Trung Quốc" và "Trung Quốc gốc Hàn"). |
 | `src/sources/datatable.py` | Hàm dùng chung cho nguồn dạng bảng: viết số kiểu Việt, xếp hạng "ai vượt ai", khuôn dòng "<Tên> theo năm: ..." mà biểu đồ đọc ngược lại được. |
 | `src/sources/youtube_check.py` | Lớp chống trùng 2: tìm bằng từ khóa tiếng Việt do Săn ý tưởng viết, chỉ đếm video view cao **cùng đề tài** (tiêu đề chứa phần lớn từ khóa đặc trưng). Cần `YOUTUBE_API_KEY`, chưa có thì tự bỏ qua. |
@@ -31,6 +31,7 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `src/produce.py` | **Agent Sản xuất**: kịch bản → spec cảnh (`data/specs/script_<id>.yaml`). Cửa kiểm spec: bỏ cảnh hỏng, không làm tròn mất số lẻ, xoay vòng kiểu cảnh chữ. |
 | `src/render/` | Engine Manim: `templates.py` là kho mẫu hình (số lớn, so găng, thanh ngang, **cuộc đua số liệu** — thanh ngang đổi chỗ qua các năm, **bản đồ châu Á** tô màu theo số liệu, đường xu hướng một hoặc nhiều đường — Việt Nam đỏ, Hàn Quốc xanh, vòng phần trăm, cảnh chữ 3 kiểu), `geo.py` đọc bản đồ và chiếu toạ độ, `base.py` là bộ nhận diện chung, `engine.py` dựng và nối cảnh. Biểu đồ đường, cuộc đua và bản đồ lấy số **thẳng từ bảng gốc** của ý tưởng, model chỉ chọn vẽ gì. |
 | `assets/geo/asia.json`, `tools/build_asia_map.py` | Ranh giới các nước Đông Á – Đông Nam Á – Nam Á cắt từ Natural Earth 1:50m (phạm vi công cộng). Hoàng Sa, Trường Sa do `geo.VN_ISLANDS` vẽ thêm (Natural Earth không có ở tỷ lệ này). |
+| `assets/geo/world.json`, `tools/build_world_map.py` | Bản đồ thế giới (235 nước/vùng, chiếu Equal Earth), ranh giới **theo góc nhìn Việt Nam** (cột `ADM0_A3_VN` của Natural Earth), mã ISO trùng mã World Bank, tên tiếng Việt quen dùng ("Mỹ", "Anh", "Hồng Kông (Trung Quốc)"). Bản đồ thế giới có ô phóng to Việt Nam + Biển Đông để ghi rõ tên Hoàng Sa, Trường Sa. Cảnh `map` tự chọn: mọi nước ở châu Á → bản đồ châu Á, có nước ngoài châu Á → thế giới. |
 | `src/assemble.py` | **Lắp ráp bản phát hành**: giọng + hình + phụ đề + chuẩn âm lượng → `output/final_<id>.mp4`. |
 | `src/audio/tts.py` | Giọng đọc Gemini TTS, tự đổi model dự phòng khi hết quota. Đổi nhà cung cấp giọng = chỉ thay file này. |
 | `src/audio/batch.py` | Đọc **cả bài bằng một lần gọi TTS** rồi tự cắt theo câu (Whisper dóng chữ + đo khoảng lặng). |
@@ -53,7 +54,7 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 - Kiểm chứng mới đối chiếu **1 nguồn** (bài gốc); thiết kế yêu cầu 2 nguồn độc lập → cần thêm search API.
 - Đã có World Bank (25 chỉ số Việt–Hàn) và KOSIS (2 bảng của Bộ Tư pháp Hàn Quốc; thêm bảng: sửa
   `sources.kosis.tables` trong `config/channel.yaml`). Số liệu KOSIS chia theo quốc tịch chỉ có từ 2022.
-- Bản đồ mới có khung châu Á (đủ cho dữ liệu Việt–Hàn và "cuộc đua").
+- Bản đồ có hai khung: châu Á và thế giới. Chưa có bản đồ một nước theo tỉnh (ví dụ 63 tỉnh Việt Nam).
 - Nhạc nền: code đã xong, chờ Du chép nhạc vào `assets/music/` trên **cả laptop và VM** (nhạc không vào
   git). Đặt tên `calm - ...`, `bright - ...`, `serious - ...` — xem `assets/music/README.md`.
   Tắt nhạc: `music.enabled: false` trong `config/channel.yaml`; to/nhỏ: `music.gain_db`.

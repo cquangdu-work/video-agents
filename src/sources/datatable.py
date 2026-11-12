@@ -24,6 +24,8 @@ def vn_number(x: float) -> str:
     a = abs(x)
     decimals = 0 if a >= 100 else 1 if a >= 10 else 2
     s = f"{x:,.{decimals}f}"
+    if "." in s:                         # bỏ số 0 thừa: 8,90 -> 8,9; 5,00 -> 5
+        s = s.rstrip("0").rstrip(".")
     return s.replace(",", " ").replace(".", ",").replace(" ", ".")
 
 
@@ -76,6 +78,41 @@ def race_years(series: dict, step: int = 5) -> list:
 def ranking(values: dict) -> list:
     """{tên: giá trị} -> danh sách tên xếp từ cao xuống thấp."""
     return [name for name, _ in sorted(values.items(), key=lambda kv: -kv[1])]
+
+
+def ranks_desc(values: dict) -> dict:
+    """{khoá: giá trị} -> {khoá: thứ hạng từ cao xuống thấp}; bằng nhau thì cùng hạng
+    (1 + số nơi có giá trị LỚN HƠN). Tóm tắt và bản đồ cùng dùng hàm này nên hạng đọc
+    trong lời và hạng hiện trên hình luôn khớp."""
+    vals = sorted(values.values(), reverse=True)
+    import bisect
+    neg = [-v for v in vals]                     # tăng dần, để đếm số giá trị lớn hơn bằng bisect
+    return {k: bisect.bisect_left(neg, -v) + 1 for k, v in values.items()}
+
+
+# Dòng bảng đủ mọi nước của ý tưởng "bản đồ thế giới" — máy đọc lại để tô bản đồ (quá dài
+# để model chép, và model không được dùng số ở đây cho lời đọc).
+WORLD_TABLE = "Số liệu từng nước năm"
+
+
+def world_table_line(year: int, named: dict) -> str:
+    """{tên tiếng Việt: giá trị} -> 'Số liệu từng nước năm 2024 (...): Afghanistan 66,0; ...'"""
+    body = "; ".join(f"{n} {vn_number(v)}" for n, v in sorted(named.items()))
+    return (f"{WORLD_TABLE} {year} (máy dùng để tô bản đồ; lời đọc chỉ dùng các số đã nêu ở"
+            f" trên): {body}.")
+
+
+def parse_world_table(summary: str):
+    """Ngược lại world_table_line -> {"year": 2024, "items": [{"label", "value"}]} hoặc None."""
+    m = re.search(rf"^{WORLD_TABLE} ((?:19|20)\d{{2}})[^:]*:\s*(.+?)\.?\s*$", str(summary or ""), re.M)
+    if not m:
+        return None
+    items = []
+    for part in m.group(2).split(";"):
+        pm = re.match(r"\s*(.+?)\s+(-?[\d.]*\d(?:,\d+)?)\s*$", part)
+        if pm:
+            items.append({"label": pm.group(1), "value": parse_vn_number(pm.group(2))})
+    return {"year": int(m.group(1)), "items": items} if items else None
 
 
 def lower_first(name: str) -> str:

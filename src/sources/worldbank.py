@@ -41,10 +41,8 @@ def fetch_indicator(ind: dict, countries: list, default_start: int) -> dict:
     return {c: [(y, v / scale) for y, v in s] for c, s in series.items()}
 
 
-def fetch_series(code: str, countries: list, start_year: int) -> dict:
-    """-> {mã nước: [(năm, giá trị), ...] tăng dần theo năm}, bỏ các năm không có số."""
-    url = API.format(countries=";".join(countries), code=code)
-    params = {"format": "json", "per_page": 1000, "date": f"{start_year}:{date.today().year}"}
+def _get_rows(url: str, params: dict) -> list:
+    """Gọi API World Bank (lần đầu có thể chỉ là "đánh thức" máy chủ, xem TIMEOUTS) -> các dòng số liệu."""
     r = None
     for k, wait in enumerate(TIMEOUTS):
         try:
@@ -56,7 +54,14 @@ def fetch_series(code: str, countries: list, start_year: int) -> dict:
             time.sleep(RETRY_PAUSE)
     r.raise_for_status()
     payload = r.json()
-    rows = payload[1] if isinstance(payload, list) and len(payload) > 1 and payload[1] else []
+    return payload[1] if isinstance(payload, list) and len(payload) > 1 and payload[1] else []
+
+
+def fetch_series(code: str, countries: list, start_year: int) -> dict:
+    """-> {mã nước: [(năm, giá trị), ...] tăng dần theo năm}, bỏ các năm không có số."""
+    url = API.format(countries=";".join(countries), code=code)
+    rows = _get_rows(url, {"format": "json", "per_page": 1000,
+                           "date": f"{start_year}:{date.today().year}"})
     series = {c: [] for c in countries}
     for row in rows:
         c, v = row.get("countryiso3code"), row.get("value")
@@ -156,6 +161,126 @@ def build_race_item(ind: dict, countries: list, series: dict, focus: list, step:
     }
 
 
+# ---------------------------------------------------------------- bản đồ thế giới
+WORLD_PAGE = "https://data.worldbank.org/indicator/{code}?view=map&year={year}"
+SOUTHEAST_ASIA = ("BRN", "KHM", "IDN", "LAO", "MYS", "MMR", "PHL", "SGP", "THA", "VNM", "TLS")
+MIN_WORLD_COUNTRIES = 100       # ít hơn thì "bản đồ thế giới" toàn ô trống, không đáng làm
+
+
+def fetch_world_table(code: str, known: set, years_back: int = 10) -> dict:
+    """Số liệu MỌI nước của một chỉ số trong `years_back` năm gần nhất (một lần gọi)
+    -> {năm: {mã ISO3: giá trị}}. Chỉ giữ mã có trên bản đồ (`known`) — API trả cả các
+    nhóm như "Thế giới", "Đông Á & Thái Bình Dương", không phải nước."""
+    this_year = date.today().year
+    rows = _get_rows(API.format(countries="all", code=code),
+                     {"format": "json", "per_page": 20000, "date": f"{this_year - years_back}:{this_year}"})
+    out = {}
+    for row in rows:
+        c, v = row.get("countryiso3code"), row.get("value")
+        if c in known and v is not None:
+            out.setdefault(int(row["date"]), {})[c] = float(v)
+    return out
+
+
+def pick_world_year(by_year: dict, must_have: str = "VNM", min_share: float = 0.85):
+    """Năm mới nhất có số của gần đủ các nước (World Bank cập nhật dần: năm mới nhất thường
+    mới có vài chục nước) VÀ có số của Việt Nam. Không trộn năm: mọi nước cùng một năm."""
+    if not by_year:
+        return None
+    best = max(len(v) for v in by_year.values())
+    ok = [y for y, v in by_year.items() if len(v) >= min_share * best and must_have in v]
+    return max(ok) if ok else None
+
+
+def build_world_item(ind: dict, year: int, table: dict, names: dict, focus: list, history: dict):
+    """Một chỉ số + số liệu mọi nước trong một năm -> ý tưởng "Việt Nam đứng thứ mấy thế giới".
+    table: {ISO3: giá trị} (đã chia scale); names: {ISO3: tên tiếng Việt}; focus: [VNM, KOR];
+    history: {ISO3: [(năm, giá trị)]} của các nước focus (để vẽ thêm biểu đồ đường).
+    None nếu quá ít nước có số hoặc thiếu Việt Nam."""
+    import statistics
+    from .datatable import ranks_desc, world_table_line
+    table = {c: v for c, v in table.items() if c in names}
+    n = len(table)
+    if n < MIN_WORLD_COUNTRIES or (focus and focus[0] not in table):
+        return None
+    unit = ind.get("unit", "")
+    val = lambda v: f"{vn_number(v)} {unit}".strip()
+    rank = ranks_desc(table)
+    order = sorted(table, key=lambda c: -table[c])
+    where = f"{n} nước và vùng lãnh thổ"
+    lines = [f"Chỉ số: {ind['name']} ({unit}). Nguồn: World Bank Open Data, mã {ind['code']}."
+             f" Năm {year}: có số của {where}."]
+    for c in focus:
+        if c in table:
+            below = sum(1 for v in table.values() if v < table[c])
+            lines.append(f"{names[c]}: {val(table[c])} — cao thứ {rank[c]} trên {where}"
+                         f" (cao hơn {round(100 * below / n)}% số nơi có số liệu).")
+    lines.append("5 nơi cao nhất: " + "; ".join(
+        f"{rank[c]}. {names[c]} — {val(table[c])}" for c in order[:5]) + ".")
+    lines.append("3 nơi thấp nhất: " + "; ".join(
+        f"{names[c]} — {val(table[c])}" for c in order[-3:]) + ".")
+    lines.append(f"Trung vị thế giới: {val(statistics.median(table.values()))}.")
+    sea = {c: table[c] for c in SOUTHEAST_ASIA if c in table}
+    if focus and focus[0] in sea and len(sea) >= 5:
+        top = max(sea, key=sea.get)
+        lines.append(f"Trong {len(sea)} nước Đông Nam Á có số liệu, {names[focus[0]]} đứng thứ"
+                     f" {ranks_desc(sea)[focus[0]]}; cao nhất là {names[top]} — {val(sea[top])}.")
+    a, b = (focus + [None, None])[:2]
+    if a in table and b in table and table[a] != table[b]:
+        hi, lo = (b, a) if table[b] > table[a] else (a, b)
+        if table[lo] > 0 and table[hi] / table[lo] >= 1.5:    # "gấp 1,12 lần" nghe gượng
+            lines.append(f"Năm {year}: {names[hi]} gấp {vn_number(table[hi] / table[lo])} lần {names[lo]}.")
+        else:                    # hiệu của hai tỷ lệ % là "điểm phần trăm", không phải %
+            gap = table[hi] - table[lo]
+            gap_text = (f"{vn_number(gap)} điểm phần trăm" if unit.startswith("%") else val(gap))
+            lines.append(f"Năm {year}: {names[hi]} hơn {names[lo]} {gap_text}.")
+    for c in focus:                                   # chuỗi theo năm -> biểu đồ đường hai nước
+        s = history.get(c) or []
+        picks = [p for i, p in enumerate(s) if p[0] % 5 == 0 or i in (0, len(s) - 1)]
+        if len(picks) >= 2:
+            lines.append(f"{names[c]} theo năm: " + "; ".join(f"{y}: {vn_number(v)}" for y, v in picks) + ".")
+    lines.append(world_table_line(year, {names[c]: v for c, v in table.items()}))
+    title = f"Bản đồ thế giới: {lower_first(ind['name'])} năm {year}"
+    if focus and focus[0] in table:
+        title += f" — {names[focus[0]]} thứ {rank[focus[0]]}/{n}"
+    return {"title": title, "summary": "\n".join(lines),
+            "url": WORLD_PAGE.format(code=ind["code"], year=year),
+            "source": SOURCE_NAME, "lang": "vi"}
+
+
+def fetch_world_maps(cfg: dict, indicators: list, today: date = None) -> list:
+    """Ý tưởng "bản đồ thế giới" (cấu hình sources.worldbank.world): mỗi ngày `per_day` chỉ số,
+    tên/đơn vị/scale lấy từ danh sách indicators chung theo mã."""
+    from ..render.geo import has_map, load_map
+    codes = cfg.get("indicators") or []
+    if not codes or not has_map("world"):
+        return []
+    lookup = {i["code"]: i for i in indicators or []}
+    pool = [lookup[c] for c in codes if c in lookup]
+    world = load_map("world")["countries"]
+    names = {c: w["name"] for c, w in world.items()}
+    focus = cfg.get("focus") or ["VNM", "KOR"]
+    items = []
+    for ind in todays_indicators(pool, int(cfg.get("per_day", 1)), today):
+        try:
+            scale = float(ind.get("scale", 1) or 1)
+            by_year = fetch_world_table(ind["code"], set(world))
+            year = pick_world_year(by_year, focus[0])
+            if year is None:
+                log.info("World Bank (bản đồ) %s: chưa năm nào đủ số liệu — bỏ", ind["code"])
+                continue
+            table = {c: v / scale for c, v in by_year[year].items()}
+            history = fetch_indicator(ind, focus, int(cfg.get("start_year", 1990)))
+            item = build_world_item(ind, year, table, names, focus, history)
+        except Exception as exc:          # mạng chập chờn không được làm sập cả pipeline
+            log.warning("Bỏ qua bản đồ World Bank %s: %s", ind.get("code"), exc)
+            continue
+        if item:
+            items.append(item)
+            log.info("World Bank (bản đồ) %s: %s", ind["code"], item["title"])
+    return items
+
+
 def todays_indicators(indicators: list, per_day: int, today: date = None) -> list:
     """Chọn per_day chỉ số cho hôm nay, xoay vòng hết danh sách rồi mới lặp lại."""
     if not indicators or per_day <= 0:
@@ -183,6 +308,7 @@ def fetch_worldbank(cfg: dict, today: date = None) -> list:
         else:
             log.info("World Bank %s: số liệu quá mỏng — bỏ", ind["code"])
     items += fetch_races(cfg.get("races") or {}, today)
+    items += fetch_world_maps(cfg.get("world") or {}, cfg.get("indicators", []), today)
     return items
 
 

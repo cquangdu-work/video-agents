@@ -31,7 +31,9 @@ class GeoTest(unittest.TestCase):
     def test_vietnamese_names_map_to_codes(self):
         self.assertEqual(geo.code_of("Việt Nam"), "VNM")
         self.assertEqual(geo.code_of(" hàn quốc "), "KOR")
-        self.assertIsNone(geo.code_of("Đức"))
+        self.assertEqual(geo.code_of("Đức"), "DEU")              # có bản đồ thế giới từ 12/11
+        self.assertEqual(geo.code_of("Hoa Kỳ"), geo.code_of("Mỹ"))
+        self.assertIsNone(geo.code_of("Wakanda"))
 
     def test_projection_fits_the_box_and_keeps_north_up(self):
         to_xy = geo.projector(8.4, 6.6, (0.0, 0.3))
@@ -87,17 +89,23 @@ class MapSpecTest(unittest.TestCase):
     def setUp(self):
         logging.disable(logging.WARNING); self.addCleanup(logging.disable, logging.NOTSET)
 
-    def test_map_keeps_known_asian_countries_and_needs_three(self):
+    def test_map_keeps_known_countries_needs_three_and_picks_the_region(self):
         spec = produce.validate_spec([
             {"template": "map", "params": {"title": "GDP", "items": [
                 {"label": "Việt Nam", "value": 5066}, {"label": "Hàn Quốc", "value": "36227"},
-                {"label": "Đức", "value": 54000}, {"label": "Ấn Độ", "value": 2702.5}]}},
+                {"label": "Wakanda", "value": 54000}, {"label": "Ấn Độ", "value": 2702.5}]}},
             {"template": "map", "params": {"title": "Ít", "items": [
-                {"label": "Việt Nam", "value": 1}, {"label": "Lào", "value": 2}]}}], CFG)
-        self.assertEqual([s["template"] for s in spec], ["intro", "map"])
+                {"label": "Việt Nam", "value": 1}, {"label": "Lào", "value": 2}]}},
+            {"template": "map", "params": {"title": "Có châu Âu", "items": [
+                {"label": "Việt Nam", "value": 1}, {"label": "Lào", "value": 2},
+                {"label": "Đức", "value": 3}]}}], CFG)
+        self.assertEqual([s["template"] for s in spec], ["intro", "map", "map"])
         p = spec[1]["params"]
         self.assertEqual([i["label"] for i in p["items"]], ["Việt Nam", "Hàn Quốc", "Ấn Độ"])
+        self.assertEqual([i["code"] for i in p["items"]], ["VNM", "KOR", "IND"])
         self.assertEqual(p["decimals"], 1)                                   # 2.702,5 không bị làm tròn
+        self.assertEqual(p["region"], "asia")                                # toàn châu Á: bản đồ chi tiết
+        self.assertEqual(spec[2]["params"]["region"], "world")               # có Đức: bản đồ thế giới
 
     def test_map_is_filled_with_the_latest_common_year(self):
         data = [{"label": "Việt Nam", "xs": [1990, 2024], "ys": [98.9, 2756]},

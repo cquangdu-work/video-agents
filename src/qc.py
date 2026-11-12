@@ -120,7 +120,9 @@ def param_digits(params: dict) -> set:
     from .utils import digits_of, spec_values
     # số liệu của cảnh + trục năm + số thứ tự của cảnh chữ kiểu 2 — đều do spec bảo vẽ
     values = (spec_values(params) + list(params.get("xs") or []) + list(params.get("years") or [])
-              + [params.get("n"), params.get("year")])
+              + [params.get("n"), params.get("year"), params.get("total")]
+              # bản đồ thế giới hiện "cao thứ 105/214": hạng do code tính từ chính bảng số
+              + [it.get("rank") for it in params.get("items") or [] if isinstance(it, dict)])
     out = set()
     for v in values:
         out |= digits_of(v)

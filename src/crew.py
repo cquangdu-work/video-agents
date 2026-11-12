@@ -396,10 +396,11 @@ TEMPLATE_GUIDE = """Các template có sẵn và tham số (CHỈ dùng đúng c�
    của nhiều nước đổi chỗ theo thứ hạng qua từng mốc năm. CHỈ dùng khi DỮ LIỆU NGUỒN có
    bảng theo năm của từ 3 nước trở lên. KHÔNG chép số — máy tự điền "years"/"items" từ
    bảng. Cảnh này chạy lâu: cho nó gánh 2-3 câu lời đọc kể diễn biến cuộc đua.
-8. "map": {"title": str, "unit": str, "source": str} — BẢN ĐỒ châu Á tô màu theo số liệu
-   năm mới nhất, Việt Nam và Hàn Quốc có nhãn số riêng. CHỈ dùng khi DỮ LIỆU NGUỒN có bảng
-   theo năm của từ 3 nước châu Á trở lên. KHÔNG chép số — máy tự điền "items"/"year" từ bảng.
-   Hợp với câu nói về bức tranh cả khu vực ở thời điểm hiện tại.
+8. "map": {"title": str, "unit": str, "source": str} — BẢN ĐỒ tô màu theo số liệu năm mới
+   nhất (châu Á, hoặc THẾ GIỚI khi dữ liệu nguồn có "Số liệu từng nước"), Việt Nam và Hàn Quốc
+   có nhãn số riêng. CHỈ dùng khi DỮ LIỆU NGUỒN có bảng số của từ 3 nước trở lên. KHÔNG chép
+   số — máy tự điền "items"/"year" từ bảng. Hợp với câu nói về bức tranh cả khu vực/thế giới,
+   hoặc Việt Nam đứng ở đâu so với thế giới.
 """
 
 ANIMATED_LONG = {"bar_race"}     # cảnh chuyển động suốt thời lượng: được gánh nhiều lời hơn
@@ -430,22 +431,40 @@ FOCUS_LABELS = {"việt nam", "hàn quốc"}
 MAX_LINES = 4              # biểu đồ đường trên khung dọc: quá 4 đường là không đọc nổi
 
 
-def fill_series_from_data(spec: list, data_series: list) -> int:
-    """Điền số liệu THẬT vào mọi cảnh line_chart / bar_race từ bảng gốc của ý tưởng (nếu có).
+def fill_world_map(p: dict, world: dict) -> None:
+    """Cảnh bản đồ của ý tưởng "bản đồ thế giới": mọi nước trong bảng, kèm mã nước và thứ hạng
+    (cùng hàm xếp hạng với phần tóm tắt -> hạng trên hình khớp hạng trong lời đọc)."""
+    from .render.geo import code_of
+    from .sources.datatable import ranks_desc
+    items = [dict(it, code=code_of(it["label"])) for it in world["items"] if code_of(it["label"])]
+    rank = ranks_desc({it["code"]: it["value"] for it in items})
+    p["year"], p["region"], p["total"] = world["year"], "world", len(items)
+    p["items"] = [dict(it, rank=rank[it["code"]]) for it in items]
+
+
+def fill_series_from_data(spec: list, data_series: list, world: dict = None) -> int:
+    """Điền số liệu THẬT vào mọi cảnh line_chart / bar_race / map từ bảng gốc của ý tưởng.
 
     Model chỉ quyết định vẽ biểu đồ nào và cho nước nào (qua nhãn trong "series");
     số liệu do code chép từ bảng, nên không thể chép sai hay bịa. Nhãn không khớp nước nào
     (hoặc biểu đồ một đường không nhãn) thì vẽ đủ các nước có trong bảng. Cuộc đua luôn
-    gồm mọi nước, trên những mốc năm nước nào cũng có số.
+    gồm mọi nước, trên những mốc năm nước nào cũng có số. `world` (datatable.parse_world_table):
+    bảng mọi nước trong một năm -> cảnh bản đồ thành bản đồ thế giới.
     Trả về số cảnh đã điền.
     """
-    if not data_series:
+    if not data_series and not world:
         return 0
     filled = 0
     for sc in spec:
         if not isinstance(sc.get("params"), dict):
             continue
         p = sc["params"]
+        if sc.get("template") == "map" and world:
+            fill_world_map(p, world)
+            filled += 1
+            continue
+        if not data_series:
+            continue
         if sc.get("template") == "map":
             # Bản đồ: năm mới nhất mà nước nào cũng có số
             common = set.intersection(*[set(s["xs"]) for s in data_series])
@@ -505,11 +524,21 @@ def design_scenes(idea: dict, scenes: list, cfg: dict) -> list:
 
     # Dữ liệu gốc của ý tưởng (bảng số World Bank, tóm tắt bài báo): agent được phép lấy số
     # ở đây để vẽ biểu đồ — một đường xu hướng cần 6-10 điểm, lời đọc không thể đọc hết.
+    from .sources.datatable import WORLD_TABLE, parse_world_table
     from .sources.worldbank import parse_series
-    source_data = str(idea.get("summary") or "").strip()[:3000]
+    full_summary = str(idea.get("summary") or "").strip()
+    # Bảng mọi nước (bản đồ thế giới) quá dài để đưa model — code đọc từ toàn văn, model chỉ
+    # thấy phần kể chuyện phía trên
+    world = parse_world_table(full_summary)
+    source_data = full_summary.split(WORLD_TABLE)[0].strip()[:3000]
     data_series = parse_series(source_data)
     data_block = (f"\nDỮ LIỆU NGUỒN (số thật, ĐƯỢC dùng cho biểu đồ kể cả khi lời đọc không nhắc"
                   f" hết):\n\"\"\"\n{source_data}\n\"\"\"\n" if source_data else "")
+    if world:
+        data_block += (
+            f"\nCÓ SỐ LIỆU CỦA {len(world['items'])} NƯỚC NĂM {world['year']}: NÊN có ĐÚNG MỘT cảnh"
+            " \"map\" (bản đồ THẾ GIỚI tô màu, Việt Nam và Hàn Quốc có nhãn hạng — chỉ ghi title,"
+            " unit, source, máy tự điền số mọi nước) cho câu nói Việt Nam đứng ở đâu trên thế giới.\n")
     if len(data_series) >= 3:
         from .render.geo import code_of
         labels = [s["label"] for s in data_series]
@@ -523,7 +552,7 @@ def design_scenes(idea: dict, scenes: list, cfg: dict) -> list:
         # Bản đồ chỉ khi các nhóm là NƯỚC vẽ được (bảng visa thì không): cảnh bản đồ hỏng bị
         # cửa kiểm spec đổi thành cảnh chữ — đừng gợi ý thứ sẽ hỏng
         if sum(1 for l in labels if code_of(l)) >= 3:
-            data_block += (" NÊN có thêm MỘT cảnh \"map\" (bản đồ châu Á năm mới nhất, máy tự điền"
+            data_block += (" NÊN có thêm MỘT cảnh \"map\" (bản đồ năm mới nhất, máy tự điền"
                            " số) cho câu nói về bức tranh cả khu vực — bản đồ là chất liệu đặc trưng"
                            " của kênh.")
         data_block += "\n"
@@ -574,7 +603,7 @@ Yêu cầu:
     from .utils import digit_set, digits_of, number_values, spec_values
     allowed_text = (" ".join(str(s.get("voice", "")) for s in scenes)
                     + " " + str(idea.get("title", "")) + " " + str(idea.get("angle", ""))
-                    + " " + source_data)
+                    + " " + full_summary)       # cả bảng mọi nước: bản đồ thế giới lấy số ở đó
     script_digits, script_values = digit_set(allowed_text), number_values(allowed_text)
 
     def known(v) -> bool:
@@ -629,7 +658,7 @@ Yêu cầu:
                 description=description, expected_output=expected)))
         except ValueError:
             spec = []
-        fill_series_from_data(spec, data_series)
+        fill_series_from_data(spec, data_series, world)
         # Đơn điệu chỉ tính trên các template SỐ LIỆU: kịch bản ít con số thì
         # nhiều statement là đúng đắn, không được ép vẽ biểu đồ (sẽ sinh bịa số).
         counts = collections.Counter(s.get("template") for s in spec)

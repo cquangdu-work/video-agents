@@ -287,7 +287,10 @@ def main():
     for sc in spec:
         assets_db.record_use(con, sc["template"], final.name)
         if sc["template"] == "map":                # dữ liệu ranh giới (Natural Earth) cũng là chất liệu
-            assets_db.record_use(con, "asia_map", final.name)
+            region = (sc.get("params") or {}).get("region") or "asia"
+            assets_db.record_use(con, f"{region}_map", final.name)
+            if region == "world":                  # ô phóng to Biển Đông vẽ từ bản đồ châu Á
+                assets_db.record_use(con, "asia_map", final.name)
     log.info("BẢN PHÁT HÀNH: %s (%.1fs)", final, ffprobe_duration(final))
     print(final)
 

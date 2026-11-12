@@ -101,6 +101,15 @@ sources:
         - {code: NY.GDP.MKTP.CD,    name: "Quy mô GDP",                       unit: "tỷ USD", scale: 1000000000}
         - {code: SP.URB.TOTL.IN.ZS, name: "Tỷ lệ dân số sống ở thành thị",    unit: "%"}
         - {code: NE.EXP.GNFS.ZS,    name: "Xuất khẩu so với GDP",             unit: "% GDP"}
+    # "Bản đồ thế giới": một chỉ số của mọi nước trong cùng một năm -> Việt Nam đứng thứ mấy,
+    # ai cao nhất/thấp nhất, bản đồ thế giới tô màu. Tên/đơn vị lấy từ `indicators` ở trên theo mã.
+    world:
+      per_day: 1
+      start_year: 1990      # chuỗi năm của Việt Nam, Hàn Quốc (vẽ thêm biểu đồ đường)
+      focus: [VNM, KOR]
+      indicators: [SP.DYN.LE00.IN, NY.GDP.PCAP.CD, SP.DYN.TFRT.IN, IT.NET.USER.ZS,
+                   SP.POP.65UP.TO.ZS, SP.URB.TOTL.IN.ZS, EG.USE.ELEC.KH.PC, SP.DYN.IMRT.IN,
+                   AG.LND.FRST.ZS, SL.AGR.EMPL.ZS, SL.TLF.CACT.FE.ZS, SH.XPD.CHEX.GD.ZS]
 
   # KOSIS — cổng thống kê quốc gia Hàn Quốc (cần KOSIS_API_KEY trong .env, không có thì bỏ qua).
   # Mỗi ngày đưa vào `per_day` bảng, xoay vòng. kind: nationality_race | vietnam_by_category
