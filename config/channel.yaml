@@ -151,6 +151,15 @@ daily:
   min_script_words: 165    # lời đọc ít hơn thế (~48 giây) thì bỏ: video sẽ rớt Kiểm định độ dài
   min_script_numbers: 4    # lời đọc có ít con số hơn thế thì bỏ: video sẽ toàn cảnh chữ
 
+# ---------- Nhạc nền (src/audio/music.py) ----------
+# Chép nhạc vào assets/music/, tên file bắt đầu bằng nhóm: "calm - ...", "bright - ...",
+# "serious - ...". Thư mục trống thì video không có nhạc.
+music:
+  enabled: true
+  gain_db: -20             # nhạc nhỏ hơn mức gốc chừng này, rồi còn tự hạ thêm khi có giọng
+  max_uses_per_week: 3     # quá thì cảnh báo: kho nhạc nhóm đó cần thêm bài
+  license: "YouTube Audio Library — không yêu cầu ghi công"
+
 # ---------- Nhịp video ----------
 pacing:
   scene_seconds_min: 2     # đổi cảnh mỗi 2-4 giây

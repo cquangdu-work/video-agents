@@ -13,3 +13,5 @@ data/render/
 data/learned.yaml
 data/specs/
 media/
+assets/music/*
+!assets/music/README.md

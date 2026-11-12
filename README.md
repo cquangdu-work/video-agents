@@ -35,6 +35,7 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `src/audio/tts.py` | Giọng đọc Gemini TTS, tự đổi model dự phòng khi hết quota. Đổi nhà cung cấp giọng = chỉ thay file này. |
 | `src/audio/batch.py` | Đọc **cả bài bằng một lần gọi TTS** rồi tự cắt theo câu (Whisper dóng chữ + đo khoảng lặng). |
 | `src/audio/subtitles.py` | Whisper lấy mốc từng từ → phụ đề `.ass` theo cụm 3 từ, không vắt ngang hai câu. |
+| `src/audio/music.py` | **Nhạc nền tự chọn**: đọc `assets/music/`, đoán tâm trạng lời đọc (calm/bright/serious), chọn bài ít dùng nhất 7 ngày, trộn bằng ffmpeg — có giọng thì nhạc tự nhỏ (sidechaincompress). Kho trống thì video không nhạc như cũ. |
 | `src/qc.py` | **Agent Kiểm định**: độ dài, khung đen, âm lượng, giấy phép, lời đọc có khớp kịch bản không, model nhìn ảnh soát hình. |
 | `src/assets_db.py` | Kho chất liệu: mỗi mẫu hình có giấy phép + nhật ký dùng, cảnh báo khi lạm dụng một mẫu. |
 | `src/telegram_bot.py` | Gửi kịch bản đã kiểm chứng vào Telegram (gọi thẳng Bot API cho nhẹ). |
@@ -52,7 +53,10 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 - Kiểm chứng mới đối chiếu **1 nguồn** (bài gốc); thiết kế yêu cầu 2 nguồn độc lập → cần thêm search API.
 - Đã có World Bank (25 chỉ số Việt–Hàn) và KOSIS (2 bảng của Bộ Tư pháp Hàn Quốc; thêm bảng: sửa
   `sources.kosis.tables` trong `config/channel.yaml`). Số liệu KOSIS chia theo quốc tịch chỉ có từ 2022.
-- Bản đồ mới có khung châu Á (đủ cho dữ liệu Việt–Hàn và "cuộc đua"); nhạc nền chờ Du tải file vào `assets/music/`.
+- Bản đồ mới có khung châu Á (đủ cho dữ liệu Việt–Hàn và "cuộc đua").
+- Nhạc nền: code đã xong, chờ Du chép nhạc vào `assets/music/` trên **cả laptop và VM** (nhạc không vào
+  git). Đặt tên `calm - ...`, `bright - ...`, `serious - ...` — xem `assets/music/README.md`.
+  Tắt nhạc: `music.enabled: false` trong `config/channel.yaml`; to/nhỏ: `music.gain_db`.
 - API World Bank treo ở lần gọi đầu của mỗi truy vấn mới (máy chủ tính xong ở phía sau rồi lưu đệm):
   code gọi "đánh thức" rồi gọi lại, nên mỗi chỉ số mới có thể mất 1–2 phút.
 - TikTok chưa làm (cần tài khoản developer). YouTube đang ở chế độ `manual`: bot gửi gói, Du tự đăng.

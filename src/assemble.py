@@ -254,17 +254,36 @@ def main():
         "spoken_words": sum(len(tokens(_voice(spec[g[0]]))) for g in todo),
         "heard_words": sum(len(tokens(w[0])) for w in words)}), encoding="utf-8")
 
-    # ---- 5. Đốt phụ đề + trộn tiếng + chuẩn âm lượng phát hành
+    # ---- 5. Đốt phụ đề + trộn tiếng (+ nhạc nền nếu kho có nhạc) + chuẩn âm lượng phát hành
+    from .audio import music
+    from .main import load_config
     OUTPUT.mkdir(exist_ok=True)
     final = OUTPUT / f"final_{args.script_id}.mp4"
-    subprocess.run(
-        ["ffmpeg", "-y", "-v", "error", "-i", str(silent), "-i", str(full_wav),
-         "-vf", f"ass={ass.name}", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
-         "-c:v", "libx264", "-crf", "20", "-preset", "medium", "-pix_fmt", "yuv420p",
-         "-c:a", "aac", "-b:a", "192k", "-shortest", str(final)],
-        check=True, cwd=RENDER)                    # cwd=RENDER: né lỗi escape đường dẫn Windows trong filter ass=
-
     con = assets_db.init_assets()
+    narration = " ".join(_voice(spec[g[0]]) for g in todo)
+    track = music.select(con, narration, f"script_{args.script_id}", load_config())
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(silent), "-i", str(full_wav)]
+    if track:
+        mcfg = load_config().get("music") or {}
+        log.info("Nhạc nền: %s (nhóm %s, lời đọc nghiêng về %s)", track["name"], track["mood"],
+                 track["mood_wanted"])
+        # nhạc lặp lại nếu ngắn hơn video; [0:v] đốt phụ đề, [aout] = giọng + nhạc đã trộn
+        cmd += ["-stream_loop", "-1", "-i", str(track["path"]),
+                "-filter_complex", f"[0:v]ass={ass.name}[vout];"
+                + music.mix_filter(ffprobe_duration(silent), float(mcfg.get("gain_db", -20))),
+                "-map", "[vout]", "-map", "[aout]"]
+    else:
+        cmd += ["-vf", f"ass={ass.name}", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]
+    cmd += ["-c:v", "libx264", "-crf", "20", "-preset", "medium", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "192k", "-shortest", str(final)]
+    subprocess.run(cmd, check=True, cwd=RENDER)   # cwd=RENDER: né lỗi escape đường dẫn Windows trong filter ass=
+
+    meta_path = audio_dir / "meta.json"            # ghi bài nhạc đã dùng (agent Phân tích có thể đối chiếu)
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["music"] = track["name"] if track else None
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    if track:
+        assets_db.record_use(con, track["name"], final.name)
     for sc in spec:
         assets_db.record_use(con, sc["template"], final.name)
         if sc["template"] == "map":                # dữ liệu ranh giới (Natural Earth) cũng là chất liệu

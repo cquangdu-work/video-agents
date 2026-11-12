@@ -20,7 +20,7 @@ Một đội agent chạy theo lịch, mỗi ngày tạo video ngắn dọc (60�
 ## Đã chốt thêm (11/2026)
 - **Chủ đề kênh: "Thế giới qua con số"** (Du chốt 10/11/2026) — biểu đồ, bản đồ động, cuộc đua số liệu dựng bằng code; nguồn mở (OWID, World Bank, KOSIS...); lồng góc Việt–Hàn.
 - **Giọng đọc: Gemini TTS** (Du chốt 11/11/2026; model đặt trong `.env` TTS_MODEL — đang dùng bản lite vì quota thoáng hơn, kèm TTS_MODEL_FALLBACKS; giọng đặt trong TTS_VOICE). Muốn đổi sang giọng nhân bản của Du sau này: chỉ thay `src/audio/tts.py`.
-- Nhạc nền: tạm chưa dùng; khi Du tải nhạc từ YouTube Audio Library vào `assets/music/` thì nối vào `src/assemble.py` (đã chừa chỗ, dùng sidechaincompress để nhạc tự hạ khi có giọng).
+- Nhạc nền: **code xong 12/11/2026** (`src/audio/music.py`, nối trong `src/assemble.py`): tự chọn bài theo tâm trạng lời đọc (tiền tố tên file `calm`/`bright`/`serious`), xoay vòng theo nhật ký kho chất liệu, sidechaincompress hạ nhạc khi có giọng, có test đo bằng số. Chờ Du tải nhạc YouTube Audio Library vào `assets/music/` trên laptop và VM (không vào git). Kho trống = video không nhạc.
 
 ## Tiêu chí của "chất liệu" tốt
 1. Sinh ra tự nhiên từ nội dung.
@@ -81,7 +81,7 @@ Python, CrewAI (điều phối agent), cron/systemd timer (lịch chạy), bot T
 - **Xong (12/11, chiều):** "cuộc đua số liệu" (`bar_race`) 10 nền kinh tế châu Á từ World Bank, số do code điền từ bảng. Hai video đã dựng sẵn trên VM, đạt Kiểm định, xếp hàng gửi duyệt: #18 (cuộc đua GDP đầu người) sáng 13/11, #17 (điện tiêu thụ Việt–Hàn) sáng 14/11. Cả hai đi tắt (bỏ qua Săn ý tưởng/Biên tập nên điểm = 0).
 - **Xong (12/11):** mẫu bản đồ châu Á (`map`, choropleth từ Natural Earth), tự dùng cho ý tưởng có bảng từ 3 nước.
 - **Xong (12/11):** nguồn KOSIS (`src/sources/kosis.py`, key đã có trong `.env` laptop + VM): người nước ngoài ở Hàn theo quốc tịch (cuộc đua) và người Việt ở Hàn theo loại visa. Cảnh hỏng có lời đọc giờ thành cảnh chữ giữ lời thay vì bị bỏ.
-- **Chưa làm:** TikTok (cần Du đăng ký tài khoản developer); nhạc nền; Kiểm chứng 2 nguồn độc lập (cần search API); bản đồ ngoài châu Á.
+- **Chưa làm:** TikTok (cần Du đăng ký tài khoản developer); file nhạc nền (code đã xong); Kiểm chứng 2 nguồn độc lập (cần search API); bản đồ ngoài châu Á.
 
 ## Những điều đã đo/đã học khi chạy thật (đừng làm lại từ đầu)
 - **Quota TTS free tier ~15 lần gọi/ngày mỗi model**, hồi lúc nửa đêm giờ Thái Bình Dương (16–17h giờ Hàn). Vì vậy giọng được đọc **cả bài trong một lần gọi** rồi tự cắt theo câu (`src/audio/batch.py`); đừng quay về đọc từng câu.
