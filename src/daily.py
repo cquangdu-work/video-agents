@@ -88,6 +88,16 @@ def script_numbers(body: str) -> int:
         return 0
 
 
+def opening_problems(body: str) -> list:
+    """Câu mở đầu (lời cảnh 1) phạm luật kể chuyện nào (src/story.py)."""
+    from .story import hook_problems
+    try:
+        scenes = yaml.safe_load(body or "") or []
+        return hook_problems(str(scenes[0].get("voice", ""))) if scenes else []
+    except Exception:
+        return []
+
+
 def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     """Kịch bản đủ điều kiện dựng, theo thứ tự ưu tiên. Trả về [{"id", "score", "has_final"}].
 
@@ -114,6 +124,12 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
             # Chặn TRƯỚC khi tốn quota giọng đọc + công dựng: kịch bản đời cũ (3 cảnh,
             # ~115 từ) cho ra video ~40 giây, kiểu gì cũng rớt Kiểm định độ dài.
             log.info("Bỏ qua kịch bản #%d: lời đọc chỉ %d từ (cần ≥ %d)", r["id"], words, min_words)
+            continue
+        bad_hook = opening_problems(r["body"])
+        if bad_hook:
+            # Kịch bản viết trước luật kể chuyện (12/11): mở bằng "Đừng…"/"Sai lầm…" = video theo
+            # mẫu + câu view, YouTube không cho kiếm tiền -> không đem đi dựng
+            log.info("Bỏ qua kịch bản #%d: câu mở đầu %s", r["id"], bad_hook[0])
             continue
         numbers = script_numbers(r["body"])
         if numbers < min_numbers:

@@ -95,6 +95,17 @@ class PickTest(DailyCase):
         self.assertEqual(daily.script_numbers(None), 0)
         self.assertEqual([c["id"] for c in daily.pick_candidates(self.con, CFG)], [8])
 
+    def test_script_opening_with_a_banned_template_is_not_produced(self):
+        # Kịch bản viết trước luật kể chuyện 12/11 (ca thật #13 "Đừng bỏ qua…", #12 "Sai lầm…")
+        self.script(12, 26.0)
+        self.script(13, 25.0)
+        body = json.loads(self.con.execute("SELECT body FROM scripts WHERE id=12").fetchone()["body"])
+        body[0]["voice"] = "Sai lầm 40 điểm khi chọn nguồn đạm cho cơ thể?"
+        self.con.execute("UPDATE scripts SET body=? WHERE id=12", (json.dumps(body, ensure_ascii=False),))
+        self.con.commit()
+        self.assertEqual([c["id"] for c in daily.pick_candidates(self.con, CFG)], [13])
+        self.assertEqual(daily.opening_problems(None), [])
+
     def test_plan_skips_done_work(self):
         names = lambda sid: [s[1] for s in daily.plan_steps(sid)]
         self.assertEqual(names(1), ["produce", "assemble", "review"])
