@@ -64,12 +64,35 @@ class BrandScene(Scene):
             self.add(lbl)
 
     def title_text(self, s: str, font_size: int = 52) -> Text:
-        t = Text(s, font=pick_font(), font_size=font_size,
+        # Tiêu đề dài: NGẮT DÒNG thay vì để fit_width thu nhỏ cả câu (trước đây tiêu đề
+        # 9 từ co lại còn cỡ chữ phụ đề, xem trên điện thoại không đọc nổi)
+        t = Text(wrap_title(s), font=pick_font(), font_size=font_size,
                  color=self.b["colors"]["text"], weight="BOLD",
                  line_spacing=0.9)
         fit_width(t, config.frame_width - 0.9)
         t.to_edge(UP, buff=self.b["frame"]["margin_top"])
         return t
+
+
+TITLE_LINE_CHARS = 24     # ~ số ký tự vừa một dòng tiêu đề cỡ 52 trên khung dọc
+
+
+def wrap_title(s: str, width: int = TITLE_LINE_CHARS) -> str:
+    """Ngắt tiêu đề dài thành tối đa 2 dòng cân nhau. Đã có xuống dòng sẵn thì giữ nguyên."""
+    import textwrap
+    s = " ".join(str(s).split()) if "\n" not in str(s) else str(s)
+    if "\n" in s or len(s) <= width:
+        return s
+    words = s.split()
+    best = None
+    for k in range(1, len(words)):           # chọn chỗ ngắt cho hai dòng dài gần bằng nhau
+        a, b = " ".join(words[:k]), " ".join(words[k:])
+        score = max(len(a), len(b))
+        if best is None or score <= best[0]:  # hoà thì lấy dòng đầu dài hơn (dạng tam giác ngược)
+            best = (score, a + "\n" + b)
+    if best and best[0] <= width + 6:
+        return best[1]
+    return "\n".join(textwrap.wrap(s, width))   # dài quá: ngắt nhiều dòng, fit_width lo phần còn lại
 
 
 def fit_width(mobj, max_w: float):

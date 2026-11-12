@@ -82,6 +82,15 @@ class ValidateSpecTest(unittest.TestCase):
         self.assertEqual([c for *_, c in two_unknown], ["#A", "#G"])     # hai đường không trùng màu
         self.assertEqual(chart_series({"xs": [5, 6], "ys": [1, 2]}, colors), [("", [5, 6], [1, 2], "#A")])
 
+    def test_long_titles_wrap_into_two_balanced_lines(self):
+        from src.render.base import wrap_title
+        self.assertEqual(wrap_title("Mức rớt giá"), "Mức rớt giá")
+        self.assertEqual(wrap_title("Điện tiêu thụ bình quân đầu người năm 1990"),
+                         "Điện tiêu thụ bình quân\nđầu người năm 1990")
+        self.assertEqual(wrap_title("Ca tử vong tập trung\nở vùng nhiệt đới"),
+                         "Ca tử vong tập trung\nở vùng nhiệt đới")             # xuống dòng sẵn: giữ
+        self.assertTrue(all(len(l) <= 24 for l in wrap_title("từ " * 30).split("\n")))
+
     def test_chart_end_labels_show_only_real_decimals(self):
         from src.render.templates import label_decimals
         self.assertEqual([label_decimals(v, d) for v, d in ((2756.0, 1), (98.9, 1), (0.75, 2),
