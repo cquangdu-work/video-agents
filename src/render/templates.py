@@ -146,6 +146,15 @@ def chart_series(p: dict, colors: dict) -> list:
              colors.get(p.get("color", "accent"), colors["accent"]))]
 
 
+def label_decimals(value: float, decimals: int) -> int:
+    """Ít chữ số thập phân nhất mà vẫn KHÔNG làm tròn mất giá trị (tối đa `decimals`):
+    2756.0 -> 0 ("2.756", không phải "2.756,0"), 98.9 -> 1, 0.75 -> 2."""
+    d = 0
+    while d < decimals and round(value, d) != round(value, decimals):
+        d += 1
+    return d
+
+
 class LineChart(BrandScene):
     """Đường xu hướng tự vẽ — params:
     {title, xs: [...], ys: [...], unit, source, color(=accent), decimals(=0)}
@@ -171,8 +180,8 @@ class LineChart(BrandScene):
             graphs.append(ax.plot_line_graph(xs, ys, line_color=color, stroke_width=7,
                                              add_vertex_dots=False))
             end = Dot(ax.c2p(xs[-1], ys[-1]), color=color, radius=0.1)
-            val = Text(fmt_num(ys[-1], dec), font=pick_font("number"), font_size=40,
-                       color=color, weight="BOLD")
+            val = Text(fmt_num(ys[-1], label_decimals(ys[-1], dec)), font=pick_font("number"),
+                       font_size=40, color=color, weight="BOLD")
             val.next_to(end, UP + LEFT, buff=0.12)
             ends.add(end, val)
         # Hai đường kết thúc gần nhau -> hai nhãn số dính vào nhau (đo được: hở 0,15 đơn vị

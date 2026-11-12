@@ -82,6 +82,12 @@ class ValidateSpecTest(unittest.TestCase):
         self.assertEqual([c for *_, c in two_unknown], ["#A", "#G"])     # hai đường không trùng màu
         self.assertEqual(chart_series({"xs": [5, 6], "ys": [1, 2]}, colors), [("", [5, 6], [1, 2], "#A")])
 
+    def test_chart_end_labels_show_only_real_decimals(self):
+        from src.render.templates import label_decimals
+        self.assertEqual([label_decimals(v, d) for v, d in ((2756.0, 1), (98.9, 1), (0.75, 2),
+                                                           (12071.0, 2), (4.9, 2), (5066, 0))],
+                         [0, 1, 2, 0, 1, 0])
+
     def test_each_series_may_have_its_own_years(self):
         spec = produce.validate_spec([{"template": "line_chart", "params": {
             "title": "Điện", "xs": [1990, 2024, 2025], "series": [
