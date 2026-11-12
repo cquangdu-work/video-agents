@@ -27,7 +27,8 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `src/crew.py` | 4 agent CrewAI: Săn ý tưởng (ép phải có "góc"), Biên tập (chấm 5 tiêu chí × trọng số), Biên kịch (3 hook + kịch bản theo cảnh), Kiểm chứng (đối chiếu claim với bài nguồn). |
 | `src/page_text.py` | Tải toàn văn bài nguồn: Biên kịch lấy số liệu từ đó, Kiểm chứng đối chiếu lại. |
 | `src/produce.py` | **Agent Sản xuất**: kịch bản → spec cảnh (`data/specs/script_<id>.yaml`). Cửa kiểm spec: bỏ cảnh hỏng, không làm tròn mất số lẻ, xoay vòng kiểu cảnh chữ. |
-| `src/render/` | Engine Manim: `templates.py` là kho mẫu hình (số lớn, so găng, thanh ngang, **cuộc đua số liệu** — thanh ngang đổi chỗ qua các năm, đường xu hướng một hoặc nhiều đường — Việt Nam đỏ, Hàn Quốc xanh, vòng phần trăm, cảnh chữ 3 kiểu), `base.py` là bộ nhận diện chung, `engine.py` dựng và nối cảnh. Biểu đồ đường và cuộc đua lấy số **thẳng từ bảng gốc** của ý tưởng, model chỉ chọn vẽ gì. |
+| `src/render/` | Engine Manim: `templates.py` là kho mẫu hình (số lớn, so găng, thanh ngang, **cuộc đua số liệu** — thanh ngang đổi chỗ qua các năm, **bản đồ châu Á** tô màu theo số liệu, đường xu hướng một hoặc nhiều đường — Việt Nam đỏ, Hàn Quốc xanh, vòng phần trăm, cảnh chữ 3 kiểu), `geo.py` đọc bản đồ và chiếu toạ độ, `base.py` là bộ nhận diện chung, `engine.py` dựng và nối cảnh. Biểu đồ đường, cuộc đua và bản đồ lấy số **thẳng từ bảng gốc** của ý tưởng, model chỉ chọn vẽ gì. |
+| `assets/geo/asia.json`, `tools/build_asia_map.py` | Ranh giới các nước Đông Á – Đông Nam Á – Nam Á cắt từ Natural Earth 1:50m (phạm vi công cộng). Hoàng Sa, Trường Sa do `geo.VN_ISLANDS` vẽ thêm (Natural Earth không có ở tỷ lệ này). |
 | `src/assemble.py` | **Lắp ráp bản phát hành**: giọng + hình + phụ đề + chuẩn âm lượng → `output/final_<id>.mp4`. |
 | `src/audio/tts.py` | Giọng đọc Gemini TTS, tự đổi model dự phòng khi hết quota. Đổi nhà cung cấp giọng = chỉ thay file này. |
 | `src/audio/batch.py` | Đọc **cả bài bằng một lần gọi TTS** rồi tự cắt theo câu (Whisper dóng chữ + đo khoảng lặng). |
@@ -48,7 +49,7 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 ## Giới hạn hiện tại (sẽ nâng ở bước sau)
 - Kiểm chứng mới đối chiếu **1 nguồn** (bài gốc); thiết kế yêu cầu 2 nguồn độc lập → cần thêm search API.
 - Đã có World Bank (25 chỉ số Việt–Hàn); chưa có KOSIS (thống kê Hàn Quốc, cần đăng ký key).
-- Chưa có mẫu bản đồ; nhạc nền chờ Du tải file vào `assets/music/`.
+- Bản đồ mới có khung châu Á (đủ cho dữ liệu Việt–Hàn và "cuộc đua"); nhạc nền chờ Du tải file vào `assets/music/`.
 - API World Bank treo ở lần gọi đầu của mỗi truy vấn mới (máy chủ tính xong ở phía sau rồi lưu đệm):
   code gọi "đánh thức" rồi gọi lại, nên mỗi chỉ số mới có thể mất 1–2 phút.
 - TikTok chưa làm (cần tài khoản developer). YouTube đang ở chế độ `manual`: bot gửi gói, Du tự đăng.
