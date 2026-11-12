@@ -239,9 +239,22 @@ class ReviewFlowTest(DbCase):
         self.assertEqual((v["status"], v["youtube_privacy"]), ("published", "private"))
         self.assertIn("audit", self.calls("send_message")[-1][1][0])
 
+    def test_missing_youtube_permission_falls_back_to_the_manual_package(self):
+        # Chưa cấp quyền / token hết hạn: thử lại vô ích -> gửi gói để Du tự đăng, video không kẹt
+        with mock.patch.object(youtube, "upload", side_effect=youtube.YouTubeAuthError("Thiếu YT_CLIENT_ID")):
+            review.handle_update(self.con, cb(f"ok:{self.vid}"), self.api_cfg())
+        self.assertEqual(self.status(), "approved")
+        texts = [c[1][0] for c in self.calls("send_message")]
+        self.assertTrue(any("Thiếu YT_CLIENT_ID" in t and "README" in t for t in texts))
+        self.assertEqual(len(self.calls("send_document")), 1)                # gói file gốc
+        self.assertEqual(self.calls("send_message")[-1][2]["buttons"],
+                         [[("📤 Đã đăng xong", f"done:{self.vid}")]])
+        review.handle_update(self.con, cb(f"done:{self.vid}"), self.api_cfg())
+        self.assertEqual(self.status(), "published")
+
     def test_api_failure_returns_to_approved_with_retry(self):
         cfg = self.api_cfg()
-        with mock.patch.object(youtube, "upload", side_effect=youtube.YouTubeAuthError("hết hạn")):
+        with mock.patch.object(youtube, "upload", side_effect=youtube.YouTubeUploadError("503")):
             with self.assertLogs("review", level="ERROR"):
                 review.handle_update(self.con, cb(f"ok:{self.vid}"), cfg)
         self.assertEqual(self.status(), "approved")

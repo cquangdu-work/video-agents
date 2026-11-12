@@ -78,20 +78,30 @@ Trả lời (reply) tin nhắn video để ghi chú/lý do loại; gửi link Yo
 
 Hai chế độ đăng, đổi ở `config/channel.yaml` → `publish.youtube.mode`:
 
-- **`manual` (mặc định):** sau khi duyệt, bot gửi file gốc + tiêu đề/mô tả chạm-để-copy; Du tự đăng bằng app.
-- **`api`:** bot tự upload. Cần làm một lần:
-  1. Google Cloud Console → tạo project → bật *YouTube Data API v3* và *YouTube Analytics API*.
-  2. OAuth consent screen (External) → thêm chính mình làm test user → tạo *OAuth client ID* loại **Desktop app**.
-  3. Điền `YT_CLIENT_ID`, `YT_CLIENT_SECRET` vào `.env`, chạy `python -m src.publish.youtube auth` trên laptop
-     (chọn đúng kênh Brand Account), kiểm tra bằng `python -m src.publish.youtube whoami`.
-  4. Lên VM: chép `.secrets/youtube_token.json` sang.
+- **`api` (Du chốt 12/11/2026):** sau khi Du bấm ✅, bot tự upload, hẹn công khai lúc 19:00 giờ Việt Nam
+  (`publish_time_local`), khai báo nội dung AI (`containsSyntheticMedia`). Chưa cấp quyền YouTube thì bot
+  tự lùi về gửi gói để Du tự đăng lần đó, kèm lời nhắc.
+- **`manual`:** sau khi duyệt, bot gửi file gốc + tiêu đề/mô tả chạm-để-copy; Du tự đăng bằng app.
 
-Hai cái bẫy của chế độ `api`:
+### Đăng tự động qua API — làm một lần
 
-- App OAuth ở trạng thái **Testing** → refresh token chết sau 7 ngày. Chuyển *Publishing status* sang **In production**.
-- Tài liệu chính thức của Google ghi: video upload từ project API **chưa qua audit** bị khoá ở chế độ riêng tư,
-  muốn gỡ phải nộp đơn audit. Vì vậy mặc định `privacy: private`, và bot luôn báo chế độ hiển thị THỰC TẾ
-  YouTube trả về. Upload thử một video trước khi tin vào chế độ này.
+1. https://console.cloud.google.com → tạo project (vd "the-gioi-qua-con-so") → *APIs & Services → Library*:
+   bật **YouTube Data API v3** và **YouTube Analytics API**.
+2. *OAuth consent screen* (Google Auth Platform): loại **External**, điền tên app + email; thêm chính
+   tài khoản Google của Du vào *Test users*. Sau đó ở *Audience* bấm **Publish app → In production**
+   (để Testing thì token chết sau 7 ngày; app chưa xác minh vẫn dùng được cho chính mình, chỉ hiện
+   cảnh báo "Google chưa xác minh" lúc cấp quyền → bấm *Advanced → Go to ...*).
+3. *Clients → Create client* → loại **Desktop app** → lấy *Client ID* và *Client secret*.
+4. Điền `YT_CLIENT_ID`, `YT_CLIENT_SECRET` vào `.env` trên **laptop và VM** (không commit).
+5. Trên laptop: `python -m src.publish.youtube auth` → trình duyệt mở ra → đăng nhập → **chọn đúng kênh
+   Brand Account "Thế giới qua con số"** → cho phép. Kiểm tra: `python -m src.publish.youtube whoami`.
+6. Chép token lên VM: `scp .secrets/youtube_token.json <vm>:video-agents/.secrets/`
+   (thư mục `.secrets/` không vào git).
+7. **Audit của YouTube API:** theo tài liệu của Google, video upload từ project API **chưa qua audit**
+   bị khoá ở chế độ **riêng tư**. Trước khi audit xong: bot vẫn upload (đỡ việc tải file + gõ chữ), báo
+   rõ chế độ hiển thị thực tế, Du chỉ cần vào YouTube Studio bấm Công khai. Nộp đơn audit tại
+   https://support.google.com/youtube/contact/yt_api_form (mất vài tuần, cần mô tả app + chính sách
+   riêng tư). Audit xong thì video tự công khai theo giờ hẹn.
 
 ## Chạy hằng ngày
 

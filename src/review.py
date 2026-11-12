@@ -61,6 +61,15 @@ def send_for_review(script_id: int, force: bool = False, skip_qc: bool = False):
         con.close()      # Windows: kết nối mở giữ khóa file DB
 
 
+def music_credit(script_id: int):
+    """Tên bài nhạc nền mà assemble đã ghi vào meta.json (video không nhạc -> None)."""
+    path = ROOT / "data" / "render" / f"audio_{script_id}" / "meta.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("music_credit")
+    except (OSError, ValueError):
+        return None
+
+
 def _send_for_review(cfg, con, script_id, force, skip_qc):
     from .publish import metadata
 
@@ -89,7 +98,7 @@ def _send_for_review(cfg, con, script_id, force, skip_qc):
     scenes = yaml.safe_load(row["body"]) or []
     hooks = json.loads(row["hooks"] or "[]")
     idea = {k: row[k] for k in ("title", "angle", "summary", "source_url", "source_name")}
-    meta = metadata.build_metadata(idea, scenes, hooks, cfg)
+    meta = metadata.build_metadata(idea, scenes, hooks, cfg, music_credit(script_id))
 
     video_id = db.upsert_video(con, script_id, video_path.relative_to(ROOT).as_posix(),
                                meta["title"], meta["description"], meta["tags"], checks)
@@ -131,6 +140,15 @@ def _publish_api(con, video: dict, cfg: dict) -> None:
     try:
         res = youtube.upload(ROOT / video["file"], video["title"], video["description"],
                              video["tags"], yt)
+    except youtube.YouTubeAuthError as exc:
+        # Chưa cấp quyền / token hết hạn: thử lại cũng vô ích -> gửi gói để Du tự đăng hôm nay,
+        # kèm cách sửa. Video về lại 'approved' nên nút "Đã đăng xong" của gói vẫn dùng được.
+        db.transition_video(con, video["id"], "publishing", "approved")
+        tg.send_message(f"⚠️ Chưa upload tự động được video #{video['id']}: {exc}\n"
+                        "Gửi gói để Du tự đăng lần này. Cách bật upload tự động: mục"
+                        " “Đăng tự động qua API” trong README.")
+        _publish_manual(con, video, cfg)
+        return
     except Exception as exc:
         log.exception("Upload YouTube lỗi")
         db.transition_video(con, video["id"], "publishing", "approved")

@@ -50,8 +50,9 @@ def script_digit_set(scenes: list) -> set:
     return digit_set(" ".join(str(s.get("voice", "")) for s in scenes))
 
 
-def finalize(raw: dict, idea: dict, scenes: list, cfg: dict) -> dict:
-    """Biến đề xuất thô của LLM thành metadata hợp lệ. Trả về kèm 'warnings'."""
+def finalize(raw: dict, idea: dict, scenes: list, cfg: dict, music_credit: str = None) -> dict:
+    """Biến đề xuất thô của LLM thành metadata hợp lệ. Trả về kèm 'warnings'.
+    music_credit: tên bài nhạc nền ("New Land — ALBIS") -> một dòng ghi công trong mô tả."""
     pub = cfg.get("publish", {})
     warnings = []
 
@@ -82,6 +83,10 @@ def finalize(raw: dict, idea: dict, scenes: list, cfg: dict) -> dict:
         extras.append("Nguồn: " + " — ".join(source_bits))
     else:
         warnings.append("Thiếu nguồn để ghi vào mô tả")
+    if music_credit:
+        # Ghi công luôn: bài thư viện "không cần ghi công" thì thừa cũng không sao, bài Creative
+        # Commons thì BẮT BUỘC — file tải về không mang theo loại giấy phép nên không phân biệt được
+        extras.append(f"Nhạc nền: {music_credit} ({cfg.get('music', {}).get('library', 'YouTube Audio Library')})")
     if pub.get("disclosure"):
         extras.append(pub["disclosure"])
     if hashtags:
@@ -106,7 +111,7 @@ def finalize(raw: dict, idea: dict, scenes: list, cfg: dict) -> dict:
             "hashtags": hashtags, "warnings": warnings}
 
 
-def build_metadata(idea: dict, scenes: list, hooks: list, cfg: dict) -> dict:
+def build_metadata(idea: dict, scenes: list, hooks: list, cfg: dict, music_credit: str = None) -> dict:
     """Gọi agent viết metadata; tiêu đề sai số thì trả về viết lại 1 lần,
     vẫn sai thì dùng câu hook đã kiểm chứng làm tiêu đề (an toàn hơn là liều)."""
     from ..crew import write_metadata   # import muộn: cần crewai + API key
@@ -114,7 +119,7 @@ def build_metadata(idea: dict, scenes: list, hooks: list, cfg: dict) -> dict:
     feedback, meta = None, None
     for attempt in range(2):
         meta = finalize(write_metadata(idea, scenes, hooks, cfg, feedback=feedback),
-                        idea, scenes, cfg)
+                        idea, scenes, cfg, music_credit)
         bad = [w for w in meta["warnings"] if "Tiêu đề" in w or "tiêu đề" in w]
         if not bad:
             return meta

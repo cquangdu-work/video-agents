@@ -53,14 +53,59 @@ class LibraryTest(unittest.TestCase):
     def test_select_registers_licence_and_respects_the_switch(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.object(db, "DB_PATH", Path(d) / "t.db"):
             con = assets_db.init_assets()
-            cfg = {"music": {"enabled": True, "license": "Giấy phép thử"}}
-            t = music.select(con, "dẫn đầu, kỷ lục mới", "script_9", cfg, self.dir)
+            cfg = {"music": {"enabled": True, "license": "Giấy phép thử", "target_lufs": -32}}
+            t = music.select(con, "dẫn đầu, kỷ lục mới", "script_9", cfg, self.dir,
+                             measure=lambda p: -12.0)
             self.assertEqual((t["mood_wanted"], t["name"]), ("bright", "BRIGHT_Sunny.wav"))
+            self.assertEqual((t["gain_db"], t["credit"]), (-20.0, "Sunny"))
             row = con.execute("SELECT license, tags FROM assets WHERE name=?", (t["name"],)).fetchone()
             self.assertEqual(tuple(row), ("Giấy phép thử", "bright"))
             self.assertIsNone(music.select(con, "x", "s", {"music": {"enabled": False}}, self.dir))
             self.assertIsNone(music.select(con, "x", "s", cfg, Path(d) / "trong"))
             con.close()
+
+
+class LoudnessAndCreditTest(unittest.TestCase):
+    def test_each_track_is_brought_to_the_same_loudness(self):
+        # Đo thật 12/11: kho của Du chênh 17 dB (-9,6 đến -26,6 LUFS)
+        self.assertEqual(music.gain_for(-9.6, -32, -20), -22.4)
+        self.assertEqual(music.gain_for(-26.6, -32, -20), -5.4)
+        self.assertEqual(music.gain_for(-35.0, -32, -20), 0.0)          # không bao giờ khuếch đại
+        self.assertEqual(music.gain_for(None, -32, -20), -20)          # đo hỏng -> mức mặc định
+
+    def test_loudness_is_measured_once_and_remeasured_when_the_file_changes(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "calm - A.mp3"
+            f.write_bytes(b"x")
+            calls = []
+            measure = lambda p: calls.append(p.name) or -14.0
+            self.assertEqual(music.track_lufs(f, measure), -14.0)
+            self.assertEqual(music.track_lufs(f, measure), -14.0)
+            self.assertEqual(len(calls), 1)                             # lần 2 lấy từ bộ đệm
+            f.write_bytes(b"xyz")                                       # thay file -> đo lại
+            music.track_lufs(f, measure)
+            self.assertEqual(len(calls), 2)
+            broken = Path(d) / "calm - Hong.mp3"
+            broken.write_bytes(b"?")
+
+            def fail(p):
+                raise ValueError("file hỏng")
+            with self.assertLogs("src.audio.music", level="WARNING"):
+                self.assertIsNone(music.track_lufs(broken, fail))     # đo hỏng -> None, không sập
+
+    def test_credit_line_comes_from_the_file_name(self):
+        self.assertEqual(music.credit("bright-New Land - ALBIS.mp3"), "New Land — ALBIS")
+        self.assertEqual(music.credit("serious-Dance of the U-boat - Aakash Gandhi.mp3"),
+                         "Dance of the U-boat — Aakash Gandhi")
+        self.assertEqual(music.credit("Lofi Beat.mp3"), "Lofi Beat")
+
+    def test_description_credits_the_music(self):
+        from src.publish import metadata
+        cfg = {"publish": {"disclosure": "AI."}, "music": {"library": "YouTube Audio Library"}}
+        idea = {"source_name": "World Bank", "source_url": "https://data.worldbank.org"}
+        m = metadata.finalize({"title": "T", "description": "Mô tả"}, idea, [], cfg, "New Land — ALBIS")
+        self.assertIn("Nhạc nền: New Land — ALBIS (YouTube Audio Library)", m["description"])
+        self.assertNotIn("Nhạc nền", metadata.finalize({"title": "T"}, idea, [], cfg)["description"])
 
 
 def write_wav(path: Path, samples, rate: int):
@@ -87,7 +132,7 @@ class DuckingTest(unittest.TestCase):
             subprocess.run(["ffmpeg", "-y", "-v", "error",
                             "-f", "lavfi", "-i", "color=c=black:s=64x64:r=10:d=6",
                             "-i", str(d / "voice.wav"), "-stream_loop", "-1", "-i", str(d / "music.wav"),
-                            "-filter_complex", music.mix_filter(6.0, gain_db=-6),
+                            "-filter_complex", music.mix_filter(6.0, gain_db=-12),   # như thật: nhạc -27, giọng -15 LUFS
                             "-map", "[aout]", str(out)], check=True)
             with wave.open(str(out), "rb") as w:
                 sr, n = w.getframerate(), w.getnframes()

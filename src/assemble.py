@@ -264,13 +264,12 @@ def main():
     track = music.select(con, narration, f"script_{args.script_id}", load_config())
     cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(silent), "-i", str(full_wav)]
     if track:
-        mcfg = load_config().get("music") or {}
-        log.info("Nhạc nền: %s (nhóm %s, lời đọc nghiêng về %s)", track["name"], track["mood"],
-                 track["mood_wanted"])
+        log.info("Nhạc nền: %s (nhóm %s, lời đọc nghiêng về %s, chỉnh %+.1f dB)", track["name"],
+                 track["mood"], track["mood_wanted"], track["gain_db"])
         # nhạc lặp lại nếu ngắn hơn video; [0:v] đốt phụ đề, [aout] = giọng + nhạc đã trộn
         cmd += ["-stream_loop", "-1", "-i", str(track["path"]),
                 "-filter_complex", f"[0:v]ass={ass.name}[vout];"
-                + music.mix_filter(ffprobe_duration(silent), float(mcfg.get("gain_db", -20))),
+                + music.mix_filter(ffprobe_duration(silent), track["gain_db"]),
                 "-map", "[vout]", "-map", "[aout]"]
     else:
         cmd += ["-vf", f"ass={ass.name}", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]
@@ -281,6 +280,7 @@ def main():
     meta_path = audio_dir / "meta.json"            # ghi bài nhạc đã dùng (agent Phân tích có thể đối chiếu)
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     meta["music"] = track["name"] if track else None
+    meta["music_credit"] = track["credit"] if track else None   # mô tả video ghi công bài nhạc
     meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
     if track:
         assets_db.record_use(con, track["name"], final.name)

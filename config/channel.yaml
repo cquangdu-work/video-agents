@@ -165,9 +165,12 @@ daily:
 # "serious - ...". Thư mục trống thì video không có nhạc.
 music:
   enabled: true
-  gain_db: -20             # nhạc nhỏ hơn mức gốc chừng này, rồi còn tự hạ thêm khi có giọng
+  target_lufs: -27         # mỗi bài về độ to này (giọng ≈ -15); có giọng thì tự hạ thêm ~8 dB.
+                           # Đo 12/11: nhạc dưới giọng ~25 dB lúc nói, ~17 dB ở khoảng nghỉ
+  gain_db: -20             # dự phòng khi không đo được độ to của một bài
   max_uses_per_week: 3     # quá thì cảnh báo: kho nhạc nhóm đó cần thêm bài
-  license: "YouTube Audio Library — không yêu cầu ghi công"
+  library: "YouTube Audio Library"   # ghi trong dòng "Nhạc nền: ..." của mô tả video
+  license: "YouTube Audio Library — dùng trong video YouTube; mô tả luôn ghi công tên bài + tác giả"
 
 # ---------- Nhịp video ----------
 pacing:
@@ -218,14 +221,15 @@ publish:
     # api:    bot tự upload qua YouTube Data API. LƯU Ý: tài liệu chính thức của
     #         Google ghi video upload từ dự án API CHƯA qua "audit" sẽ bị khoá ở
     #         chế độ riêng tư -> chỉ bật "api" sau khi đã upload thử 1 video kiểm tra.
-    mode: manual
-    privacy: private            # api: private | unlisted | public
+    mode: api                   # Du chốt 12/11/2026: bot tự upload sau khi Du bấm ✅
+                                # (chưa cấp quyền YouTube thì tự lùi về gửi gói để Du tự đăng)
+    privacy: public             # api: private | unlisted | public
     category_id: "27"           # 27 = Giáo dục
     made_for_kids: false
     contains_synthetic_media: true   # khai báo nội dung AI (giọng đọc AI) theo CLAUDE.md
     notify_subscribers: true
     # Hẹn giờ công khai (chỉ áp dụng mode api + privacy private). null = không hẹn.
-    publish_time_local: null    # ví dụ "19:00"
+    publish_time_local: "19:00" # giờ tối Việt Nam; null = công khai ngay khi upload
     utc_offset_hours: 7         # múi giờ của người xem chính (Việt Nam = +7)
   hashtags_fixed: ["#thegioiquaconso", "#Shorts"]   # luôn có ở mọi video
   max_hashtags: 5               # YouTube bỏ qua toàn bộ hashtag nếu nhét quá nhiều

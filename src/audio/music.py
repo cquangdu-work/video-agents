@@ -9,7 +9,8 @@ Luồng (gọi từ src/assemble.py):
 2. register()       ghi từng bài vào kho chất liệu kèm giấy phép (agent Kiểm định soát)
 3. pick_mood()      đoán tâm trạng từ lời đọc (luật từ khoá — đoán sai thì chỉ hơi lệch nhạc)
 4. choose_track()   chọn bài cùng nhóm ít dùng nhất 7 ngày qua (luật chống lặp của kho chất liệu)
-5. mix_filter()     đồ thị lọc ffmpeg: lặp/cắt nhạc cho vừa video, lên-xuống nhạc ở hai đầu,
+5. gain_for()       đưa từng bài về cùng độ to (target_lufs) — các bài tải về chênh nhau tới 17 dB
+6. mix_filter()     đồ thị lọc ffmpeg: lặp/cắt nhạc cho vừa video, lên-xuống nhạc ở hai đầu,
                     nén theo giọng (sidechaincompress: có giọng thì nhạc tự nhỏ), trộn, chuẩn -16 LUFS
 """
 import hashlib
@@ -85,9 +86,64 @@ def choose_track(tracks: list, mood: str, uses: dict, salt: str = ""):
     return min(pool, key=lambda t: (uses.get(t["name"], 0), tie(t)))
 
 
-def select(con, narration: str, salt: str, cfg: dict, folder: Path = MUSIC_DIR):
+LOUDNESS_CACHE = ".loudness.json"       # trong thư mục nhạc; đo một lần mỗi bài
+
+
+def measure_lufs(path: Path) -> float:
+    """Độ to tích hợp (LUFS) của cả bài, đo bằng bộ lọc ebur128 của ffmpeg."""
+    import subprocess
+    out = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", str(path), "-af", "ebur128",
+                          "-f", "null", "-"], capture_output=True, text=True, errors="replace").stderr
+    found = re.findall(r"^\s+I:\s+(-?[\d.]+) LUFS", out, re.M)
+    if not found:
+        raise ValueError(f"không đo được độ to của {path.name}")
+    return float(found[-1])                   # dòng cuối = phần tổng kết của cả bài
+
+
+def track_lufs(path: Path, measure=measure_lufs):
+    """Độ to của một bài, có lưu đệm theo tên + kích thước + giờ sửa file (thay file là đo lại).
+    Đo không được thì None."""
+    import json
+    cache_path = path.parent / LOUDNESS_CACHE
+    try:
+        cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cache = {}
+    st = path.stat()
+    key = f"{path.name}|{st.st_size}|{int(st.st_mtime)}"
+    if key not in cache:
+        try:
+            cache[key] = measure(path)
+        except Exception as exc:              # file hỏng không được làm hỏng cả video
+            log.warning("Không đo được độ to của '%s': %s", path.name, exc)
+            return None
+        try:
+            cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=1), encoding="utf-8")
+        except OSError:
+            pass
+    return cache[key]
+
+
+def gain_for(lufs, target_lufs: float, fallback_db: float) -> float:
+    """Mức tăng/giảm (dB) để bài về đúng độ to mục tiêu. Đo 12/11: 12 bài của kho chênh nhau
+    17 dB (-9,6 đến -26,6 LUFS) — hạ đều -20 dB thì bài nhỏ gần như không nghe thấy."""
+    if lufs is None:
+        return fallback_db
+    return round(max(-40.0, min(0.0, target_lufs - lufs)), 1)
+
+
+def credit(name: str) -> str:
+    """'bright-New Land - ALBIS.mp3' -> 'New Land — ALBIS' (ghi công trong mô tả video)."""
+    stem = Path(name).stem
+    m = re.match(r"\s*([a-zA-Z]+)\s*[-_ ]\s*(.+)$", stem)
+    if m and m.group(1).lower() in MOODS:
+        stem = m.group(2)
+    return " — ".join(p.strip() for p in stem.split(" - ") if p.strip())
+
+
+def select(con, narration: str, salt: str, cfg: dict, folder: Path = MUSIC_DIR, measure=measure_lufs):
     """Chọn bài cho một video, hoặc None (kho trống / tắt nhạc trong config).
-    -> {"name", "path", "mood", "mood_wanted"}."""
+    -> {"name", "path", "mood", "mood_wanted", "gain_db", "credit"}."""
     mcfg = (cfg or {}).get("music") or {}
     if not mcfg.get("enabled", True):
         return None
@@ -103,7 +159,9 @@ def select(con, narration: str, salt: str, cfg: dict, folder: Path = MUSIC_DIR):
     if uses.get(track["name"], 0) >= limit:
         log.warning("Nhạc '%s' đã dùng %d lần trong 7 ngày (trần %d) — kho nhạc nhóm '%s' cần thêm bài",
                     track["name"], uses[track["name"]], limit, track["mood"])
-    return dict(track, mood_wanted=wanted)
+    gain = gain_for(track_lufs(track["path"], measure), float(mcfg.get("target_lufs", -27)),
+                    float(mcfg.get("gain_db", -20)))
+    return dict(track, mood_wanted=wanted, gain_db=gain, credit=credit(track["name"]))
 
 
 def mix_filter(duration: float, gain_db: float = -20.0, fade_in: float = 1.0,
@@ -119,8 +177,10 @@ def mix_filter(duration: float, gain_db: float = -20.0, fade_in: float = 1.0,
         f"[2:a]atrim=0:{d},asetpts=N/SR/TB,{same},volume={gain_db}dB,"
         f"afade=t=in:st=0:d={fade_in},afade=t=out:st={out_start:.3f}:d={fade_out}[m];"
         f"[1:a]{same},asplit=2[v][key];"
-        # có giọng -> nhạc bị nén mạnh (tự nhỏ đi); hết giọng -> nhạc nhích lên trong 0,4 giây
-        f"[m][key]sidechaincompress=threshold=0.02:ratio=8:attack=20:release=400[duck];"
+        # có giọng -> nhạc tự nhỏ đi ~8 dB; hết giọng -> nhạc lên lại trong 0,25 giây.
+        # Đo 12/11 với giọng thật (video #7): bản đầu (ngưỡng 0,02, tỷ lệ 8, nhả 0,4 s) hạ nhạc
+        # tới 40 dB dưới giọng — mất hẳn nhạc, còn khoảng nghỉ giữa câu ngắn hơn thời gian nhả.
+        f"[m][key]sidechaincompress=threshold=0.05:ratio=3:attack=20:release=250[duck];"
         f"[v][duck]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
         f"loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[aout]"   # loudnorm tự nâng lên 192 kHz
     )
