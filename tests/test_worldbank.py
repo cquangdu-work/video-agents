@@ -130,5 +130,73 @@ class FetchTest(unittest.TestCase):
         self.assertEqual(main.source_text_for(news, fetch), "toàn văn bài báo")
 
 
+ASIA = [{"iso3": "VNM", "iso2": "VN", "name": "Việt Nam"}, {"iso3": "KOR", "iso2": "KR", "name": "Hàn Quốc"},
+        {"iso3": "JPN", "iso2": "JP", "name": "Nhật Bản"}, {"iso3": "IND", "iso2": "IN", "name": "Ấn Độ"}]
+RACE = {
+    "VNM": [(1990, 98.8), (1995, 288.0), (2000, 404.0), (2025, 5066.0)],
+    "KOR": [(1990, 6813.0), (1995, 13002.0), (2000, 12710.0), (2025, 36227.0)],
+    "JPN": [(1990, 26345.0), (1993, 35000.0), (1995, 44000.0), (2000, 39000.0), (2025, 35951.0)],
+    "IND": [(1990, 371.0), (1995, 380.0), (2000, 443.0), (2025, 2702.0)],
+}
+
+
+class RaceTest(unittest.TestCase):
+    def test_race_years_are_common_years_every_5_plus_first_and_last(self):
+        self.assertEqual(wb.race_years(RACE), [1990, 1995, 2000, 2025])
+        self.assertEqual(wb.race_years({"A": [(1991, 1), (2024, 2)], "B": [(1991, 3), (2024, 4)]}), [1991, 2024])
+        self.assertEqual(wb.race_years({}), [])
+
+    def test_race_idea_tells_who_passed_whom(self):
+        item = wb.build_race_item({"code": "NY.GDP.PCAP.CD", "name": "GDP bình quân đầu người", "unit": "USD"},
+                                  ASIA, RACE, ["VNM", "KOR"])
+        self.assertEqual(item["title"], "Cuộc đua GDP bình quân đầu người: 4 nền kinh tế châu Á từ 1990 đến 2025")
+        other = wb.build_race_item({"code": "X", "name": "Tỷ lệ người dùng Internet", "unit": "%"}, ASIA, RACE, [])
+        self.assertTrue(other["title"].startswith("Cuộc đua tỷ lệ người dùng Internet:"))
+        s = item["summary"]
+        self.assertIn("Xếp hạng năm 1990: 1. Nhật Bản 26.345; 2. Hàn Quốc 6.813; 3. Ấn Độ 371; 4. Việt Nam 98,8.", s)
+        self.assertIn("Việt Nam: hạng 4 năm 1990, hạng 3 năm 2025 — vượt Ấn Độ.", s)
+        self.assertIn("Hàn Quốc: hạng 2 năm 1990, hạng 1 năm 2025 — vượt Nhật Bản.", s)
+        self.assertIn("locations=VN-KR-JP-IN", item["url"])
+        rows = wb.parse_series(s)                                # bảng đọc ngược lại được cho cuộc đua
+        self.assertEqual([r["label"] for r in rows], ["Hàn Quốc", "Nhật Bản", "Việt Nam", "Ấn Độ"])
+        self.assertEqual(rows[0]["xs"], [1990, 1995, 2000, 2025])
+
+    def test_lost_places_are_reported_too(self):
+        flipped = {c: [(y, -v) for y, v in s] for c, s in RACE.items()}
+        flipped = {c: [(y, v + 50000) for y, v in s] for c, s in flipped.items()}
+        s = wb.build_race_item({"code": "X", "name": "Chỉ số", "unit": ""}, ASIA, flipped, ["VNM"])["summary"]
+        self.assertIn("Việt Nam: hạng 1 năm 1990, hạng 2 năm 2025 — bị vượt bởi Ấn Độ.", s)
+
+    def test_too_few_countries_or_years_gives_no_race(self):
+        ind = {"code": "X", "name": "Chỉ số", "unit": ""}
+        self.assertIsNone(wb.build_race_item(ind, ASIA, {k: RACE[k] for k in ("VNM", "KOR")}, []))
+        short = {c: s[:2] for c, s in RACE.items()}
+        self.assertIsNone(wb.build_race_item(ind, ASIA, short, []))
+
+    def test_scale_and_start_year_per_indicator(self):
+        r = mock.Mock(); r.json.return_value = api_payload({"VNM": [(2000, 2.0e9)], "KOR": [(2000, 5.0e9)]})
+        with mock.patch.object(wb.requests, "get", return_value=r) as get:
+            got = wb.fetch_indicator({"code": "NY.GDP.MKTP.CD", "scale": 1e9, "start_year": 2000},
+                                     ["VNM", "KOR"], 1960)
+        self.assertEqual(got, {"VNM": [(2000, 2.0)], "KOR": [(2000, 5.0)]})
+        self.assertTrue(get.call_args.kwargs["params"]["date"].startswith("2000:"))
+
+    def test_slow_first_answer_is_retried_after_a_pause(self):
+        # Đo thật 12/11: URL mới treo > 60 giây, gọi lại sau ~20 giây thì trả ngay
+        r = mock.Mock(); r.json.return_value = api_payload(SERIES)
+        answers = [wb.requests.Timeout("treo"), r]
+
+        def get(*a, **kw):
+            x = answers.pop(0)
+            if isinstance(x, Exception):
+                raise x
+            return x
+        with mock.patch.object(wb.requests, "get", get), mock.patch.object(wb.time, "sleep") as nap:
+            self.assertEqual(wb.fetch_series("X", ["VNM", "KOR"], 1960), SERIES)
+        nap.assert_called_once_with(wb.RETRY_PAUSE)
+        with mock.patch.object(wb.requests, "get", side_effect=wb.requests.Timeout("treo mãi")),                 mock.patch.object(wb.time, "sleep"), self.assertRaises(wb.requests.Timeout):
+            wb.fetch_series("X", ["VNM"], 1960)
+
+
 if __name__ == "__main__":
     unittest.main()

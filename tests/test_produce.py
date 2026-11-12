@@ -189,6 +189,30 @@ class DesignScenesTest(unittest.TestCase):
                 self.scene("statement", (2,), text="Con đường còn dài")]
         self.assertEqual(self.design(spec), spec)
 
+    def test_race_scene_gets_every_country_from_the_table(self):
+        self.IDEA = dict(self.IDEA, summary=(
+            "Hàn Quốc theo năm: 1990: 6.813; 1995: 13.002; 2025: 36.227.\n"
+            "Nhật Bản theo năm: 1990: 26.345; 1995: 44.000; 2025: 35.951.\n"
+            "Việt Nam theo năm: 1990: 98,8; 1993: 150; 1995: 288; 2025: 5.066."))
+        long = " ".join(s["voice"] for s in self.SCENES[:2])     # cuộc đua gánh 2 câu: được phép
+        spec = [{"template": "bar_race", "seconds": 9, "voice": long,
+                 "params": {"title": "Cuộc đua GDP", "unit": "USD", "source": "World Bank"}},
+                self.scene("statement", (2,), text="Con đường còn dài")]
+        got = self.design(spec)
+        self.assertEqual(len(self.prompts), 1)
+        self.assertIn('ĐÚNG MỘT cảnh "bar_race"', self.prompts[0])
+        p = got[0]["params"]
+        self.assertEqual(p["years"], [1990, 1995, 2025])             # năm 1993 chỉ một nước có
+        self.assertEqual(p["items"][2], {"label": "Việt Nam", "values": [98.8, 288.0, 5066.0]})
+        spec2 = produce.validate_spec(got, {"pacing": {"scene_seconds_min": 2, "scene_seconds_max": 4}})
+        self.assertEqual(spec2[1]["template"], "bar_race")
+        self.assertEqual(spec2[1]["params"]["decimals"], 1)          # 98,8 không bị làm tròn
+
+    def test_race_needs_three_countries_with_full_data(self):
+        bad = {"template": "bar_race", "params": {"title": "t", "years": [1990, 2000], "items": [
+            {"label": "A", "values": [1, 2]}, {"label": "B", "values": [3, 4]}, {"label": "C", "values": [5]}]}}
+        self.assertEqual(len(produce.validate_spec([bad], CFG)), 1)   # chỉ còn intro
+
     def test_one_picture_carrying_too_much_narration_is_sent_back(self):
         from src import crew
         long = "Vào năm 1990 điện tiêu thụ của Việt Nam chỉ là 98,9 kWh " * 3          # 39 từ

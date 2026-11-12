@@ -61,20 +61,46 @@ sources:
       - {code: SE.XPD.TOTL.GD.ZS,    name: "Chi tiêu công cho giáo dục so với GDP",      unit: "% GDP"}
       - {code: SH.XPD.CHEX.GD.ZS,    name: "Chi tiêu y tế so với GDP",                   unit: "% GDP"}
       - {code: GB.XPD.RSDV.GD.ZS,    name: "Chi cho nghiên cứu và phát triển so với GDP", unit: "% GDP"}
-      - {code: SP.POP.TOTL,          name: "Dân số",                                     unit: "người"}
+      - {code: SP.POP.TOTL,          name: "Dân số",                                     unit: "triệu người", scale: 1000000}
       - {code: NY.GDP.MKTP.KD.ZG,    name: "Tăng trưởng GDP hằng năm",                   unit: "%"}
       - {code: SL.TLF.CACT.FE.ZS,    name: "Tỷ lệ phụ nữ tham gia lực lượng lao động",   unit: "%"}
       - {code: EG.USE.ELEC.KH.PC,    name: "Điện tiêu thụ bình quân đầu người",          unit: "kWh"}
       - {code: SP.DYN.IMRT.IN,       name: "Tỷ suất tử vong trẻ dưới 1 tuổi",            unit: "trên 1.000 trẻ sinh ra"}
       - {code: FP.CPI.TOTL.ZG,       name: "Lạm phát giá tiêu dùng",                     unit: "%"}
       - {code: BX.KLT.DINV.WD.GD.ZS, name: "Vốn FDI vào so với GDP",                     unit: "% GDP"}
-      - {code: NY.GDP.MKTP.CD,       name: "Quy mô GDP",                                 unit: "USD"}
+      - {code: NY.GDP.MKTP.CD,       name: "Quy mô GDP",                                 unit: "tỷ USD", scale: 1000000000}
       - {code: SP.DYN.CBRT.IN,       name: "Tỷ suất sinh thô",                           unit: "trên 1.000 dân"}
       - {code: AG.LND.FRST.ZS,       name: "Tỷ lệ che phủ rừng",                         unit: "% diện tích"}
       - {code: IT.CEL.SETS.P2,       name: "Thuê bao di động trên 100 dân",              unit: "thuê bao"}
       - {code: SE.TER.ENRR,          name: "Tỷ lệ nhập học đại học",                     unit: "%"}
       - {code: NV.IND.MANF.ZS,       name: "Công nghiệp chế biến chế tạo so với GDP",    unit: "% GDP"}
       - {code: SL.AGR.EMPL.ZS,       name: "Tỷ lệ lao động làm nông nghiệp",             unit: "%"}
+    # "Cuộc đua số liệu": nhiều nền kinh tế châu Á xếp hạng qua các năm (thanh ngang đổi chỗ).
+    # Tối đa 10 nước để vừa khung dọc.
+    races:
+      per_day: 1
+      start_year: 1990
+      year_step: 5          # mốc năm của cuộc đua (kèm năm đầu và năm cuối)
+      focus: [VNM, KOR]     # nước được kể kỹ trong tóm tắt (hạng, vượt ai)
+      countries:
+        - {iso3: VNM, iso2: VN, name: "Việt Nam"}
+        - {iso3: KOR, iso2: KR, name: "Hàn Quốc"}
+        - {iso3: JPN, iso2: JP, name: "Nhật Bản"}
+        - {iso3: CHN, iso2: CN, name: "Trung Quốc"}
+        - {iso3: THA, iso2: TH, name: "Thái Lan"}
+        - {iso3: MYS, iso2: MY, name: "Malaysia"}
+        - {iso3: IDN, iso2: ID, name: "Indonesia"}
+        - {iso3: PHL, iso2: PH, name: "Philippines"}
+        - {iso3: IND, iso2: IN, name: "Ấn Độ"}
+        - {iso3: SGP, iso2: SG, name: "Singapore"}
+      indicators:
+        - {code: NY.GDP.PCAP.CD,    name: "GDP bình quân đầu người",          unit: "USD"}
+        - {code: SP.DYN.LE00.IN,    name: "Tuổi thọ trung bình",              unit: "tuổi"}
+        - {code: IT.NET.USER.ZS,    name: "Tỷ lệ người dùng Internet",        unit: "%", start_year: 2000}
+        - {code: EG.USE.ELEC.KH.PC, name: "Điện tiêu thụ bình quân đầu người", unit: "kWh"}
+        - {code: NY.GDP.MKTP.CD,    name: "Quy mô GDP",                       unit: "tỷ USD", scale: 1000000000}
+        - {code: SP.URB.TOTL.IN.ZS, name: "Tỷ lệ dân số sống ở thành thị",    unit: "%"}
+        - {code: NE.EXP.GNFS.ZS,    name: "Xuất khẩu so với GDP",             unit: "% GDP"}
 
   # Reddit chặn đường JSON công khai (403) với nhiều IP, nhất là IP đám mây của VM;
   # src/sources/reddit.py tự chuyển sang đường RSS (vẫn vào được, không cần key).

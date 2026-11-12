@@ -6,8 +6,8 @@ mỗi template tự vẽ trong (seconds) giây — nằm trong nhịp 2-4s/cản
 import re
 
 from manim import (DOWN, LEFT, ORIGIN, PI, RIGHT, TAU, UP, Arc, Circle, Create, FadeIn,
-                   GrowFromEdge, Line, Rectangle, Text, VGroup, ValueTracker, always_redraw,
-                   Axes, Dot, linear)
+                   GrowFromEdge, Line, Rectangle, Text, Transform, VGroup, ValueTracker,
+                   always_redraw, Axes, Dot, linear)
 
 from .base import BrandScene, fit_width, fmt_num, pick_font
 
@@ -135,6 +135,14 @@ class Versus(BrandScene):
         self.wait(self.seconds * 0.35)
 
 
+COUNTRY_COLORS = {"việt nam": "vietnam", "vn": "vietnam", "hàn quốc": "korea", "kr": "korea"}
+
+
+def country_color_key(label) -> str:
+    """Tên màu trong bộ nhận diện cho một nhãn nước ("Việt Nam" -> "vietnam"), hoặc None."""
+    return COUNTRY_COLORS.get(str(label or "").strip().lower())
+
+
 def chart_series(p: dict, colors: dict) -> list:
     """Các đường của một line_chart -> [(nhãn, xs, ys, màu)].
 
@@ -143,10 +151,8 @@ def chart_series(p: dict, colors: dict) -> list:
     (số liệu hai nước hay lệch năm cuối: Việt Nam tới 2024, Hàn Quốc tới 2025).
     Màu đặt theo tên trong bộ nhận diện ("vietnam" đỏ, "korea" xanh); không ghi màu thì
     nhãn "Việt Nam"/"Hàn Quốc" tự nhận màu."""
-    auto = {"việt nam": "vietnam", "vn": "vietnam", "hàn quốc": "korea", "kr": "korea"}
     if p.get("series"):
-        keys = [s.get("color") or auto.get(str(s.get("label", "")).strip().lower())
-                for s in p["series"]]
+        keys = [s.get("color") or country_color_key(s.get("label")) for s in p["series"]]
         spare = [k for k in ("accent", "good", "korea", "bad", "vietnam") if k not in keys]
         out = []
         for s, key in zip(p["series"], keys):
@@ -271,6 +277,87 @@ class Statement(BrandScene):
         self.wait(max(self.seconds - intro, 0.1))
 
 
+class BarRace(BrandScene):
+    """Cuộc đua số liệu: thanh ngang của nhiều nước đổi độ dài và ĐỔI CHỖ theo thứ hạng
+    qua từng mốc năm — params:
+    {title, years: [...], items: [{label, values: [...], color?}], unit, source, decimals}
+    mỗi "values" dài bằng "years". Việt Nam đỏ, Hàn Quốc xanh, nước khác màu trung tính.
+
+    Chạy hết các mốc trong 75% thời lượng cảnh rồi DỪNG ở năm cuối: khung Kiểm định lấy
+    mẫu ở 85% cảnh sẽ thấy đúng số liệu năm cuối, không phải số đang chuyển."""
+
+    LABEL_X, BAR_X, BAR_W, TOP_Y = -1.6, -1.45, 4.2, 3.7
+
+    def construct(self):
+        p, c = self.params, self.b["colors"]
+        self.add_signature(p.get("source"))
+        self.add(self.title_text(p["title"]))
+        years, items = list(p["years"]), list(p["items"])
+        n, dec = len(items), p.get("decimals", 0)
+        row_h = min(0.72, 7.2 / max(n, 1))
+        bar_h = row_h * 0.64
+        keys = [it.get("color") or country_color_key(it.get("label")) for it in items]
+        fill = [c.get(k, c["accent"]) if k else c["muted"] for k in keys]
+        ink = [c.get(k, c["accent"]) if k else c["text"] for k in keys]
+
+        def layout(k: int) -> list:
+            """Mốc năm thứ k -> [(y, độ dài thanh, giá trị)] cho từng nước, theo thứ hạng."""
+            vals = [float(it["values"][k]) for it in items]
+            vmax = max(vals) or 1.0
+            rank = {i: r for r, i in enumerate(sorted(range(n), key=lambda i: -vals[i]))}
+            return [(self.TOP_Y - rank[i] * row_h, max(vals[i] / vmax * self.BAR_W, 0.04), vals[i])
+                    for i in range(n)]
+
+        def bar(i, y, w):
+            return Rectangle(width=w, height=bar_h, fill_color=fill[i], stroke_width=0,
+                             fill_opacity=1 if keys[i] else 0.45).move_to([self.BAR_X + w / 2, y, 0])
+
+        def value(i, y, w, v):
+            t = Text(fmt_num(v, label_decimals(v, dec)), font=pick_font("number"), font_size=26,
+                     color=ink[i], weight="BOLD")
+            return t.move_to([self.BAR_X + w + 0.12, y, 0], aligned_edge=LEFT)
+
+        def year(k):
+            return Text(str(years[k]), font=pick_font("number"), font_size=120, color=c["muted"],
+                        weight="BOLD").move_to([2.2, self.TOP_Y - n * row_h - 0.9, 0])
+
+        first = layout(0)
+        bars = [bar(i, y, w) for i, (y, w, _) in enumerate(first)]
+        vals = [value(i, y, w, v) for i, (y, w, v) in enumerate(first)]
+        labels = [fit_width(Text(str(it["label"]), font=pick_font(), font_size=28, color=ink[i],
+                                 weight="BOLD" if keys[i] else "NORMAL"), 2.6)
+                  .move_to([self.LABEL_X, first[i][0], 0], aligned_edge=RIGHT)
+                  for i, it in enumerate(items)]
+        stamp = year(0)
+        extra = []
+        if p.get("unit"):
+            extra.append(Text(p["unit"], font=pick_font(), font_size=26, color=c["muted"])
+                         .move_to([-2.0, stamp.get_center()[1], 0]))
+        self.play(FadeIn(VGroup(*bars, *vals, *labels, stamp, *extra)), run_time=0.4)
+        race_time = max(self.seconds * 0.75 - 0.4, 0.5)
+        now = first
+        for k in range(1, len(years)):
+            target = layout(k)
+            # Năm và con số đổi NGAY đầu chặng (biến hình từng nét chữ thì nhòe "20↯5" và
+            # render chậm gấp mấy lần); sau đó thanh, nhãn, số cùng trượt tới chỗ mới.
+            new_stamp = year(k)
+            self.remove(stamp)
+            self.add(new_stamp)
+            stamp = new_stamp
+            anims = []
+            for i, ((y0, w0, _), (y, w, v)) in enumerate(zip(now, target)):
+                fresh = value(i, y0, w0, v)
+                self.remove(vals[i])
+                self.add(fresh)
+                vals[i] = fresh
+                anims += [Transform(bars[i], bar(i, y, w)),
+                          fresh.animate.move_to([self.BAR_X + w + 0.12, y, 0], aligned_edge=LEFT),
+                          labels[i].animate.move_to([self.LABEL_X, y, 0], aligned_edge=RIGHT)]
+            self.play(*anims, run_time=race_time / (len(years) - 1))
+            now = target
+        self.wait(max(self.seconds - 0.4 - race_time, 0.1))
+
+
 class PercentRing(BrandScene):
     """Vòng tròn tô dần tới X% — params: {title, value (0-100), label?, source, decimals(=0)}
     Dùng cho MỘT tỷ lệ phần trăm; mắt thấy ngay "phần đó to cỡ nào" thay vì chỉ đọc số."""
@@ -310,4 +397,5 @@ TEMPLATES = {
     "versus": Versus,
     "line_chart": LineChart,
     "percent": PercentRing,
+    "bar_race": BarRace,
 }

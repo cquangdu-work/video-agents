@@ -3,6 +3,7 @@
 Mọi template kế thừa BrandScene nên tự động cùng một bộ nhận diện;
 đổi màu/font cả kênh = sửa config/brand.yaml.
 """
+from functools import lru_cache
 from pathlib import Path
 
 import yaml
@@ -19,8 +20,12 @@ def brand() -> dict:
     return _brand_cache
 
 
+@lru_cache(maxsize=None)
 def pick_font(kind: str = "primary") -> str:
-    """Chọn font đầu tiên trong danh sách ưu tiên mà máy có (Windows/Linux khác nhau)."""
+    """Chọn font đầu tiên trong danh sách ưu tiên mà máy có (Windows/Linux khác nhau).
+
+    Nhớ kết quả: hàm này được gọi ở MỖI KHUNG HÌNH trong các cảnh đếm số (always_redraw),
+    mà liệt kê font của cả máy rất chậm — đo 12/11: cảnh số lớn 10 giây render mất 327 giây."""
     import manimpango
     installed = set(manimpango.list_fonts())
     for f in brand()["fonts"][kind]:

@@ -248,10 +248,13 @@ MAX_SPOKEN_YEARS = 5     # lời đọc nhắc quá nhiều mốc năm = đang �
 
 DATA_STORY = """
 ĐÂY LÀ Ý TƯỞNG TỪ BẢNG SỐ LIỆU (không phải bài báo) — phần này ƯU TIÊN hơn dàn bài chung:
-- Video sẽ có biểu đồ đường vẽ TOÀN BỘ chuỗi năm của hai nước. Vì vậy lời đọc KHÔNG đọc lần
-  lượt từng mốc năm ("năm 1995 là..., năm 2000 là...") — người xem sẽ lướt đi ngay.
+- Video sẽ có biểu đồ (đường, hoặc cuộc đua xếp hạng nhiều nước) vẽ TOÀN BỘ chuỗi năm. Vì vậy
+  lời đọc KHÔNG đọc lần lượt từng mốc năm ("năm 1995 là..., năm 2000 là...") — người xem sẽ
+  lướt đi ngay.
 - Kể thành CÂU CHUYỆN: hook là điều bất ngờ nhất trong bảng (ví dụ "Việt Nam hôm nay mới bằng
-  Hàn Quốc năm X", "tăng gấp N lần"); rồi điểm xuất phát, hiện tại, khoảng cách hai nước.
+  Hàn Quốc năm X", "tăng gấp N lần", "từ bét bảng lên hạng 7"); rồi điểm xuất phát, hiện tại,
+  khoảng cách. Bảng có XẾP HẠNG nhiều nước thì kể ai vượt ai, Việt Nam và Hàn Quốc đứng thứ
+  mấy lúc đầu và bây giờ (các dòng "hạng ... vượt ..." đã tính sẵn trong bảng).
 - Chỉ dùng 5-8 con số đắt nhất, tối đa 4 mốc năm khác nhau trong toàn bài.
 - Giữa các con số là phần giải thích Ý NGHĨA (chênh lệch đó nói gì về đời sống, kinh tế) —
   phần giải thích KHÔNG được thêm con số nào ngoài bảng, không khuyên người xem làm gì.
@@ -389,7 +392,13 @@ TEMPLATE_GUIDE = """Các template có sẵn và tham số (CHỈ dùng đúng c�
    "decimals": int} — vòng tròn tô dần tới X%. Dùng khi lời đọc xoay quanh MỘT tỷ lệ
    phần trăm nằm trong khoảng 0-100% ("hơn 60% số ca", "chiếm 38,4%"). Phần trăm
    TĂNG/GIẢM vượt 100% thì dùng "big_number" với suffix "%".
+7. "bar_race": {"title": str, "unit": str, "source": str} — CUỘC ĐUA SỐ LIỆU: thanh ngang
+   của nhiều nước đổi chỗ theo thứ hạng qua từng mốc năm. CHỈ dùng khi DỮ LIỆU NGUỒN có
+   bảng theo năm của từ 3 nước trở lên. KHÔNG chép số — máy tự điền "years"/"items" từ
+   bảng. Cảnh này chạy lâu: cho nó gánh 2-3 câu lời đọc kể diễn biến cuộc đua.
 """
+
+ANIMATED_LONG = {"bar_race"}     # cảnh chuyển động suốt thời lượng: được gánh nhiều lời hơn
 
 
 def static_scenes(spec: list, max_words: int) -> list:
@@ -405,27 +414,41 @@ def static_scenes(spec: list, max_words: int) -> list:
         while j + 1 < len(spec) and " ".join(str(spec[j + 1].get("voice") or "").split()) == v:
             j += 1
         words, scenes = len(v.split()), j - k + 1
-        if v and words / scenes > max_words:
+        # Cuộc đua chuyển động liên tục nên được gánh gấp 3 (trong 2-3 câu kể diễn biến)
+        limit = max_words * (3 if spec[k].get("template") in ANIMATED_LONG else 1)
+        if v and words / scenes > limit:
             out.append(f"cảnh {k + 1} ({spec[k].get('template')}) mang {words} từ cho {scenes} hình")
         k = j + 1
     return out
 
 
 def fill_series_from_data(spec: list, data_series: list) -> int:
-    """Điền số liệu THẬT vào mọi cảnh line_chart từ bảng gốc của ý tưởng (nếu có).
+    """Điền số liệu THẬT vào mọi cảnh line_chart / bar_race từ bảng gốc của ý tưởng (nếu có).
 
-    Model chỉ quyết định vẽ biểu đồ đường nào và cho nước nào (qua nhãn trong "series");
+    Model chỉ quyết định vẽ biểu đồ nào và cho nước nào (qua nhãn trong "series");
     số liệu do code chép từ bảng, nên không thể chép sai hay bịa. Nhãn không khớp nước nào
-    (hoặc biểu đồ một đường không nhãn) thì vẽ đủ các nước có trong bảng.
+    (hoặc biểu đồ một đường không nhãn) thì vẽ đủ các nước có trong bảng. Cuộc đua luôn
+    gồm mọi nước, trên những mốc năm nước nào cũng có số.
     Trả về số cảnh đã điền.
     """
     if not data_series:
         return 0
     filled = 0
     for sc in spec:
-        if sc.get("template") != "line_chart" or not isinstance(sc.get("params"), dict):
+        if not isinstance(sc.get("params"), dict):
             continue
         p = sc["params"]
+        if sc.get("template") == "bar_race":
+            # Cuộc đua: mọi nước trong bảng, trên những mốc năm ai cũng có số
+            years = sorted(set.intersection(*[set(s["xs"]) for s in data_series]))
+            p["years"] = years
+            p["items"] = [{"label": s["label"],
+                           "values": [dict(zip(s["xs"], s["ys"]))[y] for y in years]}
+                          for s in data_series]
+            filled += 1
+            continue
+        if sc.get("template") != "line_chart":
+            continue
         wanted = {str(s.get("label", "")).strip().lower()
                   for s in p.get("series") or [] if isinstance(s, dict)}
         chosen = [s for s in data_series if s["label"].lower() in wanted] or data_series
@@ -461,7 +484,13 @@ def design_scenes(idea: dict, scenes: list, cfg: dict) -> list:
     data_series = parse_series(source_data)
     data_block = (f"\nDỮ LIỆU NGUỒN (số thật, ĐƯỢC dùng cho biểu đồ kể cả khi lời đọc không nhắc"
                   f" hết):\n\"\"\"\n{source_data}\n\"\"\"\n" if source_data else "")
-    if data_series:
+    if len(data_series) >= 3:
+        data_block += (
+            f"\nBẢNG CÓ SỐ THEO NĂM CỦA {len(data_series)} NƯỚC: phải có ĐÚNG MỘT cảnh \"bar_race\""
+            " (cuộc đua) gánh 2-3 câu kể diễn biến xếp hạng — chỉ ghi title, unit, source, máy tự"
+            " điền số. Có thể thêm \"line_chart\" với \"series\": [{\"label\": \"Việt Nam\"},"
+            " {\"label\": \"Hàn Quốc\"}] (máy tự điền số) để soi riêng hai nước.\n")
+    elif data_series:
         names = ", ".join(f'{{"label": "{s["label"]}"}}' for s in data_series)
         data_block += (
             "\nBẢNG CÓ SỐ THEO NĂM: nên có 1-2 cảnh \"line_chart\" so các nước qua các năm. Với cảnh"

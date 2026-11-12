@@ -32,6 +32,7 @@ REQUIRED = {
     "bar_chart": ["title", "items"],
     "line_chart": ["title", "xs"],          # + "ys" (một đường) hoặc "series" (nhiều đường)
     "percent": ["title", "value"],
+    "bar_race": ["title", "years", "items"],
 }
 STATEMENT_STYLES = 3      # số kiểu bố cục của cảnh chữ (src/render/templates.py)
 
@@ -72,7 +73,7 @@ def validate_spec(raw: list, cfg: dict) -> list:
                             i + 1, params["value"])
                 tpl = sc["template"] = "big_number"
                 params.setdefault("suffix", "%")
-        if tpl in ("big_number", "percent", "versus", "line_chart", "bar_chart"):
+        if tpl in ("big_number", "percent", "versus", "line_chart", "bar_chart", "bar_race"):
             values = spec_values(params)
             need = max((_decimals_for(v) for v in values), default=0)
             if need > int(params.get("decimals") or 0):
@@ -82,6 +83,14 @@ def validate_spec(raw: list, cfg: dict) -> list:
             params["style"] = statements % STATEMENT_STYLES
             params["n"] = statements + 1
             statements += 1
+        if tpl == "bar_race":
+            years = params["years"]
+            good = [it for it in params["items"] if isinstance(it, dict) and it.get("label")
+                    and isinstance(it.get("values"), list) and len(it["values"]) == len(years)]
+            if len(good) < 3 or len(years) < 2 or any(b <= a for a, b in zip(years, years[1:])):
+                log.warning("Cảnh %d: cuộc đua cần >= 3 nước đủ số liệu và năm tăng dần — bỏ", i + 1)
+                continue
+            params["items"] = good[:10]                     # khung dọc vừa tối đa 10 thanh
         if tpl == "line_chart":
             xs = params["xs"]
             if params.get("series"):

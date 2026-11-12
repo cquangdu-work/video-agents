@@ -39,6 +39,7 @@ BUILTIN_TEMPLATES = [
     ("template", "line_chart", "xu hướng,thời gian,biểu đồ", "own-code", "Đường xu hướng tự vẽ dần"),
     ("template", "statement",  "câu dẫn,chuyển tiếp,chữ",    "own-code", "Câu chữ lớn cho cảnh không có số liệu (3 kiểu bố cục xoay vòng)"),
     ("template", "percent",    "tỷ lệ,phần trăm,vòng tròn",  "own-code", "Vòng tròn tô dần tới X%"),
+    ("template", "bar_race",   "cuộc đua,xếp hạng,nhiều nước", "own-code", "Cuộc đua số liệu: thanh ngang đổi chỗ qua các năm"),
 ]
 
 

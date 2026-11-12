@@ -13,6 +13,7 @@ ngập bởi một loại nội dung. Chỉ số đã vào kho rồi thì DB t�
 """
 import logging
 import re
+import time
 from datetime import date
 
 import requests
@@ -23,6 +24,10 @@ SOURCE_NAME = "World Bank Open Data"     # src/main.py nhận ra tên này: tóm
 API = "https://api.worldbank.org/v2/country/{countries}/indicator/{code}"
 PAGE = "https://data.worldbank.org/indicator/{code}?locations={locs}&end={end}"
 HEADERS = {"User-Agent": "video-agents-pipeline/0.1"}
+# Đo 12/11: URL truy vấn MỚI thì máy chủ treo hơn 60 giây, nhưng vẫn tính xong ở phía sau và
+# lưu đệm — gọi lại sau ~20 giây là trả trong 0,1 giây. Nên lần đầu chỉ là "đánh thức".
+TIMEOUTS = (20, 60, 60)      # giây chờ của từng lần gọi
+RETRY_PAUSE = 25             # giây nghỉ giữa hai lần gọi
 
 
 def vn_number(x: float) -> str:
@@ -43,11 +48,28 @@ def spoken_scale(x: float) -> str:
     return ""
 
 
+def fetch_indicator(ind: dict, countries: list, default_start: int) -> dict:
+    """fetch_series theo cấu hình của một chỉ số: năm bắt đầu riêng (`start_year`, ví dụ
+    Internet năm 1990 gần như bằng 0 ở mọi nước, xếp hạng vô nghĩa) và hệ số chia
+    (`scale`, ví dụ GDP 3.252.994.239.867 USD -> 3.253 tỷ USD, kèm unit "tỷ USD")."""
+    series = fetch_series(ind["code"], countries, int(ind.get("start_year", default_start)))
+    scale = float(ind.get("scale", 1) or 1)
+    return {c: [(y, v / scale) for y, v in s] for c, s in series.items()}
+
+
 def fetch_series(code: str, countries: list, start_year: int) -> dict:
     """-> {mã nước: [(năm, giá trị), ...] tăng dần theo năm}, bỏ các năm không có số."""
     url = API.format(countries=";".join(countries), code=code)
-    r = requests.get(url, headers=HEADERS, timeout=25,
-                     params={"format": "json", "per_page": 500, "date": f"{start_year}:{date.today().year}"})
+    params = {"format": "json", "per_page": 1000, "date": f"{start_year}:{date.today().year}"}
+    r = None
+    for k, wait in enumerate(TIMEOUTS):
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=wait, params=params)
+            break
+        except (requests.Timeout, requests.ConnectionError):
+            if k == len(TIMEOUTS) - 1:
+                raise
+            time.sleep(RETRY_PAUSE)
     r.raise_for_status()
     payload = r.json()
     rows = payload[1] if isinstance(payload, list) and len(payload) > 1 and payload[1] else []
@@ -124,6 +146,71 @@ def build_item(ind: dict, countries: list, series: dict):
     }
 
 
+def race_years(series: dict, step: int = 5) -> list:
+    """Các mốc năm cho cuộc đua: những năm MỌI nước đều có số, lấy cách nhau `step` năm,
+    luôn kèm năm đầu và năm cuối."""
+    common = set.intersection(*[{y for y, _ in s} for s in series.values()]) if series else set()
+    if not common:
+        return []
+    first, last = min(common), max(common)
+    return sorted(y for y in common if y in (first, last) or y % step == 0)
+
+
+def ranking(values: dict) -> list:
+    """{tên nước: giá trị} -> danh sách tên nước xếp từ cao xuống thấp."""
+    return [name for name, _ in sorted(values.items(), key=lambda kv: -kv[1])]
+
+
+def build_race_item(ind: dict, countries: list, series: dict, focus: list, step: int = 5):
+    """Một chỉ số + số liệu nhiều nước -> ý tưởng "cuộc đua" (thanh ngang đổi chỗ qua các năm).
+    countries: [{"iso3", "iso2", "name"}, ...]; focus: mã iso3 các nước cần kể kỹ (Việt Nam, Hàn Quốc).
+    None nếu dữ liệu không đủ cho một cuộc đua (dưới 3 nước hoặc dưới 4 mốc năm)."""
+    names = {c["iso3"]: c["name"] for c in countries}
+    series = {c: s for c, s in series.items() if c in names and s}
+    years = race_years(series, step)
+    if len(series) < 3 or len(years) < 4:
+        return None
+    at = {c: dict(s) for c, s in series.items()}                 # {mã: {năm: giá trị}}
+    y0, y1 = years[0], years[-1]
+    first = ranking({names[c]: at[c][y0] for c in series})
+    last = ranking({names[c]: at[c][y1] for c in series})
+    unit = ind.get("unit", "")
+    rank_line = lambda y, order: f"Xếp hạng năm {y}: " + "; ".join(
+        f"{k + 1}. {n} {vn_number(at[next(c for c in series if names[c] == n)][y])}"
+        for k, n in enumerate(order)) + "."
+    lines = [f"Chỉ số: {ind['name']} ({unit}). Nguồn: World Bank Open Data, mã {ind['code']}."
+             f" Cuộc đua giữa {len(series)} nền kinh tế châu Á, từ {y0} đến {y1}.",
+             rank_line(y0, first), rank_line(y1, last)]
+    for code in focus:
+        if code not in series:
+            continue
+        n = names[code]
+        r0, r1 = first.index(n) + 1, last.index(n) + 1
+        passed = [m for m in first[:r0 - 1] if last.index(m) > r1 - 1]       # trước ở trên, sau ở dưới
+        lost = [m for m in first[r0:] if last.index(m) < r1 - 1]             # trước ở dưới, sau ở trên
+        line = f"{n}: hạng {r0} năm {y0}, hạng {r1} năm {y1}"
+        if passed:
+            line += " — vượt " + ", ".join(passed)
+        if lost:
+            line += ("; " if passed else " — ") + "bị vượt bởi " + ", ".join(lost)
+        lines.append(line + ".")
+    for code in sorted(series, key=lambda c: -at[c][y1]):
+        lines.append(f"{names[code]} theo năm: "
+                     + "; ".join(f"{y}: {vn_number(at[code][y])}" for y in years) + ".")
+    locs = "-".join(c["iso2"] for c in countries if c["iso3"] in series)
+    name = ind["name"]
+    first_word = name.split()[0] if name.split() else ""
+    if not (len(first_word) > 1 and first_word.isupper()):     # "GDP ..." giữ nguyên, "Tỷ lệ" -> "tỷ lệ"
+        name = name[:1].lower() + name[1:]
+    return {
+        "title": f"Cuộc đua {name}: {len(series)} nền kinh tế châu Á từ {y0} đến {y1}",
+        "summary": "\n".join(lines),
+        "url": PAGE.format(code=ind["code"], locs=locs, end=y1),
+        "source": SOURCE_NAME,
+        "lang": "vi",
+    }
+
+
 def parse_vn_number(s: str) -> float:
     """Ngược lại vn_number: '36.227' -> 36227, '98,9' -> 98.9, '0,75' -> 0.75."""
     return float(s.replace(".", "").replace(",", "."))
@@ -167,8 +254,8 @@ def fetch_worldbank(cfg: dict, today: date = None) -> list:
     items = []
     for ind in todays_indicators(cfg.get("indicators", []), int(cfg.get("per_day", 2)), today):
         try:
-            series = fetch_series(ind["code"], [c["iso3"] for c in countries[:2]],
-                                  int(cfg.get("start_year", 1960)))
+            series = fetch_indicator(ind, [c["iso3"] for c in countries[:2]],
+                                     int(cfg.get("start_year", 1960)))
             item = build_item(ind, countries, series)
         except Exception as exc:      # mạng chập chờn không được làm sập cả pipeline
             log.warning("Bỏ qua chỉ số World Bank %s: %s", ind.get("code"), exc)
@@ -178,4 +265,26 @@ def fetch_worldbank(cfg: dict, today: date = None) -> list:
             log.info("World Bank %s: %s", ind["code"], item["title"])
         else:
             log.info("World Bank %s: số liệu quá mỏng — bỏ", ind["code"])
+    items += fetch_races(cfg.get("races") or {}, today)
+    return items
+
+
+def fetch_races(cfg: dict, today: date = None) -> list:
+    """Ý tưởng "cuộc đua" nhiều nước (cấu hình sources.worldbank.races)."""
+    countries = cfg.get("countries") or []
+    if len(countries) < 3:
+        return []
+    focus = cfg.get("focus") or []
+    items = []
+    for ind in todays_indicators(cfg.get("indicators", []), int(cfg.get("per_day", 1)), today):
+        try:
+            series = fetch_indicator(ind, [c["iso3"] for c in countries],
+                                     int(cfg.get("start_year", 1990)))
+            item = build_race_item(ind, countries, series, focus, int(cfg.get("year_step", 5)))
+        except Exception as exc:
+            log.warning("Bỏ qua cuộc đua World Bank %s: %s", ind.get("code"), exc)
+            continue
+        if item:
+            items.append(item)
+            log.info("World Bank (cuộc đua) %s: %s", ind["code"], item["title"])
     return items

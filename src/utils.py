@@ -72,6 +72,9 @@ def spec_values(params: dict) -> list:
         return []
     vals = [params.get("value")]
     vals += [i.get("value") for i in params.get("items") or [] if isinstance(i, dict)]
+    for i in params.get("items") or []:                      # bar_race: mỗi nước một chuỗi năm
+        if isinstance(i, dict):
+            vals += list(i.get("values") or [])
     vals += [params[side].get("value") for side in ("left", "right")
              if isinstance(params.get(side), dict)]
     vals += list(params.get("ys") or [])
