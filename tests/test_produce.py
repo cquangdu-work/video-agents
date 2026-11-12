@@ -189,6 +189,22 @@ class DesignScenesTest(unittest.TestCase):
                 self.scene("statement", (2,), text="Con đường còn dài")]
         self.assertEqual(self.design(spec), spec)
 
+    def test_one_picture_carrying_too_much_narration_is_sent_back(self):
+        from src import crew
+        long = "Vào năm 1990 điện tiêu thụ của Việt Nam chỉ là 98,9 kWh " * 3          # 39 từ
+        spec = [{"template": "versus", "voice": long}, {"template": "statement", "voice": "ngắn"}]
+        self.assertEqual(crew.static_scenes(spec, 27), ["cảnh 1 (versus) mang 39 từ cho 1 hình"])
+        split = [{"template": "versus", "voice": long}, {"template": "big_number", "voice": long}]
+        self.assertEqual(crew.static_scenes(split, 27), [])        # hai hình chia nhau một câu dài
+        self.SCENES = [{"voice": long.strip()}] + self.SCENES[1:]
+        one = [self.scene("statement", (0,), text="1990"), self.scene("big_number", (1,), title="KR",
+                                                                       value=36227),
+               self.scene("statement", (2,), text="Con đường còn dài")]
+        two = [self.scene("statement", (0,), text="Năm 1990"), self.scene("statement", (0,), text="Việt Nam")] \
+            + one[1:]
+        self.assertEqual(self.design(one, two), two)
+        self.assertIn("cảnh đứng yên quá lâu", self.prompts[1])
+
     def test_dropping_a_sentence_is_sent_back(self):
         short = [self.scene("big_number", (0,), title="Việt Nam", value=5066)]
         full = short + [self.scene("big_number", (1,), title="Hàn Quốc", value=36227),

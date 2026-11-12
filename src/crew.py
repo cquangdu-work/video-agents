@@ -392,6 +392,25 @@ TEMPLATE_GUIDE = """Các template có sẵn và tham số (CHỈ dùng đúng c�
 """
 
 
+def static_scenes(spec: list, max_words: int) -> list:
+    """Các cụm cảnh mà mỗi hình phải đứng yên quá lâu -> danh sách mô tả ngắn.
+
+    Một câu lời có thể trải trên nhiều cảnh liền nhau (cùng 'voice'); thời lượng câu
+    được chia đều cho các cảnh đó (assemble.voice_groups). Vì vậy đo theo SỐ TỪ của câu
+    chia cho SỐ CẢNH gánh nó."""
+    out, k = [], 0
+    while k < len(spec):
+        v = " ".join(str(spec[k].get("voice") or "").split())
+        j = k
+        while j + 1 < len(spec) and " ".join(str(spec[j + 1].get("voice") or "").split()) == v:
+            j += 1
+        words, scenes = len(v.split()), j - k + 1
+        if v and words / scenes > max_words:
+            out.append(f"cảnh {k + 1} ({spec[k].get('template')}) mang {words} từ cho {scenes} hình")
+        k = j + 1
+    return out
+
+
 def fill_series_from_data(spec: list, data_series: list) -> int:
     """Điền số liệu THẬT vào mọi cảnh line_chart từ bảng gốc của ý tưởng (nếu có).
 
@@ -520,6 +539,10 @@ Yêu cầu:
                 s["params"] = {}
         return scenes_out
 
+    # Một hình được "gánh" tối đa chừng này từ lời đọc: ~2 lần nhịp đổi cảnh tối đa.
+    # (Ca thật #17: cảnh so găng gộp hai câu dài, đứng yên 13 giây.)
+    max_words = int(2 * pacing["scene_seconds_max"] * words_per_second(cfg))
+
     def spoken_words(spec: list) -> int:
         """Số từ lời đọc mà spec mang theo, mỗi câu tính MỘT lần (câu trải nhiều cảnh
         liền nhau được ghi lặp ở các cảnh đó — xem assemble.voice_groups)."""
@@ -567,6 +590,11 @@ Yêu cầu:
         elif covered > 1.15 * total_words:
             problems.append(f"lời đọc bị chép lặp ({covered} từ so với {total_words} từ của kịch"
                             " bản) — mỗi câu chỉ thuộc một cảnh, hoặc các cảnh LIỀN NHAU")
+        slow = static_scenes(spec, max_words)
+        if slow:
+            problems.append("cảnh đứng yên quá lâu: " + "; ".join(slow) + " — tách thành 2-3 cảnh"
+                            " LIỀN NHAU (mỗi cảnh một ý của câu, hoặc thêm 'statement' tóm ý),"
+                            " các cảnh đó ghi CÙNG 'voice'")
         if best_problems is None or len(problems) <= len(best_problems):
             best, best_problems = spec, problems
         if not problems:
