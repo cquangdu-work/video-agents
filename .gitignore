@@ -15,3 +15,5 @@ data/specs/
 media/
 assets/music/*
 !assets/music/README.md
+data/cache/
+data/tmp/
