@@ -20,7 +20,7 @@ Một đội agent chạy theo lịch, mỗi ngày tạo video ngắn dọc (60�
 ## Đã chốt thêm (11/2026)
 - **Chủ đề kênh: "Thế giới qua con số"** (Du chốt 10/11/2026) — biểu đồ, bản đồ động, cuộc đua số liệu dựng bằng code; nguồn mở (OWID, World Bank, KOSIS...); lồng góc Việt–Hàn.
 - **Giọng đọc: Gemini TTS** (Du chốt 11/11/2026; model đặt trong `.env` TTS_MODEL — đang dùng bản lite vì quota thoáng hơn, kèm TTS_MODEL_FALLBACKS; giọng đặt trong TTS_VOICE). Muốn đổi sang giọng nhân bản của Du sau này: chỉ thay `src/audio/tts.py`.
-- Nhạc nền: **code xong 12/11/2026** (`src/audio/music.py`, nối trong `src/assemble.py`): tự chọn bài theo tâm trạng lời đọc (tiền tố tên file `calm`/`bright`/`serious`), xoay vòng theo nhật ký kho chất liệu, sidechaincompress hạ nhạc khi có giọng, có test đo bằng số. Chờ Du tải nhạc YouTube Audio Library vào `assets/music/` trên laptop và VM (không vào git). Kho trống = video không nhạc.
+- Nhạc nền: **code xong 12/11/2026** (`src/audio/music.py`, nối trong `src/assemble.py`): tự chọn bài theo tâm trạng lời đọc (tiền tố tên file `calm`/`bright`/`serious`), xoay vòng theo nhật ký kho chất liệu, sidechaincompress hạ nhạc khi có giọng, có test đo bằng số. Du đã tải 12 bài YouTube Audio Library (12/11, 5 calm / 4 bright / 3 serious) vào `assets/music/` trên laptop + VM (không vào git). Mỗi bài được đo độ to và đưa về -27 LUFS (các bài chênh nhau 17 dB); mô tả video tự ghi công tên bài + tác giả. Kho trống = video không nhạc.
 
 ## Tiêu chí của "chất liệu" tốt
 1. Sinh ra tự nhiên từ nội dung.
@@ -74,7 +74,7 @@ Python, CrewAI (điều phối agent), cron/systemd timer (lịch chạy), bot T
 ## Tình trạng giai đoạn 4 (cập nhật 12/11/2026)
 - **Dây chuyền đang chạy tự động trên VM từ 12/11/2026.** Code ở `~/video-agents` (remote git `vm`, SSH alias riêng trên laptop); DB chính thức là `data/pipeline.db` trên VM (DB laptop chỉ để thử). Bốn unit systemd cấp người dùng đều đã bật: `video-agents-daily.timer` (06:00 giờ Hàn, cả dây chuyền), `video-agents-daily-retry.timer` (17:40, làm tiếp khi sáng hết quota), `video-agents-weekly.timer` (Chủ nhật 21:00), `video-agents-review.service` (bot chờ nút bấm). Tắt hết: xem cuối `deploy/setup_vm.sh`.
 - **Đã chạy thật trọn vẹn** (12/11, qua chính unit systemd): ý tưởng → kịch bản → spec → 1 lần gọi TTS → video 62,9 giây → Kiểm định đạt → Telegram, hết 13 phút. Duyệt hai chiều cũng đã dùng thật: Du bấm ❌ video #1, ✅ video #2.
-- **Xong (4.1):** duyệt hai chiều (`src/review.py`), tiêu đề/mô tả (`src/publish/metadata.py`), upload YouTube (`src/publish/youtube.py`, **chưa chạy thật**). Chế độ đăng vẫn là `manual` (bot gửi gói, Du tự đăng) — mặc định tạm, **Du chưa chốt**; lý do: project API chưa audit thì video bị khoá riêng tư (chi tiết trong README).
+- **Xong (4.1):** duyệt hai chiều (`src/review.py`), tiêu đề/mô tả (`src/publish/metadata.py`), upload YouTube (`src/publish/youtube.py`, **chưa chạy thật**). **Du chốt 12/11: đăng tự động qua API** (`mode: api`, công khai, hẹn 19:00 giờ VN) — vẫn chỉ sau khi Du bấm ✅. Chưa cấp quyền YouTube thì bot tự lùi về gửi gói tự đăng. Còn chờ Du: tạo project Google Cloud + OAuth client, chạy `auth` (các bước trong README); project chưa audit thì video bị khoá riêng tư.
 - **Xong (4.2):** chuỗi hằng ngày `src/daily.py` + bộ triển khai `deploy/`.
 - **Xong (4.3):** agent Phân tích `src/analysis/weekly.py`, ghi `data/learned.yaml`. Chưa có số liệu thật vì kênh chưa đăng video nào.
 - **Xong (12/11):** nguồn World Bank (25 chỉ số Việt–Hàn, xoay vòng 2 chỉ số/ngày) + biểu đồ đường hai nước trên cùng trục, số liệu do code chép từ bảng gốc. Video đầu tiên dạng này (kịch bản #17, điện tiêu thụ) đã dựng xong trên VM, đạt Kiểm định, chờ lượt 06:00 ngày 13/11 gửi duyệt.
@@ -82,7 +82,7 @@ Python, CrewAI (điều phối agent), cron/systemd timer (lịch chạy), bot T
 - **Xong (12/11):** mẫu bản đồ châu Á (`map`, choropleth từ Natural Earth), tự dùng cho ý tưởng có bảng từ 3 nước.
 - **Xong (12/11):** nguồn KOSIS (`src/sources/kosis.py`, key đã có trong `.env` laptop + VM): người nước ngoài ở Hàn theo quốc tịch (cuộc đua) và người Việt ở Hàn theo loại visa. Cảnh hỏng có lời đọc giờ thành cảnh chữ giữ lời thay vì bị bỏ.
 - **Xong (12/11, tối):** bản đồ thế giới (`assets/geo/world.json`, ranh giới theo góc nhìn Việt Nam qua cột `ADM0_A3_VN` của Natural Earth, ô phóng to Biển Đông ghi tên Hoàng Sa/Trường Sa) + dạng ý tưởng World Bank "Việt Nam đứng thứ mấy thế giới" (`sources.worldbank.world`, 1 chỉ số/ngày). Bảng mọi nước nằm cuối tóm tắt, code đọc lại để tô bản đồ; thứ hạng trên hình và trong lời cùng một hàm `datatable.ranks_desc`.
-- **Chưa làm:** TikTok (cần Du đăng ký tài khoản developer); file nhạc nền (code đã xong); Kiểm chứng 2 nguồn độc lập (cần search API); bản đồ một nước theo tỉnh.
+- **Chưa làm:** TikTok (cần Du đăng ký tài khoản developer); Kiểm chứng 2 nguồn độc lập (cần search API); bản đồ một nước theo tỉnh.
 
 ## Những điều đã đo/đã học khi chạy thật (đừng làm lại từ đầu)
 - **Quota TTS free tier ~15 lần gọi/ngày mỗi model**, hồi lúc nửa đêm giờ Thái Bình Dương (16–17h giờ Hàn). Vì vậy giọng được đọc **cả bài trong một lần gọi** rồi tự cắt theo câu (`src/audio/batch.py`); đừng quay về đọc từng câu.
