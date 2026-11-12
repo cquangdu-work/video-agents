@@ -14,9 +14,9 @@ Không cookie, không theo dõi.
 
 ## Đăng (một lần)
 
-1. Thay `{{CONTACT_EMAIL}}` trong cả 3 trang bằng email liên hệ Du chọn công khai.
-2. Tạo repo công khai trên GitHub (vd `thegioiquaconso`), đẩy nội dung thư mục này lên nhánh `main`.
+1. Liên hệ: tạm dùng trang Issues của repo (không lộ email cá nhân); có Gmail riêng của kênh thì thay vào.
+2. Tạo repo công khai trên GitHub (`cquangdu-work/thegioiquaconso` (đã tạo 12/11/2026)), đẩy nội dung thư mục này lên nhánh `main`.
 3. Repo → Settings → Pages → Deploy from a branch → `main` / `(root)`.
-   Địa chỉ: `https://<tên-github>.github.io/thegioiquaconso/`.
+   Địa chỉ: `https://cquangdu-work.github.io/thegioiquaconso/`.
 4. TikTok: Manage apps → URL properties → xác minh **URL prefix** bằng file chữ ký TikTok cấp
    (tải file đó vào thư mục này, đẩy lên lại).
