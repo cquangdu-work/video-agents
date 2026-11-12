@@ -403,7 +403,9 @@ TEMPLATE_GUIDE = """Các template có sẵn và tham số (CHỈ dùng đúng c�
    hoặc Việt Nam đứng ở đâu so với thế giới.
 """
 
-ANIMATED_LONG = {"bar_race"}     # cảnh chuyển động suốt thời lượng: được gánh nhiều lời hơn
+# Hệ số trần lời cho một hình: cuộc đua chạy suốt cảnh (x3); bản đồ tô dần và nhiều chi tiết
+# để đọc (x1,5 — ca thật #7: bản đồ gánh 41 từ bị chê "đứng yên", chia ngắn lại bị chê "quá ngắn")
+WORDS_ALLOWANCE = {"bar_race": 3.0, "map": 1.5}
 
 
 def static_scenes(spec: list, max_words: int) -> list:
@@ -419,8 +421,7 @@ def static_scenes(spec: list, max_words: int) -> list:
         while j + 1 < len(spec) and " ".join(str(spec[j + 1].get("voice") or "").split()) == v:
             j += 1
         words, scenes = len(v.split()), j - k + 1
-        # Cuộc đua chuyển động liên tục nên được gánh gấp 3 (trong 2-3 câu kể diễn biến)
-        limit = max_words * (3 if spec[k].get("template") in ANIMATED_LONG else 1)
+        limit = max_words * WORDS_ALLOWANCE.get(spec[k].get("template"), 1.0)
         if v and words / scenes > limit:
             out.append(f"cảnh {k + 1} ({spec[k].get('template')}) mang {words} từ cho {scenes} hình")
         k = j + 1
