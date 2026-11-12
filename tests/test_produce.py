@@ -220,6 +220,12 @@ class DesignScenesTest(unittest.TestCase):
         self.assertEqual([s["label"] for s in spec[1]["params"]["series"]], ["Nhật Bản", "Việt Nam", "Ấn Độ"])
         crew.fill_series_from_data(spec[:1], [d for d in data if d["label"] not in ("Việt Nam", "Hàn Quốc")])
         self.assertEqual(len(spec[0]["params"]["series"]), crew.MAX_LINES)    # không bao giờ quá 4 đường
+        all_six = [{"template": "line_chart", "params": {"title": "t", "series": [{"label": d["label"]} for d in data]}}]
+        crew.fill_series_from_data(all_six, data)
+        got = [s["label"] for s in all_six[0]["params"]["series"]]
+        self.assertEqual(len(got), 4)
+        self.assertIn("Việt Nam", got)                                          # cắt bớt nhưng giữ Việt Nam
+        self.assertEqual(got, [d["label"] for d in data if d["label"] in got])  # giữ thứ tự của bảng
 
     def test_race_needs_three_countries_with_full_data(self):
         bad = {"template": "bar_race", "params": {"title": "t", "years": [1990, 2000], "items": [

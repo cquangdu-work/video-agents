@@ -459,7 +459,10 @@ def fill_series_from_data(spec: list, data_series: list) -> int:
         # nước của một cuộc đua — 10 đường trên một khung dọc là mớ bòng bong (ca thật #18)
         chosen = ([s for s in data_series if s["label"].lower() in wanted]
                   or [s for s in data_series if s["label"].lower() in FOCUS_LABELS]
-                  or data_series)[:MAX_LINES]
+                  or data_series)
+        if len(chosen) > MAX_LINES:              # cắt bớt nhưng luôn giữ Việt Nam, Hàn Quốc
+            keep = sorted(chosen, key=lambda s: s["label"].lower() not in FOCUS_LABELS)[:MAX_LINES]
+            chosen = [s for s in chosen if s in keep]
         p["series"] = [{"label": s["label"], "xs": list(s["xs"]), "ys": list(s["ys"])} for s in chosen]
         p["xs"] = sorted({x for s in chosen for x in s["xs"]})
         p.pop("ys", None)
