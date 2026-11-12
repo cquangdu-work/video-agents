@@ -55,6 +55,8 @@ Ba loại nội dung không được kiếm tiền:
 
 Vì vậy: không tự động hoá 100% (giữ bước Du duyệt), không dùng giọng máy đều đều không chỉnh, chủ đề sức khoẻ/tài chính chỉ giải thích dữ liệu, không khuyên người xem làm gì. Mọi chất liệu phải rõ giấy phép.
 
+**Bản đồ** (Claude đặt 12/11/2026, Du có thể đổi): bản đồ nào có Việt Nam cũng phải thể hiện quần đảo Hoàng Sa và Trường Sa thuộc Việt Nam (cùng màu Việt Nam, có tên) — luật Đo đạc và Bản đồ của Việt Nam yêu cầu, và khán giả Việt sẽ phản ứng ngay nếu thiếu. Natural Earth 1:50m không vẽ hai quần đảo nên `src/render/geo.py` (`VN_ISLANDS`) tự vẽ; có test chốt chặn.
+
 ## Hạ tầng
 - Phát triển trên máy Windows này; triển khai chạy thật trên **VM Oracle Cloud Free Tier (ARM64, Linux, tối đa 4 OCPU / 24GB RAM, không GPU)**. VM đang chạy sẵn một số dịch vụ khác: kiểm tra RAM trước khi cài thêm.
 - Không chạy LLM local để suy luận cho agent (CPU ARM quá chậm). Dùng API giá rẻ / có free tier. Model ảnh trên CPU chỉ chạy hàng loạt ban đêm.

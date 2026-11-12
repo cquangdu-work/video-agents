@@ -515,8 +515,9 @@ def design_scenes(idea: dict, scenes: list, cfg: dict) -> list:
             f"\nBẢNG CÓ SỐ THEO NĂM CỦA {len(data_series)} NƯỚC: phải có ĐÚNG MỘT cảnh \"bar_race\""
             " (cuộc đua) gánh 2-3 câu kể diễn biến xếp hạng — chỉ ghi title, unit, source, máy tự"
             " điền số. Có thể thêm \"line_chart\" với \"series\": [{\"label\": \"Việt Nam\"},"
-            " {\"label\": \"Hàn Quốc\"}] (máy tự điền số) để soi riêng hai nước, và MỘT cảnh"
-            " \"map\" (bản đồ năm mới nhất, máy tự điền số) cho câu nói về cả khu vực.\n")
+            " {\"label\": \"Hàn Quốc\"}] (máy tự điền số) để soi riêng hai nước. NÊN có thêm MỘT"
+            " cảnh \"map\" (bản đồ châu Á năm mới nhất, máy tự điền số) cho câu nói về bức tranh"
+            " cả khu vực hiện nay — bản đồ là chất liệu đặc trưng của kênh.\n")
     elif data_series:
         names = ", ".join(f'{{"label": "{s["label"]}"}}' for s in data_series)
         data_block += (

@@ -28,6 +28,24 @@ VI_TO_CODE = {
 LABEL_AT = {"VNM": (135.5, 13.5), "KOR": (138.5, 24.5)}
 
 
+# Hai quần đảo của Việt Nam. Ở tỷ lệ 1:50m Natural Earth KHÔNG vẽ chúng (đã kiểm: không có
+# đa giác nào trong vùng), nên bản đồ phải tự vẽ — bản đồ có Việt Nam mà thiếu Hoàng Sa,
+# Trường Sa là sai luật Đo đạc và Bản đồ của Việt Nam và khán giả Việt sẽ phản ứng ngay.
+# Mỗi quần đảo: tên, vị trí vài cụm đảo chính (kinh độ, vĩ độ), chỗ đặt chữ, cách canh chữ.
+# Biển Đông ở tỷ lệ này rất chật: chữ đặt ở khe trống đã thử (không chạm bờ Việt Nam,
+# Philippines, Borneo), nhỏ, không có tiền tố "QĐ." cho đỡ dài.
+VN_ISLANDS = [
+    ("Hoàng Sa", [(111.6, 16.5), (112.3, 16.8), (112.0, 16.1), (112.6, 16.4), (111.3, 15.8)],
+     (113.1, 16.4), "left"),
+    ("Trường Sa", [(112.9, 8.7), (114.3, 10.4), (115.6, 10.1), (114.0, 9.0), (113.4, 10.0),
+                   (115.0, 9.3), (116.1, 11.0)],
+     (111.3, 7.7), "center"),
+]
+# Đường dẫn của nhãn số nối vào điểm này thay vì tâm nước: với Việt Nam, nối vào miền
+# Trung–Nam để đường đi lọt giữa Hoàng Sa và Trường Sa, không cắt ngang chữ.
+LEAD_TO = {"VNM": (107.2, 12.6)}
+
+
 @lru_cache(maxsize=1)
 def load_map() -> dict:
     return json.loads(GEO_PATH.read_text(encoding="utf-8"))

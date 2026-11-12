@@ -409,6 +409,16 @@ class AsiaMap(BrandScene):
                 if (box[2] - box[0]) < 1.0:              # nhỏ quá không thấy: thêm chấm
                     marks.append(Dot(to_xy((box[0] + box[2]) / 2, (box[1] + box[3]) / 2),
                                      radius=0.07, color=shade[code]))
+        # Hoàng Sa, Trường Sa của Việt Nam (geo.VN_ISLANDS): luôn vẽ, cùng màu với Việt Nam
+        from .geo import VN_ISLANDS
+        isle_color = shade.get("VNM", c["muted"])
+        islands = VGroup()
+        for name, spots, (lab_lon, lab_lat), align in VN_ISLANDS:
+            islands.add(*[Dot(to_xy(lon, lat), radius=0.028, color=isle_color) for lon, lat in spots])
+            islands.add(Text(name, font=pick_font(), font_size=12,
+                             color=c["vietnam"] if "VNM" in data else c["muted"])
+                        .move_to(to_xy(lab_lon, lab_lat), aligned_edge=LEFT if align == "left" else ORIGIN))
+        base.add(islands)
         self.play(FadeIn(base), run_time=0.5)
         fills.sort(key=lambda f: f[0])                   # tô từ thấp lên cao: mắt theo được thứ hạng
         fill_time = max(self.seconds * 0.45, 0.6)
@@ -429,8 +439,8 @@ class AsiaMap(BrandScene):
                               font_size=32, color=c[key], weight="BOLD")).arrange(DOWN, buff=0.06)
             # Nhãn đặt ở vùng biển trống (geo.LABEL_AT), có đường dẫn về nước đó, và luôn nằm
             # trong khung (bản đầu: nhãn Hàn Quốc tràn mép phải, đè lên Nhật Bản)
-            from .geo import LABEL_AT
-            centre = to_xy((box[0] + box[2]) / 2, (box[1] + box[3]) / 2)
+            from .geo import LABEL_AT, LEAD_TO
+            centre = to_xy(*LEAD_TO.get(code, ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2)))
             if code in LABEL_AT:
                 tag.move_to(to_xy(*LABEL_AT[code]))
             else:

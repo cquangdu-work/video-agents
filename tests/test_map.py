@@ -46,6 +46,20 @@ class GeoTest(unittest.TestCase):
         box = geo.country_box("VNM")
         self.assertTrue(102 < box[0] < 104 and 109 < box[2] < 110 and 8 < box[1] < 9)
 
+    def test_vietnam_islands_are_always_drawn_in_the_right_place(self):
+        # Bản đồ có Việt Nam mà thiếu Hoàng Sa, Trường Sa là sai luật Việt Nam — đừng xoá
+        names = {name for name, *_ in geo.VN_ISLANDS}
+        self.assertEqual(names, {"Hoàng Sa", "Trường Sa"})
+        where = {"Hoàng Sa": (110.5, 15.5, 113.0, 17.2), "Trường Sa": (111.5, 6.5, 117.0, 11.6)}
+        for name, spots, *_ in geo.VN_ISLANDS:
+            a, b, c, d = where[name]
+            self.assertTrue(all(a <= lon <= c and b <= lat <= d for lon, lat in spots), name)
+        # Natural Earth 1:50m không có đa giác nào ở đó -> không nước nào bị tô màu lên hai quần đảo
+        for code, country in geo.load_map()["countries"].items():
+            for ring in country["rings"]:
+                self.assertFalse(any(111.1 <= lon <= 112.8 and 15.7 <= lat <= 17.1 for lon, lat in ring), code)
+                self.assertFalse(any(111.4 <= lon <= 116.0 and 7.6 <= lat <= 11.5 for lon, lat in ring), code)
+
     def test_label_spots_are_inside_the_map(self):
         lon0, lat0, lon1, lat1 = geo.load_map()["bbox"]
         for lon, lat in geo.LABEL_AT.values():
