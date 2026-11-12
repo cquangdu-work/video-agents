@@ -222,5 +222,51 @@ class WorldSceneTest(unittest.TestCase):
         self.assertTrue({"5", "6", "2024", "747"} <= allowed)
 
 
+class RichSceneTimeTest(unittest.TestCase):
+    """Ca thật kịch bản #7: bản đồ thế giới chia câu mở đầu với cảnh chữ, chỉ được 2,3 giây."""
+    Q = "Tuổi thọ của Việt Nam năm 2024 đạt bao nhiêu?"          # 10 từ ≈ 2,9 giây
+
+    def test_short_map_is_reported_with_how_many_words_it_needs(self):
+        spec = [{"template": "statement", "seconds": 3, "voice": self.Q},
+                {"template": "map", "seconds": 4, "voice": self.Q},
+                {"template": "big_number", "seconds": 3, "voice": "Việt Nam đạt 74,7 tuổi."}]
+        got = crew.short_rich_scenes(spec, 3.4)
+        self.assertEqual(len(got), 1)
+        self.assertIn("cảnh 2 (map)", got[0]); self.assertIn("≥ 18 từ", got[0])
+        long_voice = " ".join(["từ"] * 20)
+        self.assertEqual(crew.short_rich_scenes([{"template": "map", "seconds": 4, "voice": long_voice}], 3.4), [])
+
+    def test_statement_sharing_a_sentence_with_a_map_gives_way_and_no_words_are_lost(self):
+        spec = [{"template": "intro"},
+                {"template": "statement", "seconds": 3, "voice": self.Q},
+                {"template": "map", "seconds": 4, "voice": self.Q},
+                {"template": "statement", "seconds": 3, "voice": "Câu khác."},
+                {"template": "big_number", "seconds": 3, "voice": "Câu ba."},
+                {"template": "statement", "seconds": 3, "voice": "Câu ba."}]
+        got = crew.make_room_for_rich(spec)
+        self.assertEqual([s["template"] for s in got], ["intro", "map", "statement", "big_number", "statement"])
+        self.assertEqual(got[1]["voice"], self.Q)
+
+
+class BarChartLayoutTest(unittest.TestCase):
+    def test_last_bar_and_unit_stay_above_the_subtitles(self):
+        # Ca thật #7: 5 cột thì cột cuối đè chữ "tuổi"; 6 cột thì rơi vào vùng phụ đề (y≈-5,2)
+        from manim import Rectangle, Text
+        from src.render.templates import BarChart
+        for n in (3, 5, 6):
+            scene = BarChart(params={"title": "T", "unit": "tuổi", "items": [
+                {"label": f"N{i}", "value": 90 - i} for i in range(n)]}, seconds=1)
+            seen = []                       # không dựng thật: ghi lại vật thể của từng hiệu ứng
+            with mock.patch.object(scene, "play", lambda *a, **k: seen.extend(x.mobject for x in a)), \
+                    mock.patch.object(scene, "wait"):
+                scene.construct()
+            flat = [m for g in seen for m in g.get_family()]
+            unit = [m for m in flat if isinstance(m, Text) and m.text == "tuổi"][0]
+            bars = [m for m in flat if isinstance(m, Rectangle)]
+            self.assertEqual(len(bars), n)
+            self.assertGreater(min(b.get_bottom()[1] for b in bars), unit.get_top()[1], n)
+            self.assertGreater(unit.get_bottom()[1], -4.6, n)                # trên vùng phụ đề
+
+
 if __name__ == "__main__":
     unittest.main()

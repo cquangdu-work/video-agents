@@ -78,8 +78,12 @@ class BarChart(BrandScene):
         max_w, bar_h, gap = 5.6, 0.62, 0.42
         dec = p.get("decimals", 0)
         rows, anims = VGroup(), []
+        # Cột cuối không xuống dưới y=-3,4: dưới đó là chữ đơn vị rồi tới vùng phụ đề (ca thật
+        # kịch bản #7: 5 cột thì cột cuối đè chữ "tuổi", 6 cột thì rơi vào phụ đề)
+        pitch = min((bar_h + gap) * 1.6, 6.0 / max(len(items) - 1, 1))
+        y_last = 2.6 - (len(items) - 1) * pitch
         for idx, it in enumerate(items):
-            y = 2.6 - idx * (bar_h + gap) * 1.6
+            y = 2.6 - idx * pitch
             color = c.get(it.get("color", ""), c["accent"] if idx == 0 else c["surface"])
             bar = Rectangle(width=max(it["value"] / vmax * max_w, 0.1), height=bar_h,
                             fill_color=color, fill_opacity=1, stroke_width=0)
@@ -93,7 +97,7 @@ class BarChart(BrandScene):
             anims.append(GrowFromEdge(bar, LEFT))
         if p.get("unit"):
             rows.add(Text(p["unit"], font=pick_font(), font_size=26,
-                          color=c["muted"]).move_to([0, -4.3, 0]))
+                          color=c["muted"]).move_to([0, min(y_last - bar_h / 2 - 0.45, -2.0), 0]))
         self.play(FadeIn(rows), *anims, run_time=self.seconds * 0.6)
         self.wait(self.seconds * 0.4)
 

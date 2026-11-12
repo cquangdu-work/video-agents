@@ -427,6 +427,49 @@ def static_scenes(spec: list, max_words: int) -> list:
     return out
 
 
+# Cảnh nhiều chi tiết cần đủ thời gian để mắt kịp đọc (ca thật kịch bản #7: bản đồ thế giới
+# chia câu mở đầu 4 giây với một cảnh chữ, chỉ còn 2,3 giây — chưa tô màu xong đã chuyển cảnh)
+RICH_MIN_SECONDS = {"map": 5.0, "bar_race": 5.0}
+
+
+def _voice_runs(spec: list) -> list:
+    """Các cụm cảnh LIỀN NHAU cùng một lời đọc -> [(lời, [chỉ số cảnh])] (như assemble.voice_groups)."""
+    runs = []
+    for i, sc in enumerate(spec):
+        v = " ".join(str(sc.get("voice") or "").split())
+        if runs and v and v == runs[-1][0]:
+            runs[-1][1].append(i)
+        else:
+            runs.append((v, [i]))
+    return runs
+
+
+def short_rich_scenes(spec: list, wps: float) -> list:
+    """Cảnh bản đồ/cuộc đua có quá ít thời gian lời -> danh sách mô tả ngắn. Thời lượng của câu
+    chia cho các cảnh cùng lời theo 'seconds' (đúng như assemble.share_seconds)."""
+    out = []
+    for voice, idx in _voice_runs(spec):
+        weights = [max(float(spec[i].get("seconds") or 0), 0.1) for i in idx]
+        for i, w in zip(idx, weights):
+            need = RICH_MIN_SECONDS.get(spec[i].get("template"))
+            have = len(voice.split()) / wps * w / sum(weights)
+            if need and have < need:
+                out.append(f"cảnh {i + 1} ({spec[i]['template']}) chỉ có ~{have:.1f} giây lời, cần"
+                           f" ≥ {need:.0f} giây: cho nó gánh trọn 1-2 câu (≥ {int(need * wps) + 1} từ),"
+                           " không chia câu đó với cảnh khác")
+    return out
+
+
+def make_room_for_rich(spec: list) -> list:
+    """Tự sửa cuối cùng: cảnh chữ chia chung câu với cảnh bản đồ/cuộc đua thì bỏ cảnh chữ —
+    lời vẫn nằm nguyên trên cảnh bản đồ nên không mất câu nào, bản đồ được trọn thời lượng."""
+    drop = set()
+    for _, idx in _voice_runs(spec):
+        if len(idx) > 1 and any(spec[i].get("template") in RICH_MIN_SECONDS for i in idx):
+            drop |= {i for i in idx if spec[i].get("template") == "statement"}
+    return [sc for i, sc in enumerate(spec) if i not in drop]
+
+
 FOCUS_LABELS = {"việt nam", "hàn quốc"}
 MAX_LINES = 4              # biểu đồ đường trên khung dọc: quá 4 đường là không đọc nổi
 
@@ -538,7 +581,8 @@ def design_scenes(idea: dict, scenes: list, cfg: dict) -> list:
         data_block += (
             f"\nCÓ SỐ LIỆU CỦA {len(world['items'])} NƯỚC NĂM {world['year']}: NÊN có ĐÚNG MỘT cảnh"
             " \"map\" (bản đồ THẾ GIỚI tô màu, Việt Nam và Hàn Quốc có nhãn hạng — chỉ ghi title,"
-            " unit, source, máy tự điền số mọi nước) cho câu nói Việt Nam đứng ở đâu trên thế giới.\n")
+            " unit, source, máy tự điền số mọi nước) gánh TRỌN 1-2 câu nói Việt Nam đứng ở đâu trên"
+            " thế giới (≥ 5 giây lời; không chia câu đó cho cảnh khác — bản đồ cần thời gian để xem).\n")
     if len(data_series) >= 3:
         from .render.geo import code_of
         labels = [s["label"] for s in data_series]
@@ -690,6 +734,10 @@ Yêu cầu:
             problems.append("cảnh đứng yên quá lâu: " + "; ".join(slow) + " — tách thành 2-3 cảnh"
                             " LIỀN NHAU (mỗi cảnh một ý của câu, hoặc thêm 'statement' tóm ý),"
                             " các cảnh đó ghi CÙNG 'voice'")
+        spec = make_room_for_rich(spec)
+        short = short_rich_scenes(spec, words_per_second(cfg))
+        if short:
+            problems.append("cảnh nhiều chi tiết quá ngắn: " + "; ".join(short))
         if best_problems is None or len(problems) <= len(best_problems):
             best, best_problems = spec, problems
         if not problems:
