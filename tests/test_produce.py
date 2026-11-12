@@ -97,6 +97,14 @@ class ValidateSpecTest(unittest.TestCase):
                                                            (12071.0, 2), (4.9, 2), (5066, 0))],
                          [0, 1, 2, 0, 1, 0])
 
+    def test_versus_colours_follow_the_countries_not_the_sides(self):
+        from src.render.templates import versus_colors
+        colors = {"accent": "#A", "vietnam": "#VN", "korea": "#KR", "text": "#T"}
+        self.assertEqual(versus_colors("Việt Nam", "Hàn Quốc", colors), ("#VN", "#KR"))
+        self.assertEqual(versus_colors("Hàn Quốc", "Nhật Bản", colors), ("#KR", "#A"))   # ca thật #18
+        self.assertEqual(versus_colors("Nhật Bản", "Singapore", colors), ("#A", "#T"))
+        self.assertEqual(versus_colors("Giá gốc", "Việt Nam", colors), ("#A", "#VN"))
+
     def test_each_series_may_have_its_own_years(self):
         spec = produce.validate_spec([{"template": "line_chart", "params": {
             "title": "Điện", "xs": [1990, 2024, 2025], "series": [

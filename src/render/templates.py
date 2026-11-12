@@ -108,7 +108,8 @@ class Versus(BrandScene):
         self.add(self.title_text(p["title"]))
         dec = p.get("decimals", 0)
         trL, trR = ValueTracker(0), ValueTracker(0)
-        sides = [(p["left"], c["vietnam"], -2.2, trL), (p["right"], c["korea"], 2.2, trR)]
+        left_c, right_c = versus_colors(p["left"].get("label"), p["right"].get("label"), c)
+        sides = [(p["left"], left_c, -2.2, trL), (p["right"], right_c, 2.2, trR)]
         # Mỗi bên chỉ hiện số lẻ khi giá trị của CHÍNH nó có phần lẻ (98,9 bên này không được
         # biến 2.462 bên kia thành "2.462,0" — Kiểm định đã bắt lỗi này)
         side_dec = [label_decimals(float(s["value"]), dec) for s in (p["left"], p["right"])]
@@ -141,6 +142,16 @@ COUNTRY_COLORS = {"việt nam": "vietnam", "vn": "vietnam", "hàn quốc": "kore
 def country_color_key(label) -> str:
     """Tên màu trong bộ nhận diện cho một nhãn nước ("Việt Nam" -> "vietnam"), hoặc None."""
     return COUNTRY_COLORS.get(str(label or "").strip().lower())
+
+
+def versus_colors(left_label, right_label, colors: dict) -> tuple:
+    """Màu hai bên cảnh so găng: Việt Nam luôn đỏ, Hàn Quốc luôn xanh, bất kể đứng bên nào;
+    nước khác lấy màu nhấn / màu chữ (trước đây trái luôn đỏ, phải luôn xanh: "Hàn Quốc vs
+    Nhật Bản" tô Hàn Quốc màu của Việt Nam)."""
+    keys = [country_color_key(left_label), country_color_key(right_label)]
+    spare = [k for k in ("accent", "text") if k not in keys]
+    keys = [k or spare.pop(0) for k in keys]
+    return colors[keys[0]], colors[keys[1]]
 
 
 def chart_series(p: dict, colors: dict) -> list:
@@ -318,8 +329,10 @@ class BarRace(BrandScene):
             return t.move_to([self.BAR_X + w + 0.12, y, 0], aligned_edge=LEFT)
 
         def year(k):
-            return Text(str(years[k]), font=pick_font("number"), font_size=120, color=c["muted"],
-                        weight="BOLD").move_to([2.2, self.TOP_Y - n * row_h - 0.9, 0])
+            # Sát dưới thanh cuối, KHÔNG xuống vùng phụ đề (đáy khung ~ y -4,7 trở xuống):
+            # bản đầu đặt thấp hơn 0,5 đơn vị và số năm bị phụ đề đè lên
+            return Text(str(years[k]), font=pick_font("number"), font_size=100, color=c["muted"],
+                        weight="BOLD").move_to([2.2, self.TOP_Y - n * row_h - 0.4, 0])
 
         first = layout(0)
         bars = [bar(i, y, w) for i, (y, w, _) in enumerate(first)]
