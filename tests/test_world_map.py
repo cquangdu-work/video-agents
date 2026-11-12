@@ -160,6 +160,15 @@ class BuildWorldItemTest(unittest.TestCase):
         self.assertEqual(len(world["items"]), len(table))
         self.assertTrue(item["url"].endswith("year=2024"))
 
+    def test_bottom_half_is_told_from_the_bottom(self):
+        # Ca thật 12/11 (tỷ suất sinh): "Hàn Quốc cao thứ 213 trên 214 (cao hơn 0%...)"
+        table, names = fake_world()
+        table["KOR"] = 0.75
+        s = wb.build_world_item(LE, 2024, table, names, ["VNM", "KOR"], {})["summary"]
+        self.assertIn(f"Hàn Quốc: 0,75 tuổi — thấp thứ 1 trên {len(table)} nước và vùng lãnh thổ"
+                      f" (tức cao thứ {len(table)})", s)
+        self.assertNotIn("cao hơn 0%", s)
+
     def test_gaps_between_two_percentages_are_percentage_points(self):
         table, names = fake_world()
         table.update({"VNM": 20.0, "KOR": 25.5})
@@ -267,6 +276,41 @@ class RichSceneTimeTest(unittest.TestCase):
         got = crew.make_room_for_rich(spec)
         self.assertEqual([s["template"] for s in got], ["intro", "map", "statement", "big_number", "statement"])
         self.assertEqual(got[1]["voice"], self.Q)
+
+
+class MapSceneBuildTest(unittest.TestCase):
+    """Dựng cảnh bản đồ (không render: chặn play/wait) cho cả hai nhánh. Lỗi thật 12/11: biến
+    thứ hạng đặt tên `low` đè lên màu `low` của thang màu -> mọi bản đồ thế giới sập."""
+
+    def build(self, params):
+        from manim import Text
+        from src.render.templates import MapScene
+        scene = MapScene(params=params, seconds=3)
+        seen = []
+        with mock.patch.object(scene, "play", lambda *a, **k: seen.extend(x.mobject for x in a)), \
+                mock.patch.object(scene, "wait"):
+            scene.construct()
+        # Manim bỏ dấu cách trong .text -> so sánh không dấu cách
+        return [m.text for g in seen + scene.mobjects for m in g.get_family() if isinstance(m, Text)]
+
+    def assertShown(self, phrase, texts):
+        self.assertIn(phrase.replace(" ", ""), texts)
+
+    def test_world_map_with_korea_at_the_bottom(self):
+        items = [{"label": "Việt Nam", "value": 1.9, "code": "VNM"}, {"label": "Hàn Quốc", "value": 0.75, "code": "KOR"},
+                 {"label": "Chad", "value": 6.03, "code": "TCD"}, {"label": "Đức", "value": 1.4, "code": "DEU"}]
+        texts = self.build({"title": "Sinh", "unit": "con", "region": "world", "year": 2024, "decimals": 2,
+                            "items": items})
+        self.assertShown("thấp thứ 1/4", texts)                      # Hàn Quốc: nửa dưới -> đếm từ dưới
+        self.assertShown("cao thứ 2/4", texts)                       # Việt Nam
+        self.assertShown("Cao nhất: Chad", texts)
+        self.assertShown("Hoàng Sa", texts); self.assertShown("Trường Sa", texts)   # ô phóng to luôn có tên
+
+    def test_asia_map_still_builds(self):
+        texts = self.build({"title": "GDP", "unit": "USD", "region": "asia", "items": [
+            {"label": "Việt Nam", "value": 5066}, {"label": "Hàn Quốc", "value": 36227},
+            {"label": "Ấn Độ", "value": 2702.5}]})
+        self.assertShown("Hoàng Sa", texts)
 
 
 class BarChartLayoutTest(unittest.TestCase):

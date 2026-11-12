@@ -516,7 +516,10 @@ class MapScene(BrandScene):
             fit_width(head, 4.6)
             num = Text(fmt_num(value, label_decimals(value, dec)), font=pick_font("number"),
                        font_size=36, color=color, weight="BOLD")
-            pos = Text(f"cao thứ {rank}/{n}", font=pick_font(), font_size=20, color=c["text"])
+            # nửa dưới bảng nói "thấp thứ 2/214" (khớp tóm tắt), không "cao thứ 213/214"
+            from_bottom = 1 + sum(1 for _, v in data.values() if v < value)
+            pos = Text(f"cao thứ {rank}/{n}" if rank <= n / 2 else f"thấp thứ {from_bottom}/{n}",
+                       font=pick_font(), font_size=20, color=c["text"])
             panel.add(VGroup(head, VGroup(num, pos).arrange(RIGHT, buff=0.2, aligned_edge=DOWN))
                       .arrange(DOWN, aligned_edge=LEFT, buff=0.08))
         if len(panel):

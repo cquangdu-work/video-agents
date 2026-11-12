@@ -226,8 +226,12 @@ def build_world_item(ind: dict, year: int, table: dict, names: dict, focus: list
     for c in focus:
         if c in table:
             below = sum(1 for v in table.values() if v < table[c])
-            lines.append(f"{names[c]}: {val(table[c])} — cao thứ {rank[c]} trên {where}"
-                         f" (cao hơn {round(100 * below / n)}% số nơi có số liệu).")
+            if rank[c] <= n / 2:
+                lines.append(f"{names[c]}: {val(table[c])} — cao thứ {rank[c]} trên {where}"
+                             f" (cao hơn {round(100 * below / n)}% số nơi có số liệu).")
+            else:          # nửa dưới bảng: "thấp thứ 2" thay vì "cao thứ 213, cao hơn 0%"
+                lines.append(f"{names[c]}: {val(table[c])} — thấp thứ {below + 1} trên {where}"
+                             f" (tức cao thứ {rank[c]}).")
     lines.append("5 nơi cao nhất: " + "; ".join(
         f"{rank[c]}. {names[c]} — {val(table[c])}" for c in order[:5]) + ".")
     lines.append("3 nơi thấp nhất: " + "; ".join(
