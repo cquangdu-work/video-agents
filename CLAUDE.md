@@ -96,6 +96,8 @@ Python, CrewAI (điều phối agent), cron/systemd timer (lịch chạy), bot T
 - **Render chậm thường do tạo chữ mỗi khung hình**: `pick_font()` từng liệt kê font cả máy ở mỗi khung của cảnh đếm số (cảnh số lớn 10 giây mất 327 giây). Đã lưu kết quả; mẫu mới đừng gọi hàm nặng bên trong `always_redraw`.
 - **Model chép chuỗi số rất hay sai**: biểu đồ đường và cuộc đua phải lấy số bằng code từ bảng gốc (`crew.fill_series_from_data`), model chỉ chọn vẽ gì.
 - **Lớp chống trùng YouTube phải xét cùng đề tài**: đếm mọi video view cao trong kết quả tìm kiếm thì "…Việt Nam và Hàn Quốc…" ra toàn video bóng đá, ý tưởng bị loại oan.
+- **API World Bank với truy vấn "mọi nước"** (12/11): chưa có trong bộ đệm thì máy chủ tính mất vài phút (treo, rồi 502), xong thì trả trong 0,2 giây — `WORLD_TIMEOUTS` chờ tới ~9 phút. Hôm đó API số liệu còn sập 502 cả buổi chiều; code tự bỏ qua, đừng coi là lỗi code.
+- **Cảnh nhiều chi tiết cần đủ thời gian** (chạy thử #7 trên laptop): bản đồ thế giới chia câu mở đầu với cảnh chữ chỉ còn 2,3 giây. `crew.short_rich_scenes` (≥ 5 giây cho map/bar_race) + `make_room_for_rich`; trần lời bản đồ ×1,5.
 - **Agent Kiểm chứng bằng LLM không đủ để chặn số bịa**: nó chỉ soát danh sách "claims" Biên kịch tự khai. Đã lọt câu mở đầu "Sai lầm 99% người ăn chay..." (kịch bản #10) và ba con số không có trong nguồn ở kịch bản #6 (video #2, Du đã duyệt trước khi có cổng này). Từ 12/11 code đối chiếu TỪNG con số trong lời đọc với bài nguồn (`crew.unsourced_numbers`); đừng gỡ cổng này.
 
 ## Cách làm việc
