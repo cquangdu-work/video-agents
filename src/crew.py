@@ -396,6 +396,10 @@ TEMPLATE_GUIDE = """Các template có sẵn và tham số (CHỈ dùng đúng c�
    của nhiều nước đổi chỗ theo thứ hạng qua từng mốc năm. CHỈ dùng khi DỮ LIỆU NGUỒN có
    bảng theo năm của từ 3 nước trở lên. KHÔNG chép số — máy tự điền "years"/"items" từ
    bảng. Cảnh này chạy lâu: cho nó gánh 2-3 câu lời đọc kể diễn biến cuộc đua.
+8. "map": {"title": str, "unit": str, "source": str} — BẢN ĐỒ châu Á tô màu theo số liệu
+   năm mới nhất, Việt Nam và Hàn Quốc có nhãn số riêng. CHỈ dùng khi DỮ LIỆU NGUỒN có bảng
+   theo năm của từ 3 nước châu Á trở lên. KHÔNG chép số — máy tự điền "items"/"year" từ bảng.
+   Hợp với câu nói về bức tranh cả khu vực ở thời điểm hiện tại.
 """
 
 ANIMATED_LONG = {"bar_race"}     # cảnh chuyển động suốt thời lượng: được gánh nhiều lời hơn
@@ -442,6 +446,17 @@ def fill_series_from_data(spec: list, data_series: list) -> int:
         if not isinstance(sc.get("params"), dict):
             continue
         p = sc["params"]
+        if sc.get("template") == "map":
+            # Bản đồ: năm mới nhất mà nước nào cũng có số
+            common = set.intersection(*[set(s["xs"]) for s in data_series])
+            if not common:
+                continue
+            year = max(common)
+            p["year"] = year
+            p["items"] = [{"label": s["label"], "value": dict(zip(s["xs"], s["ys"]))[year]}
+                          for s in data_series]
+            filled += 1
+            continue
         if sc.get("template") == "bar_race":
             # Cuộc đua: mọi nước trong bảng, trên những mốc năm ai cũng có số
             years = sorted(set.intersection(*[set(s["xs"]) for s in data_series]))
@@ -500,7 +515,8 @@ def design_scenes(idea: dict, scenes: list, cfg: dict) -> list:
             f"\nBẢNG CÓ SỐ THEO NĂM CỦA {len(data_series)} NƯỚC: phải có ĐÚNG MỘT cảnh \"bar_race\""
             " (cuộc đua) gánh 2-3 câu kể diễn biến xếp hạng — chỉ ghi title, unit, source, máy tự"
             " điền số. Có thể thêm \"line_chart\" với \"series\": [{\"label\": \"Việt Nam\"},"
-            " {\"label\": \"Hàn Quốc\"}] (máy tự điền số) để soi riêng hai nước.\n")
+            " {\"label\": \"Hàn Quốc\"}] (máy tự điền số) để soi riêng hai nước, và MỘT cảnh"
+            " \"map\" (bản đồ năm mới nhất, máy tự điền số) cho câu nói về cả khu vực.\n")
     elif data_series:
         names = ", ".join(f'{{"label": "{s["label"]}"}}' for s in data_series)
         data_block += (

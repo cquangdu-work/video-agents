@@ -371,6 +371,95 @@ class BarRace(BrandScene):
         self.wait(max(self.seconds - 0.4 - race_time, 0.1))
 
 
+class AsiaMap(BrandScene):
+    """Bản đồ châu Á tô màu theo số liệu (choropleth) — params:
+    {title, year?, items: [{label, value}], unit, source, decimals}
+    Nước có số: tô từ màu nền phụ (thấp) tới màu nhấn (cao) THEO THỨ HẠNG (một nước vượt trội
+    như Singapore không làm cả bản đồ nhạt đi). Nước không có số: chỉ vẽ viền mờ.
+    Việt Nam và Hàn Quốc: viền màu riêng + nhãn số. Nước quá nhỏ (Singapore): thêm chấm tròn."""
+
+    MAP_W, MAP_H, MAP_CENTER = 8.4, 6.6, (0.0, 0.3)
+
+    def construct(self):
+        from manim import Polygon, interpolate_color, ManimColor, LaggedStart
+        from .geo import code_of, country_box, load_map, projector
+        p, c = self.params, self.b["colors"]
+        self.add_signature(p.get("source"))
+        self.add(self.title_text(p["title"]))
+        dec = p.get("decimals", 0)
+        to_xy = projector(self.MAP_W, self.MAP_H, self.MAP_CENTER)
+        data = {code_of(it["label"]): (it["label"], float(it["value"]))
+                for it in p["items"] if code_of(it["label"])}
+        order = sorted(data, key=lambda k: data[k][1])
+        low, high = ManimColor(c["surface"]), ManimColor(c["accent"])
+        shade = {k: interpolate_color(low, high, 0.15 + 0.85 * r / max(len(order) - 1, 1))
+                 for r, k in enumerate(order)}
+
+        base, fills, marks = VGroup(), [], []
+        for code, country in load_map()["countries"].items():
+            shapes = VGroup(*[Polygon(*[to_xy(lon, lat) for lon, lat in ring[:-1]],
+                                      stroke_color=c["muted"], stroke_width=1.2,
+                                      stroke_opacity=0.55, fill_opacity=0)
+                              for ring in country["rings"]])
+            base.add(shapes)
+            if code in data:
+                fills.append((data[code][1], shapes.copy().set_fill(shade[code], opacity=1)
+                              .set_stroke(c["background"], width=1.2, opacity=1)))
+                box = country_box(code)
+                if (box[2] - box[0]) < 1.0:              # nhỏ quá không thấy: thêm chấm
+                    marks.append(Dot(to_xy((box[0] + box[2]) / 2, (box[1] + box[3]) / 2),
+                                     radius=0.07, color=shade[code]))
+        self.play(FadeIn(base), run_time=0.5)
+        fills.sort(key=lambda f: f[0])                   # tô từ thấp lên cao: mắt theo được thứ hạng
+        fill_time = max(self.seconds * 0.45, 0.6)
+        self.play(LaggedStart(*[FadeIn(g) for _, g in fills], *[FadeIn(m) for m in marks],
+                              lag_ratio=0.25), run_time=fill_time)
+
+        callouts = VGroup()
+        for code, key in (("VNM", "vietnam"), ("KOR", "korea")):
+            if code not in data:
+                continue
+            box = country_box(code)
+            outline = VGroup(*[Polygon(*[to_xy(lon, lat) for lon, lat in ring[:-1]],
+                                       stroke_color=c[key], stroke_width=4, fill_opacity=0)
+                               for ring in load_map()["countries"][code]["rings"]])
+            label, value = data[code]
+            tag = VGroup(Text(label, font=pick_font(), font_size=24, color=c[key], weight="BOLD"),
+                         Text(fmt_num(value, label_decimals(value, dec)), font=pick_font("number"),
+                              font_size=32, color=c[key], weight="BOLD")).arrange(DOWN, buff=0.06)
+            # Nhãn đặt ở vùng biển trống (geo.LABEL_AT), có đường dẫn về nước đó, và luôn nằm
+            # trong khung (bản đầu: nhãn Hàn Quốc tràn mép phải, đè lên Nhật Bản)
+            from .geo import LABEL_AT
+            centre = to_xy((box[0] + box[2]) / 2, (box[1] + box[3]) / 2)
+            if code in LABEL_AT:
+                tag.move_to(to_xy(*LABEL_AT[code]))
+            else:
+                tag.next_to(to_xy(box[2], (box[1] + box[3]) / 2), RIGHT, buff=0.25)
+            overflow = tag.get_right()[0] - 4.3
+            if overflow > 0:
+                tag.shift(LEFT * overflow)
+            lead = Line(tag.get_corner(UP + LEFT) if code == "KOR" else tag.get_left(), centre,
+                        color=c[key], stroke_width=2, buff=0.08)
+            callouts.add(outline, lead, tag)
+
+        legend = VGroup()
+        if order:
+            bar = VGroup(*[Rectangle(width=0.32, height=0.18, stroke_width=0,
+                                     fill_color=interpolate_color(low, high, 0.15 + 0.85 * i / 9),
+                                     fill_opacity=1) for i in range(10)]).arrange(RIGHT, buff=0)
+            lo_v, hi_v = data[order[0]][1], data[order[-1]][1]
+            lo_t = Text(fmt_num(lo_v, label_decimals(lo_v, dec)), font=pick_font("number"),
+                        font_size=24, color=c["text"]).next_to(bar, LEFT, buff=0.15)
+            hi_t = Text(fmt_num(hi_v, label_decimals(hi_v, dec)), font=pick_font("number"),
+                        font_size=24, color=c["text"]).next_to(bar, RIGHT, buff=0.15)
+            caption = " · ".join(x for x in (str(p.get("year") or ""), p.get("unit", "")) if x)
+            cap = Text(caption, font=pick_font(), font_size=24, color=c["muted"])
+            legend = VGroup(VGroup(lo_t, bar, hi_t), cap).arrange(DOWN, buff=0.12)
+            legend.move_to([0, self.MAP_CENTER[1] - self.MAP_H / 2 - 0.55, 0])
+        self.play(FadeIn(callouts), FadeIn(legend), run_time=0.4)
+        self.wait(max(self.seconds - 0.5 - fill_time - 0.4, 0.1))
+
+
 class PercentRing(BrandScene):
     """Vòng tròn tô dần tới X% — params: {title, value (0-100), label?, source, decimals(=0)}
     Dùng cho MỘT tỷ lệ phần trăm; mắt thấy ngay "phần đó to cỡ nào" thay vì chỉ đọc số."""
@@ -411,4 +500,5 @@ TEMPLATES = {
     "line_chart": LineChart,
     "percent": PercentRing,
     "bar_race": BarRace,
+    "map": AsiaMap,
 }

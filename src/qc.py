@@ -119,7 +119,8 @@ def param_digits(params: dict) -> set:
     """Chuỗi chữ số của mọi con số mà cảnh này ĐƯỢC PHÉP vẽ (lấy từ spec của chính nó)."""
     from .utils import digits_of, spec_values
     # số liệu của cảnh + trục năm + số thứ tự của cảnh chữ kiểu 2 — đều do spec bảo vẽ
-    values = spec_values(params) + list(params.get("xs") or []) + [params.get("n")]
+    values = (spec_values(params) + list(params.get("xs") or []) + list(params.get("years") or [])
+              + [params.get("n"), params.get("year")])
     out = set()
     for v in values:
         out |= digits_of(v)

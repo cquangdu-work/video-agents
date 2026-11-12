@@ -267,6 +267,8 @@ def main():
     con = assets_db.init_assets()
     for sc in spec:
         assets_db.record_use(con, sc["template"], final.name)
+        if sc["template"] == "map":                # dữ liệu ranh giới (Natural Earth) cũng là chất liệu
+            assets_db.record_use(con, "asia_map", final.name)
     log.info("BẢN PHÁT HÀNH: %s (%.1fs)", final, ffprobe_duration(final))
     print(final)
 

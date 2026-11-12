@@ -33,6 +33,7 @@ REQUIRED = {
     "line_chart": ["title", "xs"],          # + "ys" (một đường) hoặc "series" (nhiều đường)
     "percent": ["title", "value"],
     "bar_race": ["title", "years", "items"],
+    "map": ["title", "items"],
 }
 STATEMENT_STYLES = 3      # số kiểu bố cục của cảnh chữ (src/render/templates.py)
 
@@ -73,7 +74,7 @@ def validate_spec(raw: list, cfg: dict) -> list:
                             i + 1, params["value"])
                 tpl = sc["template"] = "big_number"
                 params.setdefault("suffix", "%")
-        if tpl in ("big_number", "percent", "versus", "line_chart", "bar_chart", "bar_race"):
+        if tpl in ("big_number", "percent", "versus", "line_chart", "bar_chart", "bar_race", "map"):
             values = spec_values(params)
             need = max((_decimals_for(v) for v in values), default=0)
             if need > int(params.get("decimals") or 0):
@@ -83,6 +84,19 @@ def validate_spec(raw: list, cfg: dict) -> list:
             params["style"] = statements % STATEMENT_STYLES
             params["n"] = statements + 1
             statements += 1
+        if tpl == "map":
+            from .render.geo import code_of
+            good = []
+            for it in params["items"]:
+                try:
+                    if isinstance(it, dict) and code_of(it.get("label")):
+                        good.append({"label": it["label"], "value": float(it["value"])})
+                except (KeyError, TypeError, ValueError):
+                    pass
+            if len(good) < 3:
+                log.warning("Cảnh %d: bản đồ cần >= 3 nước châu Á có số — bỏ", i + 1)
+                continue
+            params["items"] = good
         if tpl == "bar_race":
             years = params["years"]
             good = [it for it in params["items"] if isinstance(it, dict) and it.get("label")
