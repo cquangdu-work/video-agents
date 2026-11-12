@@ -164,7 +164,7 @@ def recent_hooks(con, n: int = 8) -> list:
 def get_script_with_idea(con, script_id: int):
     """Kịch bản + ý tưởng gốc của nó (tiêu đề, góc, nguồn) — agent Đăng bài cần cả hai."""
     row = con.execute(
-        "SELECT s.id, s.idea_id, s.body, s.hooks, s.status AS script_status,"
+        "SELECT s.id, s.idea_id, s.body, s.hooks, s.status AS script_status, s.factcheck,"
         " i.title, i.angle, i.summary, i.source_url, i.source_name"
         " FROM scripts s JOIN ideas i ON i.id = s.idea_id WHERE s.id = ?", (script_id,)
     ).fetchone()

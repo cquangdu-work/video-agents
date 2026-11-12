@@ -190,6 +190,13 @@ def _script_one(crew, idea: dict, source_text: str, cfg: dict, recent_hooks: lis
         fc["standard_problems"] = problems
         log.warning("Kịch bản cho “%s” hụt chuẩn (%s) — giữ ở trạng thái nháp, không dựng",
                     idea["title"][:50], "; ".join(problems))
+    # Nguồn thứ hai (Our World in Data cho số liệu World Bank) — lưu kèm hồ sơ kiểm chứng để Du
+    # xem lúc duyệt; không chặn kịch bản (hai cơ quan thống kê có thể ước tính khác nhau đôi chút)
+    try:
+        from . import second_source
+        fc["second_source"] = second_source.check(idea, second_source.scale_for(idea.get("summary"), cfg))
+    except Exception as exc:
+        log.warning("Kiểm chứng nguồn thứ hai lỗi (bỏ qua): %s", exc)
     return script, fc, "verified" if fc.get("pass") and not problems else "draft"
 
 

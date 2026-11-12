@@ -42,12 +42,15 @@ def load_config() -> dict:
 
 
 # ------------------------------------------------------------- Gửi duyệt
-def format_review_caption(video_id: int, script_id: int, meta: dict, checks: list) -> str:
+def format_review_caption(video_id: int, script_id: int, meta: dict, checks: list,
+                          second_line: str = None) -> str:
     qc_line = " · ".join(f"{'✅' if c['ok'] else '❌'} {c['name']}: {c['value']}" for c in checks)
     lines = [f"🎬 Video #{video_id} chờ duyệt (kịch bản #{script_id})",
              f"📌 {meta['title']}"]
     if qc_line:
         lines += ["", f"Kiểm định: {qc_line}"]
+    if second_line:
+        lines.append(second_line)
     lines += [f"⚠️ {w}" for w in meta.get("warnings", [])]
     lines += ["", "Trả lời (reply) tin này để ghi chú hoặc lý do loại."]
     return "\n".join(lines)
@@ -60,6 +63,21 @@ def send_for_review(script_id: int, force: bool = False, skip_qc: bool = False):
         return _send_for_review(cfg, con, script_id, force, skip_qc)
     finally:
         con.close()      # Windows: kết nối mở giữ khóa file DB
+
+
+def second_source_line(row: dict, cfg: dict):
+    """Dòng "Nguồn 2" cho tin nhắn duyệt: lấy từ hồ sơ kiểm chứng; kịch bản viết trước khi có
+    bước này thì đối chiếu ngay lúc gửi. Lỗi thì bỏ dòng, không chặn việc gửi duyệt."""
+    from . import second_source
+    try:
+        result = (json.loads(row.get("factcheck") or "{}") or {}).get("second_source")
+        if not result:
+            idea = {k: row.get(k) for k in ("summary", "source_name")}
+            result = second_source.check(idea, second_source.scale_for(row.get("summary"), cfg))
+        return second_source.review_line(result)
+    except Exception as exc:
+        log.warning("Không lấy được dòng nguồn thứ hai: %s", exc)
+        return None
 
 
 def music_credit(script_id: int):
@@ -104,7 +122,8 @@ def _send_for_review(cfg, con, script_id, force, skip_qc):
     video_id = db.upsert_video(con, script_id, video_path.relative_to(ROOT).as_posix(),
                                meta["title"], meta["description"], meta["tags"], checks)
     mid = tg.send_video(
-        video_path, format_review_caption(video_id, script_id, meta, checks),
+        video_path, format_review_caption(video_id, script_id, meta, checks,
+                                          second_source_line(row, cfg)),
         buttons=[[("✅ Duyệt đăng", f"ok:{video_id}"), ("❌ Loại", f"no:{video_id}")]])
     if not mid:
         # Trả None (lệnh thoát mã 1) để chuỗi hằng ngày biết là CHƯA tới tay Du và thử lại

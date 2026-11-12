@@ -28,6 +28,7 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `src/db.py` | Kho SQLite (`data/pipeline.db`). Vòng đời ý tưởng: `raw → candidate → selected → scripted → rejected`. Chống lặp bằng URL + độ giống tiêu đề. |
 | `src/crew.py` | 4 agent CrewAI: Săn ý tưởng (ép phải có "góc"), Biên tập (chấm 5 tiêu chí × trọng số), Biên kịch (3 hook + kịch bản theo cảnh), Kiểm chứng (đối chiếu claim với bài nguồn). |
 | `src/story.py` | **Luật kể chuyện** (code, không nhờ LLM): cấm câu mở đầu theo khuôn/câu view ("Đừng…", "Sai lầm…", "Bạn có biết…", từ giật gân), chấm điểm và **chọn câu mở đầu mạnh nhất** trong 3 phương án (phương án bịa số không được chọn), cấm mở giống video gần đây, gọt câu đệm kiểu báo cáo, bắt số viết bằng chữ và chữ Hàn sót, đo chuỗi câu có số đứng liền. |
+| `src/second_source.py` | **Nguồn thứ hai** cho ý tưởng số liệu World Bank: đối chiếu các điểm chính (Việt Nam, Hàn Quốc, nơi cao nhất/thấp nhất) với Our World in Data — chỉ những chuỗi có gốc khác World Bank (Liên Hợp Quốc, UN IGME, FAO). Kết quả hiện ở dòng "Nguồn 2" trong tin nhắn duyệt; không chặn video. Bài báo chưa có nguồn thứ hai tự động: tìm kiếm web qua Gemini cần project trả phí. |
 | `src/page_text.py` | Tải toàn văn bài nguồn: Biên kịch lấy số liệu từ đó, Kiểm chứng đối chiếu lại. |
 | `src/produce.py` | **Agent Sản xuất**: kịch bản → spec cảnh (`data/specs/script_<id>.yaml`). Cửa kiểm spec: bỏ cảnh hỏng, không làm tròn mất số lẻ, xoay vòng kiểu cảnh chữ. |
 | `src/render/` | Engine Manim: `templates.py` là kho mẫu hình (số lớn, so găng, thanh ngang, **cuộc đua số liệu** — thanh ngang đổi chỗ qua các năm, **bản đồ châu Á** tô màu theo số liệu, đường xu hướng một hoặc nhiều đường — Việt Nam đỏ, Hàn Quốc xanh, vòng phần trăm, cảnh chữ 3 kiểu), `geo.py` đọc bản đồ và chiếu toạ độ, `base.py` là bộ nhận diện chung, `engine.py` dựng và nối cảnh. Biểu đồ đường, cuộc đua và bản đồ lấy số **thẳng từ bảng gốc** của ý tưởng, model chỉ chọn vẽ gì. |
@@ -52,7 +53,7 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `src/utils.py` | Chuẩn hóa tiêu đề, đo độ giống (Jaccard), móc JSON từ câu trả lời LLM. |
 
 ## Giới hạn hiện tại (sẽ nâng ở bước sau)
-- Kiểm chứng mới đối chiếu **1 nguồn** (bài gốc); thiết kế yêu cầu 2 nguồn độc lập → cần thêm search API.
+- Kiểm chứng 2 nguồn: số liệu World Bank đã có nguồn thứ hai (Our World in Data) cho 6 chỉ số; bài báo và các chỉ số còn lại mới có 1 nguồn — tìm kiếm web qua Gemini (Grounding with Google Search) không có ở gói miễn phí (đo 12/11/2026).
 - Đã có World Bank (25 chỉ số Việt–Hàn) và KOSIS (2 bảng của Bộ Tư pháp Hàn Quốc; thêm bảng: sửa
   `sources.kosis.tables` trong `config/channel.yaml`). Số liệu KOSIS chia theo quốc tịch chỉ có từ 2022.
 - Bản đồ có hai khung: châu Á và thế giới. Chưa có bản đồ một nước theo tỉnh (ví dụ 63 tỉnh Việt Nam).
