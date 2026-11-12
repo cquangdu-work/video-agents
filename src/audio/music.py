@@ -112,10 +112,13 @@ def mix_filter(duration: float, gain_db: float = -20.0, fade_in: float = 1.0,
     Kết quả: [aout] = giọng + nhạc đã hạ thấp và tự nhỏ khi có giọng, chuẩn -16 LUFS."""
     d = f"{duration:.3f}"
     out_start = max(duration - fade_out, 0.0)
+    # Ép giọng (mono 24 kHz) và nhạc (thường stereo 44,1 kHz) về cùng một định dạng: ffmpeg 4.4
+    # trên VM không tự thống nhất được cho sidechaincompress ("could not choose their formats").
+    same = "aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo"
     return (
-        f"[2:a]atrim=0:{d},asetpts=N/SR/TB,aresample=48000,volume={gain_db}dB,"
+        f"[2:a]atrim=0:{d},asetpts=N/SR/TB,{same},volume={gain_db}dB,"
         f"afade=t=in:st=0:d={fade_in},afade=t=out:st={out_start:.3f}:d={fade_out}[m];"
-        f"[1:a]aresample=48000,asplit=2[v][key];"
+        f"[1:a]{same},asplit=2[v][key];"
         # có giọng -> nhạc bị nén mạnh (tự nhỏ đi); hết giọng -> nhạc nhích lên trong 0,4 giây
         f"[m][key]sidechaincompress=threshold=0.02:ratio=8:attack=20:release=400[duck];"
         f"[v][duck]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
