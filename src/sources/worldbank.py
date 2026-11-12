@@ -12,15 +12,17 @@ Mỗi ngày chỉ đưa vào `per_day` chỉ số, xoay vòng theo ngày, để 
 ngập bởi một loại nội dung. Chỉ số đã vào kho rồi thì DB tự bỏ qua (trùng URL).
 """
 import logging
-import re
 import time
 from datetime import date
 
 import requests
 
+from .datatable import (WB_SOURCE, lower_first, parse_series, parse_vn_number,  # noqa: F401
+                        race_lines, race_years, ranking, spoken_scale, vn_number)
+
 log = logging.getLogger(__name__)
 
-SOURCE_NAME = "World Bank Open Data"     # src/main.py nhận ra tên này: tóm tắt CHÍNH LÀ nguồn
+SOURCE_NAME = WB_SOURCE                  # datatable.is_data_source() nhận ra tên này
 API = "https://api.worldbank.org/v2/country/{countries}/indicator/{code}"
 PAGE = "https://data.worldbank.org/indicator/{code}?locations={locs}&end={end}"
 HEADERS = {"User-Agent": "video-agents-pipeline/0.1"}
@@ -28,24 +30,6 @@ HEADERS = {"User-Agent": "video-agents-pipeline/0.1"}
 # lưu đệm — gọi lại sau ~20 giây là trả trong 0,1 giây. Nên lần đầu chỉ là "đánh thức".
 TIMEOUTS = (20, 60, 60)      # giây chờ của từng lần gọi
 RETRY_PAUSE = 25             # giây nghỉ giữa hai lần gọi
-
-
-def vn_number(x: float) -> str:
-    """Viết số kiểu Việt Nam, làm tròn vừa đủ để ĐỌC được: 36226.97 -> '36.227',
-    83.74 -> '83,7', 0.721 -> '0,72'. Biên kịch chép nguyên dạng này vào lời đọc nên
-    cổng chống bịa số khớp được từng chữ số."""
-    a = abs(x)
-    decimals = 0 if a >= 100 else 1 if a >= 10 else 2
-    s = f"{x:,.{decimals}f}"
-    return s.replace(",", " ").replace(".", ",").replace(" ", ".")
-
-
-def spoken_scale(x: float) -> str:
-    """Số rất lớn kèm cách nói gọn: 100987686 -> ' (khoảng 101,0 triệu)'. Nhỏ thì rỗng."""
-    for size, word in ((1e12, "nghìn tỷ"), (1e9, "tỷ"), (1e6, "triệu")):
-        if abs(x) >= size:
-            return f" (khoảng {vn_number(x / size)} {word})"
-    return ""
 
 
 def fetch_indicator(ind: dict, countries: list, default_start: int) -> dict:
@@ -146,21 +130,6 @@ def build_item(ind: dict, countries: list, series: dict):
     }
 
 
-def race_years(series: dict, step: int = 5) -> list:
-    """Các mốc năm cho cuộc đua: những năm MỌI nước đều có số, lấy cách nhau `step` năm,
-    luôn kèm năm đầu và năm cuối."""
-    common = set.intersection(*[{y for y, _ in s} for s in series.values()]) if series else set()
-    if not common:
-        return []
-    first, last = min(common), max(common)
-    return sorted(y for y in common if y in (first, last) or y % step == 0)
-
-
-def ranking(values: dict) -> list:
-    """{tên nước: giá trị} -> danh sách tên nước xếp từ cao xuống thấp."""
-    return [name for name, _ in sorted(values.items(), key=lambda kv: -kv[1])]
-
-
 def build_race_item(ind: dict, countries: list, series: dict, focus: list, step: int = 5):
     """Một chỉ số + số liệu nhiều nước -> ý tưởng "cuộc đua" (thanh ngang đổi chỗ qua các năm).
     countries: [{"iso3", "iso2", "name"}, ...]; focus: mã iso3 các nước cần kể kỹ (Việt Nam, Hàn Quốc).
@@ -170,73 +139,21 @@ def build_race_item(ind: dict, countries: list, series: dict, focus: list, step:
     years = race_years(series, step)
     if len(series) < 3 or len(years) < 4:
         return None
-    at = {c: dict(s) for c, s in series.items()}                 # {mã: {năm: giá trị}}
     y0, y1 = years[0], years[-1]
-    first = ranking({names[c]: at[c][y0] for c in series})
-    last = ranking({names[c]: at[c][y1] for c in series})
     unit = ind.get("unit", "")
-    rank_line = lambda y, order: f"Xếp hạng năm {y}: " + "; ".join(
-        f"{k + 1}. {n} {vn_number(at[next(c for c in series if names[c] == n)][y])}"
-        for k, n in enumerate(order)) + "."
+    named = {names[c]: series[c] for c in series}
     lines = [f"Chỉ số: {ind['name']} ({unit}). Nguồn: World Bank Open Data, mã {ind['code']}."
-             f" Cuộc đua giữa {len(series)} nền kinh tế châu Á, từ {y0} đến {y1}.",
-             rank_line(y0, first), rank_line(y1, last)]
-    for code in focus:
-        if code not in series:
-            continue
-        n = names[code]
-        r0, r1 = first.index(n) + 1, last.index(n) + 1
-        passed = [m for m in first[:r0 - 1] if last.index(m) > r1 - 1]       # trước ở trên, sau ở dưới
-        lost = [m for m in first[r0:] if last.index(m) < r1 - 1]             # trước ở dưới, sau ở trên
-        line = f"{n}: hạng {r0} năm {y0}, hạng {r1} năm {y1}"
-        if passed:
-            line += " — vượt " + ", ".join(passed)
-        if lost:
-            line += ("; " if passed else " — ") + "bị vượt bởi " + ", ".join(lost)
-        lines.append(line + ".")
-    for code in sorted(series, key=lambda c: -at[c][y1]):
-        lines.append(f"{names[code]} theo năm: "
-                     + "; ".join(f"{y}: {vn_number(at[code][y])}" for y in years) + ".")
+             f" Cuộc đua giữa {len(series)} nền kinh tế châu Á, từ {y0} đến {y1}."]
+    lines += race_lines(named, years, [names[c] for c in focus if c in series])
     locs = "-".join(c["iso2"] for c in countries if c["iso3"] in series)
-    name = ind["name"]
-    first_word = name.split()[0] if name.split() else ""
-    if not (len(first_word) > 1 and first_word.isupper()):     # "GDP ..." giữ nguyên, "Tỷ lệ" -> "tỷ lệ"
-        name = name[:1].lower() + name[1:]
     return {
-        "title": f"Cuộc đua {name}: {len(series)} nền kinh tế châu Á từ {y0} đến {y1}",
+        "title": f"Cuộc đua {lower_first(ind['name'])}: {len(series)} nền kinh tế châu Á"
+                 f" từ {y0} đến {y1}",
         "summary": "\n".join(lines),
         "url": PAGE.format(code=ind["code"], locs=locs, end=y1),
         "source": SOURCE_NAME,
         "lang": "vi",
     }
-
-
-def parse_vn_number(s: str) -> float:
-    """Ngược lại vn_number: '36.227' -> 36227, '98,9' -> 98.9, '0,75' -> 0.75."""
-    return float(s.replace(".", "").replace(",", "."))
-
-
-def parse_series(summary: str) -> list:
-    """Đọc lại các dòng "<Nước> theo năm: 1990: 98,9; 1995: 159; ..." mà build_item viết
-    -> [{"label": "Việt Nam", "xs": [1990, 1995, ...], "ys": [98.9, 159, ...]}, ...].
-
-    Để biểu đồ đường lấy số THẲNG từ bảng gốc: model nhỏ chép chuỗi 8-10 con số hay chép
-    sai/bịa (ca thật 12/11: tự chế 11.500 và 11.800 kWh cho Hàn Quốc ba lần liền).
-    """
-    out = []
-    for line in str(summary or "").splitlines():
-        m = re.match(r"\s*(.+?) theo năm:\s*(.+?)\.?\s*$", line)
-        if not m:
-            continue
-        xs, ys = [], []
-        for pair in m.group(2).split(";"):
-            pm = re.match(r"\s*((?:19|20)\d{2}):\s*([\d.,]+)\s*$", pair)
-            if pm:
-                xs.append(int(pm.group(1)))
-                ys.append(parse_vn_number(pm.group(2)))
-        if len(xs) >= 2:
-            out.append({"label": m.group(1).strip(), "xs": xs, "ys": ys})
-    return out
 
 
 def todays_indicators(indicators: list, per_day: int, today: date = None) -> list:

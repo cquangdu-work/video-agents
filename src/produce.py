@@ -47,96 +47,121 @@ def _decimals_for(value) -> int:
     return min(len(frac), 2)
 
 
+def _check_scene(i: int, sc: dict):
+    """Kiểm và tự sửa MỘT cảnh. Trả về cảnh đã sửa, hoặc None nếu cảnh hỏng không cứu được."""
+    tpl, params = sc.get("template"), sc.get("params", {})
+    if tpl not in REQUIRED:
+        log.warning("Cảnh %d: template lạ '%s' — bỏ", i + 1, tpl)
+        return None
+    missing = [k for k in REQUIRED[tpl] if k not in params]
+    if missing:
+        log.warning("Cảnh %d (%s): thiếu %s — bỏ", i + 1, tpl, missing)
+        return None
+    if tpl == "percent":
+        try:
+            in_range = 0 <= float(params["value"]) <= 100
+        except (TypeError, ValueError):
+            in_range = False
+        if not in_range:      # "tăng 250%" không vẽ được bằng vòng tròn -> số lớn
+            log.warning("Cảnh %d: percent=%s ngoài 0-100 — đổi sang big_number",
+                        i + 1, params["value"])
+            tpl = sc["template"] = "big_number"
+            params.setdefault("suffix", "%")
+    if tpl in ("big_number", "percent", "versus", "line_chart", "bar_chart", "bar_race", "map"):
+        values = spec_values(params)
+        need = max((_decimals_for(v) for v in values), default=0)
+        if need > int(params.get("decimals") or 0):
+            params["decimals"] = need       # tỷ suất sinh 0,75 từng hiện thành "1"
+    if tpl == "map":
+        from .render.geo import code_of
+        good = []
+        for it in params["items"]:
+            try:
+                if isinstance(it, dict) and code_of(it.get("label")):
+                    good.append({"label": it["label"], "value": float(it["value"])})
+            except (KeyError, TypeError, ValueError):
+                pass
+        if len(good) < 3:
+            log.warning("Cảnh %d: bản đồ cần >= 3 nước châu Á có số — bỏ", i + 1)
+            return None
+        params["items"] = good
+    if tpl == "bar_race":
+        years = params["years"]
+        good = [it for it in params["items"] if isinstance(it, dict) and it.get("label")
+                and isinstance(it.get("values"), list) and len(it["values"]) == len(years)]
+        if len(good) < 3 or len(years) < 2 or any(b <= a for a, b in zip(years, years[1:])):
+            log.warning("Cảnh %d: cuộc đua cần >= 3 nước đủ số liệu và năm tăng dần — bỏ", i + 1)
+            return None
+        params["items"] = good[:10]                     # khung dọc vừa tối đa 10 thanh
+    if tpl == "line_chart":
+        xs = params["xs"]
+        if params.get("series"):
+            # Đường nào thiếu/thừa điểm so với trục năm (của chính nó, hoặc trục chung)
+            # thì bỏ đường đó, không bỏ cả cảnh
+            good = [s for s in params["series"] if isinstance(s, dict)
+                    and isinstance(s.get("ys"), list)
+                    and len(s["ys"]) == len(s.get("xs") or xs) >= 2]
+            if len(good) < len(params["series"]):
+                log.warning("Cảnh %d: bỏ %d đường lệch độ dài với xs", i + 1,
+                            len(params["series"]) - len(good))
+            if not good:
+                return None
+            params["series"] = good
+            params.pop("ys", None)
+        elif not isinstance(params.get("ys"), list) or len(xs) != len(params["ys"]):
+            log.warning("Cảnh %d: xs/ys lệch độ dài — bỏ", i + 1)
+            return None
+        if len(xs) < 2 and not params.get("series"):
+            log.warning("Cảnh %d: biểu đồ đường cần ít nhất 2 mốc — bỏ", i + 1)
+            return None
+        if any(any(b <= a for a, b in zip(s["xs"], s["xs"][1:]))
+               for s in params.get("series") or [] if s.get("xs")):
+            log.warning("Cảnh %d: trục năm riêng của một đường không tăng dần — bỏ", i + 1)
+            return None
+        if any(b <= a for a, b in zip(xs, xs[1:])):
+            # LLM hay dùng số tháng vắt qua năm (12,1,2...) -> trục x loạn.
+            # Đổi thành chỉ số mốc 1..n cho đường vẽ đúng chiều thời gian.
+            params["xs"] = list(range(1, len(xs) + 1))
+            log.warning("Cảnh %d: xs không tăng dần — thay bằng mốc 1..%d", i + 1, len(xs))
+    return sc
+
+
+def fallback_statement(sc: dict):
+    """Cảnh hỏng nhưng có lời đọc -> cảnh chữ GIỮ NGUYÊN lời. Bỏ hẳn cảnh thì câu lời của nó
+    biến mất khỏi video (người xem nghe hụt một ý). Không có lời đọc thì trả None (bỏ được)."""
+    voice = " ".join(str(sc.get("voice") or "").split())
+    if not voice:
+        return None
+    p = sc.get("params") if isinstance(sc.get("params"), dict) else {}
+    text = str(p.get("title") or p.get("text") or " ".join(voice.split()[:12]))
+    return {"template": "statement", "seconds": sc.get("seconds", 3), "voice": sc.get("voice"),
+            "params": {"text": text, "source": p.get("source", "")}}
+
+
 def validate_spec(raw: list, cfg: dict) -> list:
-    """Loại cảnh hỏng, kẹp thời lượng về nhịp 2-4s, tự thêm intro đầu video.
+    """Kiểm từng cảnh, kẹp thời lượng về nhịp 2-4s, tự thêm intro đầu video.
     Tự sửa những thứ LLM hay quên: số lẻ thiếu 'decimals' (38.4 hiện thành 38),
-    'percent' ngoài 0-100, và xoay vòng kiểu bố cục của các cảnh chữ."""
+    'percent' ngoài 0-100, và xoay vòng kiểu bố cục của các cảnh chữ. Cảnh hỏng không cứu
+    được: có lời đọc thì thành cảnh chữ giữ lời, không có lời thì bỏ."""
     pacing = cfg.get("pacing", {"scene_seconds_min": 2, "scene_seconds_max": 4})
     lo, hi = pacing["scene_seconds_min"], pacing["scene_seconds_max"]
     ok = [{"template": "intro", "seconds": 1.2, "params": {}}]
     statements = 0
     for i, sc in enumerate(raw):
-        tpl, params = sc.get("template"), sc.get("params", {})
-        if tpl not in REQUIRED:
-            log.warning("Cảnh %d: template lạ '%s' — bỏ", i + 1, tpl)
-            continue
-        missing = [k for k in REQUIRED[tpl] if k not in params]
-        if missing:
-            log.warning("Cảnh %d (%s): thiếu %s — bỏ", i + 1, tpl, missing)
-            continue
-        if tpl == "percent":
-            try:
-                in_range = 0 <= float(params["value"]) <= 100
-            except (TypeError, ValueError):
-                in_range = False
-            if not in_range:      # "tăng 250%" không vẽ được bằng vòng tròn -> số lớn
-                log.warning("Cảnh %d: percent=%s ngoài 0-100 — đổi sang big_number",
-                            i + 1, params["value"])
-                tpl = sc["template"] = "big_number"
-                params.setdefault("suffix", "%")
-        if tpl in ("big_number", "percent", "versus", "line_chart", "bar_chart", "bar_race", "map"):
-            values = spec_values(params)
-            need = max((_decimals_for(v) for v in values), default=0)
-            if need > int(params.get("decimals") or 0):
-                params["decimals"] = need       # tỷ suất sinh 0,75 từng hiện thành "1"
-        if tpl == "statement":
+        good = _check_scene(i, sc)
+        if good is None:
+            good = fallback_statement(sc)
+            if good is None:
+                continue
+            log.warning("Cảnh %d hỏng nhưng có lời đọc — đổi thành cảnh chữ, giữ lời", i + 1)
+        params = good.setdefault("params", {})
+        if good["template"] == "statement":
             # xoay vòng 3 kiểu bố cục để hai cảnh chữ liền nhau không giống hệt nhau
             params["style"] = statements % STATEMENT_STYLES
             params["n"] = statements + 1
             statements += 1
-        if tpl == "map":
-            from .render.geo import code_of
-            good = []
-            for it in params["items"]:
-                try:
-                    if isinstance(it, dict) and code_of(it.get("label")):
-                        good.append({"label": it["label"], "value": float(it["value"])})
-                except (KeyError, TypeError, ValueError):
-                    pass
-            if len(good) < 3:
-                log.warning("Cảnh %d: bản đồ cần >= 3 nước châu Á có số — bỏ", i + 1)
-                continue
-            params["items"] = good
-        if tpl == "bar_race":
-            years = params["years"]
-            good = [it for it in params["items"] if isinstance(it, dict) and it.get("label")
-                    and isinstance(it.get("values"), list) and len(it["values"]) == len(years)]
-            if len(good) < 3 or len(years) < 2 or any(b <= a for a, b in zip(years, years[1:])):
-                log.warning("Cảnh %d: cuộc đua cần >= 3 nước đủ số liệu và năm tăng dần — bỏ", i + 1)
-                continue
-            params["items"] = good[:10]                     # khung dọc vừa tối đa 10 thanh
-        if tpl == "line_chart":
-            xs = params["xs"]
-            if params.get("series"):
-                # Đường nào thiếu/thừa điểm so với trục năm (của chính nó, hoặc trục chung)
-                # thì bỏ đường đó, không bỏ cả cảnh
-                good = [s for s in params["series"] if isinstance(s, dict)
-                        and isinstance(s.get("ys"), list)
-                        and len(s["ys"]) == len(s.get("xs") or xs) >= 2]
-                if len(good) < len(params["series"]):
-                    log.warning("Cảnh %d: bỏ %d đường lệch độ dài với xs", i + 1,
-                                len(params["series"]) - len(good))
-                if not good:
-                    continue
-                params["series"] = good
-                params.pop("ys", None)
-            elif not isinstance(params.get("ys"), list) or len(xs) != len(params["ys"]):
-                log.warning("Cảnh %d: xs/ys lệch độ dài — bỏ", i + 1)
-                continue
-            if len(xs) < 2 and not params.get("series"):
-                log.warning("Cảnh %d: biểu đồ đường cần ít nhất 2 mốc — bỏ", i + 1)
-                continue
-            if any(any(b <= a for a, b in zip(s["xs"], s["xs"][1:]))
-                   for s in params.get("series") or [] if s.get("xs")):
-                log.warning("Cảnh %d: trục năm riêng của một đường không tăng dần — bỏ", i + 1)
-                continue
-            if any(b <= a for a, b in zip(xs, xs[1:])):
-                # LLM hay dùng số tháng vắt qua năm (12,1,2...) -> trục x loạn.
-                # Đổi thành chỉ số mốc 1..n cho đường vẽ đúng chiều thời gian.
-                params["xs"] = list(range(1, len(xs) + 1))
-                log.warning("Cảnh %d: xs không tăng dần — thay bằng mốc 1..%d", i + 1, len(xs))
-        sc["seconds"] = max(lo, min(hi, float(sc.get("seconds", 3))))
-        ok.append(sc)
+        good["seconds"] = max(lo, min(hi, float(good.get("seconds", 3))))
+        ok.append(good)
     return ok
 
 

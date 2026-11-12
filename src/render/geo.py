@@ -19,6 +19,8 @@ VI_TO_CODE = {
     "bangladesh": "BGD", "pakistan": "PAK", "mông cổ": "MNG", "triều tiên": "PRK",
     "đài loan": "TWN", "sri lanka": "LKA", "nepal": "NPL", "brunei": "BRN",
     "timor-leste": "TLS", "đông timor": "TLS", "bhutan": "BTN",
+    "uzbekistan": "UZB", "kazakhstan": "KAZ", "kyrgyzstan": "KGZ", "tajikistan": "TJK",
+    "turkmenistan": "TKM", "afghanistan": "AFG",
 }
 
 

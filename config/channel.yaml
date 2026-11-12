@@ -102,6 +102,19 @@ sources:
         - {code: SP.URB.TOTL.IN.ZS, name: "Tỷ lệ dân số sống ở thành thị",    unit: "%"}
         - {code: NE.EXP.GNFS.ZS,    name: "Xuất khẩu so với GDP",             unit: "% GDP"}
 
+  # KOSIS — cổng thống kê quốc gia Hàn Quốc (cần KOSIS_API_KEY trong .env, không có thì bỏ qua).
+  # Mỗi ngày đưa vào `per_day` bảng, xoay vòng. kind: nationality_race | vietnam_by_category
+  # (src/sources/kosis.py). Tra bảng mới: kosis.kr -> tìm, lấy orgId/tblId trên trang bảng.
+  kosis:
+    per_day: 1
+    tables:
+      - {kind: nationality_race, org: "111", tbl: DT_1B040A7, start: 2010, top: 10,
+         org_name: "Bộ Tư pháp Hàn Quốc", unit: "người", focus: ["Việt Nam"],
+         name: "Người nước ngoài đăng ký cư trú tại Hàn Quốc"}
+      - {kind: vietnam_by_category, org: "111", tbl: DT_1B040A5A, start: 2013, top: 8,
+         org_name: "Bộ Tư pháp Hàn Quốc", unit: "người",
+         name: "Người Việt Nam cư trú tại Hàn Quốc theo loại visa"}
+
   # Reddit chặn đường JSON công khai (403) với nhiều IP, nhất là IP đám mây của VM;
   # src/sources/reddit.py tự chuyển sang đường RSS (vẫn vào được, không cần key).
   reddit:

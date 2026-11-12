@@ -154,8 +154,8 @@ def source_text_for(idea: dict, fetch) -> str:
     trang web của nó là ứng dụng JavaScript không có số trong HTML -> dùng tóm tắt.
     Các nguồn khác: tải toàn văn bài báo.
     """
-    from .sources.worldbank import SOURCE_NAME as DATA_SOURCE
-    if idea.get("source_name") == DATA_SOURCE:
+    from .sources.datatable import is_data_source
+    if is_data_source(idea.get("source_name")):       # World Bank, KOSIS...
         return idea.get("summary") or ""
     return fetch(idea["source_url"])
 

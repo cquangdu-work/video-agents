@@ -80,7 +80,8 @@ Python, CrewAI (điều phối agent), cron/systemd timer (lịch chạy), bot T
 - **Xong (12/11):** nguồn World Bank (25 chỉ số Việt–Hàn, xoay vòng 2 chỉ số/ngày) + biểu đồ đường hai nước trên cùng trục, số liệu do code chép từ bảng gốc. Video đầu tiên dạng này (kịch bản #17, điện tiêu thụ) đã dựng xong trên VM, đạt Kiểm định, chờ lượt 06:00 ngày 13/11 gửi duyệt.
 - **Xong (12/11, chiều):** "cuộc đua số liệu" (`bar_race`) 10 nền kinh tế châu Á từ World Bank, số do code điền từ bảng. Hai video đã dựng sẵn trên VM, đạt Kiểm định, xếp hàng gửi duyệt: #18 (cuộc đua GDP đầu người) sáng 13/11, #17 (điện tiêu thụ Việt–Hàn) sáng 14/11. Cả hai đi tắt (bỏ qua Săn ý tưởng/Biên tập nên điểm = 0).
 - **Xong (12/11):** mẫu bản đồ châu Á (`map`, choropleth từ Natural Earth), tự dùng cho ý tưởng có bảng từ 3 nước.
-- **Chưa làm:** TikTok (cần Du đăng ký tài khoản developer); nhạc nền; Kiểm chứng 2 nguồn độc lập (cần search API); KOSIS (cần key); bản đồ ngoài châu Á.
+- **Xong (12/11):** nguồn KOSIS (`src/sources/kosis.py`, key đã có trong `.env` laptop + VM): người nước ngoài ở Hàn theo quốc tịch (cuộc đua) và người Việt ở Hàn theo loại visa. Cảnh hỏng có lời đọc giờ thành cảnh chữ giữ lời thay vì bị bỏ.
+- **Chưa làm:** TikTok (cần Du đăng ký tài khoản developer); nhạc nền; Kiểm chứng 2 nguồn độc lập (cần search API); bản đồ ngoài châu Á.
 
 ## Những điều đã đo/đã học khi chạy thật (đừng làm lại từ đầu)
 - **Quota TTS free tier ~15 lần gọi/ngày mỗi model**, hồi lúc nửa đêm giờ Thái Bình Dương (16–17h giờ Hàn). Vì vậy giọng được đọc **cả bài trong một lần gọi** rồi tự cắt theo câu (`src/audio/batch.py`); đừng quay về đọc từng câu.

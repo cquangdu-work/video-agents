@@ -299,8 +299,8 @@ def write_script(idea: dict, cfg: dict, feedback: str = None, source_text: str =
     """
     ch = cfg["channel"]
     lo_words, hi_words = word_budget(cfg)
-    from .sources.worldbank import SOURCE_NAME as DATA_SOURCE
-    data_story = DATA_STORY if idea.get("source_name") == DATA_SOURCE else ""
+    from .sources.datatable import is_data_source
+    data_story = DATA_STORY if is_data_source(idea.get("source_name")) else ""
     excerpt = (source_text or "").strip()[:5000]
     source_block = (f"\nTRÍCH BÀI NGUỒN (mọi con số trong kịch bản phải lấy từ đây hoặc từ tóm tắt"
                     f" bên trên, tuyệt đối không tự nghĩ ra):\n\"\"\"\n{excerpt}\n\"\"\"\n"
@@ -511,13 +511,22 @@ def design_scenes(idea: dict, scenes: list, cfg: dict) -> list:
     data_block = (f"\nDỮ LIỆU NGUỒN (số thật, ĐƯỢC dùng cho biểu đồ kể cả khi lời đọc không nhắc"
                   f" hết):\n\"\"\"\n{source_data}\n\"\"\"\n" if source_data else "")
     if len(data_series) >= 3:
+        from .render.geo import code_of
+        labels = [s["label"] for s in data_series]
+        pair = ([l for l in labels if l.lower() in FOCUS_LABELS] or labels)[:2]
+        pair_json = ", ".join(f'{{"label": "{l}"}}' for l in pair)
         data_block += (
-            f"\nBẢNG CÓ SỐ THEO NĂM CỦA {len(data_series)} NƯỚC: phải có ĐÚNG MỘT cảnh \"bar_race\""
-            " (cuộc đua) gánh 2-3 câu kể diễn biến xếp hạng — chỉ ghi title, unit, source, máy tự"
-            " điền số. Có thể thêm \"line_chart\" với \"series\": [{\"label\": \"Việt Nam\"},"
-            " {\"label\": \"Hàn Quốc\"}] (máy tự điền số) để soi riêng hai nước. NÊN có thêm MỘT"
-            " cảnh \"map\" (bản đồ châu Á năm mới nhất, máy tự điền số) cho câu nói về bức tranh"
-            " cả khu vực hiện nay — bản đồ là chất liệu đặc trưng của kênh.\n")
+            f"\nBẢNG CÓ SỐ THEO NĂM CỦA {len(data_series)} NHÓM ({', '.join(labels[:10])}): phải có"
+            " ĐÚNG MỘT cảnh \"bar_race\" (cuộc đua) gánh 2-3 câu kể diễn biến xếp hạng — chỉ ghi"
+            " title, unit, source, máy tự điền số. Có thể thêm \"line_chart\" với \"series\":"
+            f" [{pair_json}] (máy tự điền số) để soi riêng vài nhóm.")
+        # Bản đồ chỉ khi các nhóm là NƯỚC vẽ được (bảng visa thì không): cảnh bản đồ hỏng bị
+        # cửa kiểm spec đổi thành cảnh chữ — đừng gợi ý thứ sẽ hỏng
+        if sum(1 for l in labels if code_of(l)) >= 3:
+            data_block += (" NÊN có thêm MỘT cảnh \"map\" (bản đồ châu Á năm mới nhất, máy tự điền"
+                           " số) cho câu nói về bức tranh cả khu vực — bản đồ là chất liệu đặc trưng"
+                           " của kênh.")
+        data_block += "\n"
     elif data_series:
         names = ", ".join(f'{{"label": "{s["label"]}"}}' for s in data_series)
         data_block += (

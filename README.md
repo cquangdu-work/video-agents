@@ -22,6 +22,8 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `src/main.py` | Nhạc trưởng: gọi lần lượt các bước, có cờ `--dry-run`. |
 | `src/sources/` | Lấy ý tưởng thô: RSS (OWID, ScienceDaily, Hankyoreh, Donga...), arXiv API, Reddit (JSON, bị chặn thì tự sang RSS) — đều **không cần API key**. Nguồn chết thì bỏ qua, không sập pipeline. |
 | `src/sources/worldbank.py` | Kho dữ liệu mở World Bank, không cần key. Hai dạng ý tưởng: "Việt Nam – Hàn Quốc qua một con số" (25 chỉ số, kèm góc "Việt Nam hôm nay bằng Hàn Quốc năm nào") và "cuộc đua" 10 nền kinh tế châu Á (7 chỉ số, kèm xếp hạng và "ai vượt ai" tính sẵn). Tóm tắt chính là bảng số liệu thật. |
+| `src/sources/kosis.py` | KOSIS — thống kê quốc gia Hàn Quốc (cần `KOSIS_API_KEY`). Hai dạng ý tưởng: cuộc đua các cộng đồng người nước ngoài ở Hàn theo quốc tịch, và người Việt ở Hàn theo loại visa. Tự đọc cấu trúc bảng (không mã hoá cứng mã phân loại); ghi chú sẵn những chỗ dễ kể sai (KOSIS tách "Trung Quốc" và "Trung Quốc gốc Hàn"). |
+| `src/sources/datatable.py` | Hàm dùng chung cho nguồn dạng bảng: viết số kiểu Việt, xếp hạng "ai vượt ai", khuôn dòng "<Tên> theo năm: ..." mà biểu đồ đọc ngược lại được. |
 | `src/sources/youtube_check.py` | Lớp chống trùng 2: tìm bằng từ khóa tiếng Việt do Săn ý tưởng viết, chỉ đếm video view cao **cùng đề tài** (tiêu đề chứa phần lớn từ khóa đặc trưng). Cần `YOUTUBE_API_KEY`, chưa có thì tự bỏ qua. |
 | `src/db.py` | Kho SQLite (`data/pipeline.db`). Vòng đời ý tưởng: `raw → candidate → selected → scripted → rejected`. Chống lặp bằng URL + độ giống tiêu đề. |
 | `src/crew.py` | 4 agent CrewAI: Săn ý tưởng (ép phải có "góc"), Biên tập (chấm 5 tiêu chí × trọng số), Biên kịch (3 hook + kịch bản theo cảnh), Kiểm chứng (đối chiếu claim với bài nguồn). |
@@ -48,7 +50,8 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 
 ## Giới hạn hiện tại (sẽ nâng ở bước sau)
 - Kiểm chứng mới đối chiếu **1 nguồn** (bài gốc); thiết kế yêu cầu 2 nguồn độc lập → cần thêm search API.
-- Đã có World Bank (25 chỉ số Việt–Hàn); chưa có KOSIS (thống kê Hàn Quốc, cần đăng ký key).
+- Đã có World Bank (25 chỉ số Việt–Hàn) và KOSIS (2 bảng của Bộ Tư pháp Hàn Quốc; thêm bảng: sửa
+  `sources.kosis.tables` trong `config/channel.yaml`). Số liệu KOSIS chia theo quốc tịch chỉ có từ 2022.
 - Bản đồ mới có khung châu Á (đủ cho dữ liệu Việt–Hàn và "cuộc đua"); nhạc nền chờ Du tải file vào `assets/music/`.
 - API World Bank treo ở lần gọi đầu của mỗi truy vấn mới (máy chủ tính xong ở phía sau rồi lưu đệm):
   code gọi "đánh thức" rồi gọi lại, nên mỗi chỉ số mới có thể mất 1–2 phút.
