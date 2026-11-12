@@ -112,6 +112,26 @@ vì chưa audit) thì báo Du vào Studio bấm Công khai.
    https://support.google.com/youtube/contact/yt_api_form (mất vài tuần, cần mô tả app + chính sách
    riêng tư). Audit xong thì video tự công khai theo giờ hẹn.
 
+### Đẩy lên TikTok (bản nháp vào hộp thư)
+
+Sau khi Du bấm ✅, ngoài YouTube bot còn đẩy video vào **hộp thư TikTok** (`src/publish/tiktok.py`,
+Content Posting API, quyền `video.upload`) và gửi chú thích chạm-để-copy. Du mở TikTok → Hộp thư →
+hoàn tất, bật "Nội dung do AI tạo", đăng. Không dùng Direct Post: app chưa audit thì bài đăng thẳng
+bị khoá riêng tư, và đăng thẳng đòi giao diện xác nhận riêng.
+
+Kết nối: gửi **/tiktok** cho bot → mở link → cho phép → TikTok chuyển về
+`site/tiktok-callback.html` (trang tĩnh trên GitHub Pages, chỉ hiện mã) → bấm Sao chép → dán vào
+bot. Token truy cập 2 giờ, refresh token 180 ngày, tự làm mới (token xoay vòng: luôn lưu token mới).
+
+Cấu hình app TikTok: Platform **Web**, Website/Terms/Privacy = 3 trang của site (URL prefix đã xác
+minh bằng file chữ ký); **Login Kit** redirect URI = `https://cquangdu-work.github.io/thegioiquaconso/tiktok-callback.html`;
+**Content Posting API** chỉ quyền `video.upload` (tắt Direct Post); bỏ mọi sản phẩm/quyền khác.
+App chưa từng được duyệt thì phải thử ở **Sandbox** (tài khoản kênh là Target user) rồi mới quay
+video demo nộp duyệt. Đoạn giải thích cho ô "Explain how each product and scope works"
+(930/1000 ký tự):
+
+> Thế giới qua con số uploader is a private tool used only by the owner of the Thế giới qua con số channel (a Vietnamese data-explainer channel) to send the channel's own videos to its own TikTok account. Login Kit (user.info.basic): the owner opens the authorization link sent by the channel's private Telegram bot, logs in with the channel's TikTok account and grants access. TikTok redirects to https://cquangdu-work.github.io/thegioiquaconso/tiktok-callback.html, which only displays the code for the owner to paste back to the bot; our server exchanges it for tokens. user.info.basic only shows which account is connected. Content Posting API (video.upload): after the owner approves a finished video in Telegram, the server uploads it (FILE_UPLOAD) to the owner's TikTok inbox as a draft. The owner opens TikTok, adds the caption, turns on the AI-generated content label and publishes manually. No Direct Post, no other users.
+
 ## Chạy hằng ngày
 
 ```bash

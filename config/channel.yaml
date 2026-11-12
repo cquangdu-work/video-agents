@@ -235,6 +235,11 @@ publish:
     # giới hạn token 7 ngày của chế độ Testing. Quay lại Testing thì đặt 7 để bot nhắc gia hạn.
     # Token hỏng vì lý do khác: bot tự gửi gói tự đăng và nhắc gửi /capquyen.
     oauth_token_days: null
+  tiktok:
+    # Đẩy video đã duyệt vào HỘP THƯ TikTok (bản nháp) — Du mở app, chạm thông báo, dán chú thích,
+    # bật "Nội dung do AI tạo" rồi đăng. Cần TIKTOK_CLIENT_KEY/SECRET trong .env + gửi /tiktok cho bot
+    # để kết nối; chưa có khoá thì bỏ qua trong im lặng.
+    enabled: true
   hashtags_fixed: ["#thegioiquaconso", "#Shorts"]   # luôn có ở mọi video
   max_hashtags: 5               # YouTube bỏ qua toàn bộ hashtag nếu nhét quá nhiều
   disclosure: "Giọng đọc được tạo bằng AI. Số liệu được đối chiếu với nguồn trước khi đăng."

@@ -34,7 +34,7 @@ OUTPUT = ROOT / "output"
 CONFIG_PATH = ROOT / "config" / "channel.yaml"
 
 _YT_LINK = re.compile(r"(?:youtu\.be/|youtube\.com/(?:shorts/|watch\?v=|live/))([\w-]{11})")
-_CALLBACK = re.compile(r"^(ok|no|done|retry):(\d+)$")
+_CALLBACK = re.compile(r"^(ok|no|done|retry|tt):(\d+)$")
 
 
 def load_config() -> dict:
@@ -186,6 +186,48 @@ def publish(con, video: dict, cfg: dict) -> None:
         raise ValueError(f"Video #{video['id']} chưa được duyệt (status={video['status']})")
     mode = cfg["publish"]["youtube"].get("mode", "manual")
     (_publish_api if mode == "api" else _publish_manual)(con, video, cfg)
+    push_tiktok(con, video, cfg)
+
+
+# --------------------------------------------------------------- TikTok (bản nháp)
+def tiktok_caption(video: dict) -> str:
+    """Chú thích gợi ý cho TikTok: tiêu đề + dòng nguồn + ghi công nhạc + hashtag (API hộp thư
+    không nhận chú thích — Du dán khi hoàn tất bài trong app)."""
+    lines = [l.strip() for l in str(video.get("description") or "").splitlines()]
+    keep = [l for l in lines if l.startswith(("Nguồn:", "Nhạc nền:"))]
+    tags = next((l for l in reversed(lines) if l.startswith("#")), "")
+    return "\n".join(x for x in [video.get("title") or "", "", *keep, tags] if x is not None).strip()
+
+
+def push_tiktok(con, video: dict, cfg: dict) -> None:
+    """Đẩy video vào hộp thư TikTok của Du (nếu đã bật + đã kết nối). Mỗi video chỉ đẩy một lần;
+    lỗi thì báo kèm nút thử lại. Chưa kết nối thì nhắc một lần, không chặn YouTube."""
+    from .publish import tiktok
+    import os
+    tcfg = cfg["publish"].get("tiktok") or {}
+    if not tcfg.get("enabled") or db.get_state(con, f"tt_publish_{video['id']}"):
+        return
+    if not os.getenv("TIKTOK_CLIENT_KEY"):          # chưa tạo app TikTok: bỏ qua, không nhắc
+        return
+    try:
+        res = tiktok.upload_draft(ROOT / video["file"])
+    except tiktok.TikTokAuthError as exc:
+        if db.get_state(con, "tt_auth_nagged") != datetime.now(timezone.utc).strftime("%Y-%m-%d"):
+            db.set_state(con, "tt_auth_nagged", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+            tg.send_message(f"ℹ️ Chưa đẩy được lên TikTok: {exc}")
+        return
+    except Exception as exc:
+        log.exception("Đẩy TikTok lỗi")
+        tg.send_message(f"⚠️ Đẩy video #{video['id']} vào TikTok lỗi:\n{exc}",
+                        buttons=[[("🔁 Thử lại TikTok", f"tt:{video['id']}")]])
+        return
+    db.set_state(con, f"tt_publish_{video['id']}", res["publish_id"])
+    where = ("đã nằm trong hộp thư" if res["status"] == "SEND_TO_USER_INBOX"
+             else f"đang xử lý ({res['status']}) — vài phút nữa sẽ vào hộp thư")
+    tg.send_message(
+        f"📥 TikTok: video #{video['id']} {where}. Mở TikTok → Hộp thư → thông báo của app → hoàn tất"
+        " và đăng. Khi đăng: bật “Nội dung do AI tạo”.\n\n<b>Chú thích</b> (chạm để copy)\n"
+        + tg.code(tiktok_caption(video)), as_html=True)
 
 
 # ------------------------------------------------------- Xử lý sự kiện Telegram
@@ -240,6 +282,13 @@ def _handle_callback(con, cq: dict, cfg: dict) -> None:
         tg.send_message(f"Đã ghi nhận video #{video_id} đã đăng. Gửi link YouTube vào đây "
                         "để agent Phân tích theo dõi số liệu của nó.")
 
+    elif action == "tt":            # thử đẩy TikTok lại sau lỗi
+        tg.answer_callback(cq["id"], "Đang thử lại TikTok…")
+        if mid:
+            tg.clear_buttons(mid)
+        if video["status"] in ("approved", "publishing", "published"):
+            push_tiktok(con, video, cfg)
+
     elif action == "retry":         # mode api: thử upload lại sau lỗi
         tg.answer_callback(cq["id"], "Đang thử lại…")
         if mid:
@@ -287,11 +336,48 @@ def _finish_renewal(con, text: str) -> None:
                     + ("" if who.get("title") else "\n⚠️ Không đọc được tên kênh — kiểm tra đã chọn đúng kênh chưa."))
 
 
+def _start_tiktok(con) -> None:
+    from .publish import tiktok
+    try:
+        a = tiktok.start_auth()
+    except tiktok.TikTokAuthError as exc:
+        tg.send_message(f"⚠️ Không tạo được link TikTok: {exc}")
+        return
+    db.set_state(con, "tt_auth_state", a["state"])
+    tg.send_message(
+        "🎵 Kết nối TikTok (≈1 phút):\n"
+        "1. Mở link dưới, đăng nhập đúng tài khoản TikTok của kênh, bấm cho phép (giữ cả 2 quyền).\n"
+        "2. TikTok chuyển về trang của kênh — bấm “Sao chép” rồi dán vào đây.\n\n" + a["url"])
+
+
+def _finish_tiktok(con, text: str) -> None:
+    from .publish import tiktok
+    state = db.get_state(con, "tt_auth_state")
+    if not state:
+        tg.send_message("Chưa có yêu cầu kết nối TikTok nào đang chờ — gửi /tiktok để bắt đầu.")
+        return
+    try:
+        tiktok.finish_auth(text, state)
+        who = tiktok.whoami()
+    except Exception as exc:
+        tg.send_message(f"⚠️ Kết nối TikTok chưa được: {exc}")
+        return
+    db.set_state(con, "tt_auth_state", "")
+    tg.send_message(f"✅ Đã kết nối TikTok: {who.get('display_name', '?')}. Từ giờ video được duyệt sẽ được"
+                    " đẩy vào hộp thư TikTok của tài khoản này.")
+
+
 def _handle_message(con, msg: dict) -> None:
     if not _from_owner(msg.get("chat"), msg.get("from")):
         return
     text = (msg.get("text") or "").strip()
     if not text:
+        return
+    if text.lower() in ("/tiktok", "tiktok"):
+        _start_tiktok(con)
+        return
+    if "tiktok-callback" in text:
+        _finish_tiktok(con, text)
         return
     if text.lower() in RENEW_COMMANDS:
         _start_renewal(con)

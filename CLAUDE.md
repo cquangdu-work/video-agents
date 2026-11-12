@@ -82,7 +82,8 @@ Python, CrewAI (điều phối agent), cron/systemd timer (lịch chạy), bot T
 - **Xong (12/11):** mẫu bản đồ châu Á (`map`, choropleth từ Natural Earth), tự dùng cho ý tưởng có bảng từ 3 nước.
 - **Xong (12/11):** nguồn KOSIS (`src/sources/kosis.py`, key đã có trong `.env` laptop + VM): người nước ngoài ở Hàn theo quốc tịch (cuộc đua) và người Việt ở Hàn theo loại visa. Cảnh hỏng có lời đọc giờ thành cảnh chữ giữ lời thay vì bị bỏ.
 - **Xong (12/11, tối):** bản đồ thế giới (`assets/geo/world.json`, ranh giới theo góc nhìn Việt Nam qua cột `ADM0_A3_VN` của Natural Earth, ô phóng to Biển Đông ghi tên Hoàng Sa/Trường Sa) + dạng ý tưởng World Bank "Việt Nam đứng thứ mấy thế giới" (`sources.worldbank.world`, 1 chỉ số/ngày). Bảng mọi nước nằm cuối tóm tắt, code đọc lại để tô bản đồ; thứ hạng trên hình và trong lời cùng một hàm `datatable.ranks_desc`.
-- **Chưa làm:** TikTok (cần Du đăng ký tài khoản developer); Kiểm chứng 2 nguồn độc lập (cần search API); bản đồ một nước theo tỉnh.
+- **TikTok (12/11, đang làm):** code đẩy bản nháp vào hộp thư xong (`src/publish/tiktok.py`, lệnh `/tiktok`, trang nhận mã `site/tiktok-callback.html`); site của kênh đã xác minh URL prefix với TikTok. Chờ Du: cấu hình Sandbox (Login Kit redirect, Content Posting chỉ `video.upload`, Target user = tài khoản kênh) + gửi Client key/secret của Sandbox; thử thật rồi mới quay demo nộp duyệt.
+- **Chưa làm:** Kiểm chứng 2 nguồn độc lập (cần search API); bản đồ một nước theo tỉnh.
 
 ## Những điều đã đo/đã học khi chạy thật (đừng làm lại từ đầu)
 - **Quota TTS free tier ~15 lần gọi/ngày mỗi model**, hồi lúc nửa đêm giờ Thái Bình Dương (16–17h giờ Hàn). Vì vậy giọng được đọc **cả bài trong một lần gọi** rồi tự cắt theo câu (`src/audio/batch.py`); đừng quay về đọc từng câu.

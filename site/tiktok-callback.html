@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>TikTok connection — Thế giới qua con số</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  textarea { width: 100%; min-height: 110px; background: var(--surface); color: var(--text);
+             border: 1px solid var(--muted); border-radius: 8px; padding: 10px; font: 14px/1.4 monospace; }
+  button { margin-top: 10px; background: var(--accent); color: var(--bg); border: 0; border-radius: 8px;
+           padding: 12px 18px; font-weight: 700; font-size: 16px; }
+  .err { color: #E76F51; }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <img src="avatar.png" alt="Thế giới qua con số logo">
+  <div><div class="name">THẾ GIỚI QUA CON SỐ</div><div class="tag">TikTok connection</div></div>
+</header>
+
+<h1 id="title">Almost done</h1>
+<p id="lead">Copy the text below and send it to the channel's Telegram bot. The bot finishes connecting
+the channel's TikTok account. This page does not store or send anything.</p>
+<p lang="vi">Bấm <strong>Sao chép</strong> rồi dán vào bot Telegram của kênh — bot sẽ hoàn tất kết nối
+TikTok. Trang này không lưu và không gửi gì đi.</p>
+<textarea id="out" readonly></textarea>
+<button id="copy" type="button">Copy / Sao chép</button>
+<p id="note" class="meta"></p>
+
+<footer><a href="./">Home</a> · <a href="privacy.html">Privacy Policy</a> · <a href="terms.html">Terms of Service</a></footer>
+</main>
+<script>
+  // Mã cấp quyền chỉ dùng được cùng client secret nằm trên máy chủ của chủ kênh — trang chỉ hiển thị
+  var q = new URLSearchParams(location.search);
+  var out = document.getElementById("out");
+  if (q.get("error")) {
+    document.getElementById("title").textContent = "TikTok did not grant access";
+    document.getElementById("lead").innerHTML = '<span class="err">' +
+      (q.get("error_description") || q.get("error")).replace(/[<>&]/g, "") + "</span>";
+  }
+  out.value = q.get("code") ? location.href : "(No authorization code in this address / Không có mã trong địa chỉ này)";
+  document.getElementById("copy").onclick = function () {
+    out.select();
+    (navigator.clipboard ? navigator.clipboard.writeText(out.value) : Promise.reject())
+      .catch(function () { document.execCommand("copy"); })
+      .finally(function () { document.getElementById("note").textContent = "Copied / Đã sao chép"; });
+  };
+</script>
+</body>
+</html>
