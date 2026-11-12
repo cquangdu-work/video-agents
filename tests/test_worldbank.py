@@ -101,7 +101,7 @@ class FetchTest(unittest.TestCase):
 
     def test_one_dead_indicator_does_not_stop_the_others(self):
         def get(url, **kw):
-            r = mock.Mock()
+            r = mock.Mock(status_code=200)
             if "X.DEAD" in url:
                 r.raise_for_status.side_effect = wb.requests.HTTPError("502")
             r.json.return_value = api_payload(SERIES)
@@ -116,7 +116,7 @@ class FetchTest(unittest.TestCase):
         self.assertEqual(wb.fetch_worldbank({"countries": COUNTRIES[:1], "indicators": [GDP]}), [])
 
     def test_null_years_are_dropped_and_series_sorted(self):
-        r = mock.Mock(); r.json.return_value = api_payload(SERIES)
+        r = mock.Mock(status_code=200); r.json.return_value = api_payload(SERIES)
         with mock.patch.object(wb.requests, "get", return_value=r):
             got = wb.fetch_series("NY.GDP.PCAP.CD", ["VNM", "KOR"], 1960)
         self.assertEqual(got, SERIES)
@@ -174,7 +174,7 @@ class RaceTest(unittest.TestCase):
         self.assertIsNone(wb.build_race_item(ind, ASIA, short, []))
 
     def test_scale_and_start_year_per_indicator(self):
-        r = mock.Mock(); r.json.return_value = api_payload({"VNM": [(2000, 2.0e9)], "KOR": [(2000, 5.0e9)]})
+        r = mock.Mock(status_code=200); r.json.return_value = api_payload({"VNM": [(2000, 2.0e9)], "KOR": [(2000, 5.0e9)]})
         with mock.patch.object(wb.requests, "get", return_value=r) as get:
             got = wb.fetch_indicator({"code": "NY.GDP.MKTP.CD", "scale": 1e9, "start_year": 2000},
                                      ["VNM", "KOR"], 1960)
@@ -183,7 +183,7 @@ class RaceTest(unittest.TestCase):
 
     def test_slow_first_answer_is_retried_after_a_pause(self):
         # Đo thật 12/11: URL mới treo > 60 giây, gọi lại sau ~20 giây thì trả ngay
-        r = mock.Mock(); r.json.return_value = api_payload(SERIES)
+        r = mock.Mock(status_code=200); r.json.return_value = api_payload(SERIES)
         answers = [wb.requests.Timeout("treo"), r]
 
         def get(*a, **kw):

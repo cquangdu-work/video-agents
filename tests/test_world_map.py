@@ -185,9 +185,30 @@ class BuildWorldItemTest(unittest.TestCase):
         rows = [{"countryiso3code": "VNM", "date": "2024", "value": 74.7},
                 {"countryiso3code": "WLD", "date": "2024", "value": 73.3},     # "Thế giới": không phải nước
                 {"countryiso3code": "KOR", "date": "2024", "value": None}]
-        r = mock.Mock(); r.json.return_value = [{"page": 1}, rows]
+        r = mock.Mock(status_code=200); r.json.return_value = [{"page": 1}, rows]
         with mock.patch.object(wb.requests, "get", return_value=r):
             self.assertEqual(wb.fetch_world_table("SP.DYN.LE00.IN", {"VNM", "KOR"}), {2024: {"VNM": 74.7}})
+
+    def test_busy_server_gets_a_longer_wait_for_the_big_query(self):
+        # Đo thật 12/11: truy vấn mọi nước treo rồi 502 vài phút trong lúc máy chủ tính, sau đó trả ngay
+        rows = [{"countryiso3code": "VNM", "date": "2024", "value": 74.7}]
+        ok = mock.Mock(status_code=200); ok.json.return_value = [{"page": 1}, rows]
+        busy = mock.Mock(status_code=502)
+        answers = [wb.requests.Timeout("treo"), busy, ok]
+
+        def get(*a, **kw):
+            x = answers.pop(0)
+            if isinstance(x, Exception):
+                raise x
+            return x
+        with mock.patch.object(wb.requests, "get", get), mock.patch.object(wb.time, "sleep") as nap:
+            self.assertEqual(wb.fetch_world_table("X", {"VNM"}), {2024: {"VNM": 74.7}})
+        self.assertEqual([c.args[0] for c in nap.call_args_list], [wb.WORLD_PAUSE, wb.WORLD_PAUSE])
+        always_busy = mock.Mock(status_code=502)
+        always_busy.raise_for_status.side_effect = wb.requests.HTTPError("502")
+        with mock.patch.object(wb.requests, "get", return_value=always_busy), \
+                mock.patch.object(wb.time, "sleep"), self.assertRaises(wb.requests.HTTPError):
+            wb.fetch_world_table("X", {"VNM"})
 
 
 class WorldSceneTest(unittest.TestCase):

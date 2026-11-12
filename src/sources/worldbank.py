@@ -41,17 +41,24 @@ def fetch_indicator(ind: dict, countries: list, default_start: int) -> dict:
     return {c: [(y, v / scale) for y, v in s] for c, s in series.items()}
 
 
-def _get_rows(url: str, params: dict) -> list:
-    """Gọi API World Bank (lần đầu có thể chỉ là "đánh thức" máy chủ, xem TIMEOUTS) -> các dòng số liệu."""
+def _get_rows(url: str, params: dict, timeouts: tuple = TIMEOUTS, pause: float = RETRY_PAUSE) -> list:
+    """Gọi API World Bank (lần đầu có thể chỉ là "đánh thức" máy chủ, xem TIMEOUTS) -> các dòng
+    số liệu. Treo, mất kết nối, hoặc lỗi 5xx tạm thời của máy chủ (đo 12/11: 502 trong lúc nó
+    đang tính) thì nghỉ rồi gọi lại."""
     r = None
-    for k, wait in enumerate(TIMEOUTS):
+    for k, wait in enumerate(timeouts):
+        last = k == len(timeouts) - 1
         try:
             r = requests.get(url, headers=HEADERS, timeout=wait, params=params)
-            break
         except (requests.Timeout, requests.ConnectionError):
-            if k == len(TIMEOUTS) - 1:
+            if last:
                 raise
-            time.sleep(RETRY_PAUSE)
+            time.sleep(pause)
+            continue
+        if r.status_code >= 500 and not last:
+            time.sleep(pause)
+            continue
+        break
     r.raise_for_status()
     payload = r.json()
     return payload[1] if isinstance(payload, list) and len(payload) > 1 and payload[1] else []
@@ -165,6 +172,11 @@ def build_race_item(ind: dict, countries: list, series: dict, focus: list, step:
 WORLD_PAGE = "https://data.worldbank.org/indicator/{code}?view=map&year={year}"
 SOUTHEAST_ASIA = ("BRN", "KHM", "IDN", "LAO", "MYS", "MMR", "PHL", "SGP", "THA", "VNM", "TLS")
 MIN_WORLD_COUNTRIES = 100       # ít hơn thì "bản đồ thế giới" toàn ô trống, không đáng làm
+# Đo 12/11: truy vấn "mọi nước x 11 năm" chưa có trong bộ đệm thì máy chủ tính mất vài phút
+# (treo, rồi 502), tính xong thì trả trong 0,2 giây. Lịch chờ dài hơn (tối đa ~9 phút) — bước
+# ý tưởng của lượt hằng ngày có trần 1 giờ.
+WORLD_TIMEOUTS = (20, 120, 120, 120)
+WORLD_PAUSE = 60
 
 
 def fetch_world_table(code: str, known: set, years_back: int = 10) -> dict:
@@ -173,7 +185,8 @@ def fetch_world_table(code: str, known: set, years_back: int = 10) -> dict:
     nhóm như "Thế giới", "Đông Á & Thái Bình Dương", không phải nước."""
     this_year = date.today().year
     rows = _get_rows(API.format(countries="all", code=code),
-                     {"format": "json", "per_page": 20000, "date": f"{this_year - years_back}:{this_year}"})
+                     {"format": "json", "per_page": 20000, "date": f"{this_year - years_back}:{this_year}"},
+                     WORLD_TIMEOUTS, WORLD_PAUSE)
     out = {}
     for row in rows:
         c, v = row.get("countryiso3code"), row.get("value")
