@@ -12,6 +12,7 @@ Mỗi ngày chỉ đưa vào `per_day` chỉ số, xoay vòng theo ngày, để 
 ngập bởi một loại nội dung. Chỉ số đã vào kho rồi thì DB tự bỏ qua (trùng URL).
 """
 import logging
+import re
 from datetime import date
 
 import requests
@@ -121,6 +122,34 @@ def build_item(ind: dict, countries: list, series: dict):
         "source": SOURCE_NAME,
         "lang": "vi",
     }
+
+
+def parse_vn_number(s: str) -> float:
+    """Ngược lại vn_number: '36.227' -> 36227, '98,9' -> 98.9, '0,75' -> 0.75."""
+    return float(s.replace(".", "").replace(",", "."))
+
+
+def parse_series(summary: str) -> list:
+    """Đọc lại các dòng "<Nước> theo năm: 1990: 98,9; 1995: 159; ..." mà build_item viết
+    -> [{"label": "Việt Nam", "xs": [1990, 1995, ...], "ys": [98.9, 159, ...]}, ...].
+
+    Để biểu đồ đường lấy số THẲNG từ bảng gốc: model nhỏ chép chuỗi 8-10 con số hay chép
+    sai/bịa (ca thật 12/11: tự chế 11.500 và 11.800 kWh cho Hàn Quốc ba lần liền).
+    """
+    out = []
+    for line in str(summary or "").splitlines():
+        m = re.match(r"\s*(.+?) theo năm:\s*(.+?)\.?\s*$", line)
+        if not m:
+            continue
+        xs, ys = [], []
+        for pair in m.group(2).split(";"):
+            pm = re.match(r"\s*((?:19|20)\d{2}):\s*([\d.,]+)\s*$", pair)
+            if pm:
+                xs.append(int(pm.group(1)))
+                ys.append(parse_vn_number(pm.group(2)))
+        if len(xs) >= 2:
+            out.append({"label": m.group(1).strip(), "xs": xs, "ys": ys})
+    return out
 
 
 def todays_indicators(indicators: list, per_day: int, today: date = None) -> list:

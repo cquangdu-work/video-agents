@@ -50,6 +50,20 @@ def digits_of(value) -> set:
     return out
 
 
+def number_values(text: str) -> set:
+    """Mọi giá trị số có thể đọc ra từ văn bản, thử CẢ hai cách viết: kiểu Việt
+    ("2.462" = 2462, "4,90" = 4,9) và kiểu Anh ("2,462" = 2462, "4.90" = 4,9).
+    So theo GIÁ TRỊ thì "4,9" khớp "4,90"; so chuỗi chữ số ("49" với "490") thì không."""
+    out = set()
+    for tok in re.findall(r"\d[\d.,]*\d|\d", str(text)):
+        for cand in (tok.replace(".", "").replace(",", "."), tok.replace(",", "")):
+            try:
+                out.add(float(cand))
+            except ValueError:
+                pass
+    return out
+
+
 def spec_values(params: dict) -> list:
     """Mọi con số SỐ LIỆU mà một cảnh hiển thị (không tính trục năm xs, số thứ tự n).
     Dùng chung cho cổng chống bịa số (crew) và Kiểm định (qc) — thêm template mới có

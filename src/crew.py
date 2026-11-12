@@ -392,6 +392,31 @@ TEMPLATE_GUIDE = """Các template có sẵn và tham số (CHỈ dùng đúng c�
 """
 
 
+def fill_series_from_data(spec: list, data_series: list) -> int:
+    """Điền số liệu THẬT vào mọi cảnh line_chart từ bảng gốc của ý tưởng (nếu có).
+
+    Model chỉ quyết định vẽ biểu đồ đường nào và cho nước nào (qua nhãn trong "series");
+    số liệu do code chép từ bảng, nên không thể chép sai hay bịa. Nhãn không khớp nước nào
+    (hoặc biểu đồ một đường không nhãn) thì vẽ đủ các nước có trong bảng.
+    Trả về số cảnh đã điền.
+    """
+    if not data_series:
+        return 0
+    filled = 0
+    for sc in spec:
+        if sc.get("template") != "line_chart" or not isinstance(sc.get("params"), dict):
+            continue
+        p = sc["params"]
+        wanted = {str(s.get("label", "")).strip().lower()
+                  for s in p.get("series") or [] if isinstance(s, dict)}
+        chosen = [s for s in data_series if s["label"].lower() in wanted] or data_series
+        p["series"] = [{"label": s["label"], "xs": list(s["xs"]), "ys": list(s["ys"])} for s in chosen]
+        p["xs"] = sorted({x for s in chosen for x in s["xs"]})
+        p.pop("ys", None)
+        filled += 1
+    return filled
+
+
 def design_scenes(idea: dict, scenes: list, cfg: dict) -> list:
     """Agent Sản xuất: dịch từng cảnh kịch bản thành scene spec cho engine Manim.
 
@@ -412,9 +437,17 @@ def design_scenes(idea: dict, scenes: list, cfg: dict) -> list:
 
     # Dữ liệu gốc của ý tưởng (bảng số World Bank, tóm tắt bài báo): agent được phép lấy số
     # ở đây để vẽ biểu đồ — một đường xu hướng cần 6-10 điểm, lời đọc không thể đọc hết.
+    from .sources.worldbank import parse_series
     source_data = str(idea.get("summary") or "").strip()[:3000]
+    data_series = parse_series(source_data)
     data_block = (f"\nDỮ LIỆU NGUỒN (số thật, ĐƯỢC dùng cho biểu đồ kể cả khi lời đọc không nhắc"
                   f" hết):\n\"\"\"\n{source_data}\n\"\"\"\n" if source_data else "")
+    if data_series:
+        names = ", ".join(f'{{"label": "{s["label"]}"}}' for s in data_series)
+        data_block += (
+            "\nBẢNG CÓ SỐ THEO NĂM: nên có 1-2 cảnh \"line_chart\" so các nước qua các năm. Với cảnh"
+            f" đó KHÔNG chép số — chỉ ghi \"series\": [{names}] (chọn nước cần vẽ) cùng title,"
+            " unit, source; máy tự điền đúng xs/ys từ bảng.\n")
 
     base_description = f"""Video của kênh "{cfg['channel']['name']}", ý tưởng: {idea['title']}
 
@@ -453,20 +486,27 @@ Yêu cầu:
 
     # Tập chữ số có thật — chuẩn đối chiếu chống bịa: lời kịch bản, tiêu đề ý tưởng (kịch
     # bản hay viết số bằng chữ: "tám nghìn...") và dữ liệu nguồn của ý tưởng.
-    from .utils import digit_set, digits_of, spec_values
-    script_digits = digit_set(
-        " ".join(str(s.get("voice", "")) for s in scenes)
-        + " " + str(idea.get("title", "")) + " " + str(idea.get("angle", ""))
-        + " " + source_data)
+    from .utils import digit_set, digits_of, number_values, spec_values
+    allowed_text = (" ".join(str(s.get("voice", "")) for s in scenes)
+                    + " " + str(idea.get("title", "")) + " " + str(idea.get("angle", ""))
+                    + " " + source_data)
+    script_digits, script_values = digit_set(allowed_text), number_values(allowed_text)
+
+    def known(v) -> bool:
+        """Con số v có căn cứ: khớp theo chuỗi chữ số (kể cả quy đổi nghìn/triệu/tỷ),
+        hoặc khớp theo giá trị ("4,9" với "4,90")."""
+        if digits_of(v) & script_digits:
+            return True
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return False
+        return any(abs(f - x) <= 1e-9 * max(1.0, abs(x)) for x in script_values)
 
     def fabricated(spec: list) -> list:
-        """Những con số trong spec KHÔNG có trong kịch bản (trừ xs trục thời gian)."""
-        fakes = []
-        for sc in spec:
-            for v in spec_values(sc.get("params")):
-                if digits_of(v) and not (digits_of(v) & script_digits):
-                    fakes.append(v)
-        return fakes
+        """Những con số trong spec KHÔNG có trong kịch bản/dữ liệu nguồn (trừ trục năm xs)."""
+        return [v for sc in spec for v in spec_values(sc.get("params"))
+                if digits_of(v) and not known(v)]
 
     def as_spec(obj) -> list:
         """Đưa câu trả lời về đúng dạng danh sách cảnh (model dự phòng hay trả sai khuôn)."""
@@ -500,6 +540,7 @@ Yêu cầu:
                 description=description, expected_output=expected)))
         except ValueError:
             spec = []
+        fill_series_from_data(spec, data_series)
         # Đơn điệu chỉ tính trên các template SỐ LIỆU: kịch bản ít con số thì
         # nhiều statement là đúng đắn, không được ép vẽ biểu đồ (sẽ sinh bịa số).
         counts = collections.Counter(s.get("template") for s in spec)

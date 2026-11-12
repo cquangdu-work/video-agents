@@ -123,11 +123,13 @@ class Versus(BrandScene):
 
 
 def chart_series(p: dict, colors: dict) -> list:
-    """Các đường của một line_chart -> [(nhãn, ys, màu)].
+    """Các đường của một line_chart -> [(nhãn, xs, ys, màu)].
 
     Một đường: {xs, ys, color?}. Nhiều đường (so hai nước qua các năm):
-    {xs, series: [{label, ys, color?}, ...]}. Màu đặt theo tên trong bộ nhận diện
-    ("vietnam" đỏ, "korea" xanh); không ghi màu thì nhãn "Việt Nam"/"Hàn Quốc" tự nhận màu."""
+    {xs, series: [{label, ys, xs?, color?}, ...]} — mỗi đường được có trục năm riêng
+    (số liệu hai nước hay lệch năm cuối: Việt Nam tới 2024, Hàn Quốc tới 2025).
+    Màu đặt theo tên trong bộ nhận diện ("vietnam" đỏ, "korea" xanh); không ghi màu thì
+    nhãn "Việt Nam"/"Hàn Quốc" tự nhận màu."""
     auto = {"việt nam": "vietnam", "vn": "vietnam", "hàn quốc": "korea", "kr": "korea"}
     if p.get("series"):
         keys = [s.get("color") or auto.get(str(s.get("label", "")).strip().lower())
@@ -137,9 +139,11 @@ def chart_series(p: dict, colors: dict) -> list:
         for s, key in zip(p["series"], keys):
             if not key:                          # đường không rõ nước: lấy màu chưa ai dùng
                 key = spare.pop(0) if spare else "accent"
-            out.append((str(s.get("label", "")), list(s["ys"]), colors.get(key, colors["accent"])))
+            out.append((str(s.get("label", "")), list(s.get("xs") or p["xs"]), list(s["ys"]),
+                        colors.get(key, colors["accent"])))
         return out
-    return [("", list(p["ys"]), colors.get(p.get("color", "accent"), colors["accent"]))]
+    return [("", list(p["xs"]), list(p["ys"]),
+             colors.get(p.get("color", "accent"), colors["accent"]))]
 
 
 class LineChart(BrandScene):
@@ -152,17 +156,18 @@ class LineChart(BrandScene):
         p, c = self.params, self.b["colors"]
         self.add_signature(p.get("source"))
         self.add(self.title_text(p["title"]))
-        xs = p["xs"]
         lines = chart_series(p, c)
-        top = max(max(ys) for _, ys, _ in lines)
+        x0 = min(min(xs) for _, xs, _, _ in lines)
+        x1 = max(max(xs) for _, xs, _, _ in lines)
+        top = max(max(ys) for _, _, ys, _ in lines)
         dec = p.get("decimals", 0)
-        ax = Axes(x_range=[min(xs), max(xs), max((max(xs) - min(xs)) // 4, 1)],
+        ax = Axes(x_range=[x0, x1, max((x1 - x0) // 4, 1)],
                   y_range=[0, top * 1.15, max(top / 4, 1e-9)],
                   x_length=7.2, y_length=6.0, tips=False,
                   axis_config={"color": c["muted"], "stroke_width": 2,
                                "include_numbers": False}).move_to([0.1, -0.4, 0])
         graphs, ends = [], VGroup()
-        for k, (label, ys, color) in enumerate(lines):
+        for label, xs, ys, color in lines:
             graphs.append(ax.plot_line_graph(xs, ys, line_color=color, stroke_width=7,
                                              add_vertex_dots=False))
             end = Dot(ax.c2p(xs[-1], ys[-1]), color=color, radius=0.1)
@@ -177,7 +182,7 @@ class LineChart(BrandScene):
             (dot_lo, val_lo), (_, val_hi) = sorted(pairs, key=lambda d_v: d_v[0].get_center()[1])
             if val_hi.get_bottom()[1] - val_lo.get_top()[1] < 0.35:
                 val_lo.next_to(dot_lo, DOWN + LEFT, buff=0.12)
-        span = Text(f"{xs[0]} → {xs[-1]}" + (f"  ·  {p['unit']}" if p.get("unit") else ""),
+        span = Text(f"{x0} → {x1}" + (f"  ·  {p['unit']}" if p.get("unit") else ""),
                     font=pick_font(), font_size=28, color=c["muted"]).move_to([0, -4.5, 0])
         self.add(ax, span)
         if len(lines) > 1:                       # chú thích màu ngay dưới tiêu đề
@@ -185,7 +190,7 @@ class LineChart(BrandScene):
                 VGroup(Line(ORIGIN, RIGHT * 0.6, color=color, stroke_width=8),
                        Text(label, font=pick_font(), font_size=34, color=color, weight="BOLD")
                        ).arrange(RIGHT, buff=0.2)
-                for label, _, color in lines]).arrange(RIGHT, buff=0.8).move_to([0, 3.4, 0])
+                for label, _, _, color in lines]).arrange(RIGHT, buff=0.8).move_to([0, 3.4, 0])
             fit_width(legend, 8.0)
             self.add(legend)
         self.play(*[Create(g) for g in graphs], run_time=self.seconds * 0.6)

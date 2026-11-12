@@ -85,9 +85,11 @@ def validate_spec(raw: list, cfg: dict) -> list:
         if tpl == "line_chart":
             xs = params["xs"]
             if params.get("series"):
-                # Đường nào thiếu/thừa điểm so với trục năm thì bỏ đường đó, không bỏ cả cảnh
+                # Đường nào thiếu/thừa điểm so với trục năm (của chính nó, hoặc trục chung)
+                # thì bỏ đường đó, không bỏ cả cảnh
                 good = [s for s in params["series"] if isinstance(s, dict)
-                        and isinstance(s.get("ys"), list) and len(s["ys"]) == len(xs)]
+                        and isinstance(s.get("ys"), list)
+                        and len(s["ys"]) == len(s.get("xs") or xs) >= 2]
                 if len(good) < len(params["series"]):
                     log.warning("Cảnh %d: bỏ %d đường lệch độ dài với xs", i + 1,
                                 len(params["series"]) - len(good))
@@ -98,8 +100,12 @@ def validate_spec(raw: list, cfg: dict) -> list:
             elif not isinstance(params.get("ys"), list) or len(xs) != len(params["ys"]):
                 log.warning("Cảnh %d: xs/ys lệch độ dài — bỏ", i + 1)
                 continue
-            if len(xs) < 2:
+            if len(xs) < 2 and not params.get("series"):
                 log.warning("Cảnh %d: biểu đồ đường cần ít nhất 2 mốc — bỏ", i + 1)
+                continue
+            if any(any(b <= a for a, b in zip(s["xs"], s["xs"][1:]))
+                   for s in params.get("series") or [] if s.get("xs")):
+                log.warning("Cảnh %d: trục năm riêng của một đường không tăng dần — bỏ", i + 1)
                 continue
             if any(b <= a for a, b in zip(xs, xs[1:])):
                 # LLM hay dùng số tháng vắt qua năm (12,1,2...) -> trục x loạn.

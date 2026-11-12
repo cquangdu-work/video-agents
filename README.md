@@ -21,12 +21,13 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `config/channel.yaml` | Toàn bộ "não" cấu hình: chủ đề, nguồn, luật góc, trọng số chấm điểm. Sửa kênh = sửa file này, không đụng code. |
 | `src/main.py` | Nhạc trưởng: gọi lần lượt các bước, có cờ `--dry-run`. |
 | `src/sources/` | Lấy ý tưởng thô: RSS (OWID, ScienceDaily, Hankyoreh, Donga...), arXiv API, Reddit (JSON, bị chặn thì tự sang RSS) — đều **không cần API key**. Nguồn chết thì bỏ qua, không sập pipeline. |
-| `src/sources/youtube_check.py` | Lớp chống trùng 2: đếm video tiếng Việt view cao cùng đề tài (cần `YOUTUBE_API_KEY`, chưa có thì tự bỏ qua). |
+| `src/sources/worldbank.py` | Kho dữ liệu mở World Bank: mỗi chỉ số trong `config/channel.yaml` thành một ý tưởng "Việt Nam – Hàn Quốc qua một con số", tóm tắt chính là bảng số liệu thật (kèm góc "Việt Nam hôm nay bằng Hàn Quốc năm nào"). Không cần key. |
+| `src/sources/youtube_check.py` | Lớp chống trùng 2: tìm bằng từ khóa tiếng Việt do Săn ý tưởng viết, chỉ đếm video view cao **cùng đề tài** (tiêu đề chứa phần lớn từ khóa đặc trưng). Cần `YOUTUBE_API_KEY`, chưa có thì tự bỏ qua. |
 | `src/db.py` | Kho SQLite (`data/pipeline.db`). Vòng đời ý tưởng: `raw → candidate → selected → scripted → rejected`. Chống lặp bằng URL + độ giống tiêu đề. |
 | `src/crew.py` | 4 agent CrewAI: Săn ý tưởng (ép phải có "góc"), Biên tập (chấm 5 tiêu chí × trọng số), Biên kịch (3 hook + kịch bản theo cảnh), Kiểm chứng (đối chiếu claim với bài nguồn). |
 | `src/page_text.py` | Tải toàn văn bài nguồn: Biên kịch lấy số liệu từ đó, Kiểm chứng đối chiếu lại. |
 | `src/produce.py` | **Agent Sản xuất**: kịch bản → spec cảnh (`data/specs/script_<id>.yaml`). Cửa kiểm spec: bỏ cảnh hỏng, không làm tròn mất số lẻ, xoay vòng kiểu cảnh chữ. |
-| `src/render/` | Engine Manim: `templates.py` là kho mẫu hình (số lớn, so găng, thanh ngang, đường xu hướng, vòng phần trăm, cảnh chữ 3 kiểu), `base.py` là bộ nhận diện chung, `engine.py` dựng và nối cảnh. |
+| `src/render/` | Engine Manim: `templates.py` là kho mẫu hình (số lớn, so găng, thanh ngang, đường xu hướng một hoặc nhiều đường — Việt Nam đỏ, Hàn Quốc xanh, vòng phần trăm, cảnh chữ 3 kiểu), `base.py` là bộ nhận diện chung, `engine.py` dựng và nối cảnh. |
 | `src/assemble.py` | **Lắp ráp bản phát hành**: giọng + hình + phụ đề + chuẩn âm lượng → `output/final_<id>.mp4`. |
 | `src/audio/tts.py` | Giọng đọc Gemini TTS, tự đổi model dự phòng khi hết quota. Đổi nhà cung cấp giọng = chỉ thay file này. |
 | `src/audio/batch.py` | Đọc **cả bài bằng một lần gọi TTS** rồi tự cắt theo câu (Whisper dóng chữ + đo khoảng lặng). |
@@ -46,7 +47,7 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 
 ## Giới hạn hiện tại (sẽ nâng ở bước sau)
 - Kiểm chứng mới đối chiếu **1 nguồn** (bài gốc); thiết kế yêu cầu 2 nguồn độc lập → cần thêm search API.
-- Chưa có nguồn KOSIS/World Bank chuyên dụng (mới có OWID qua RSS).
+- Đã có World Bank (25 chỉ số Việt–Hàn); chưa có KOSIS (thống kê Hàn Quốc, cần đăng ký key).
 - Chưa có mẫu bản đồ và "cuộc đua số liệu"; nhạc nền chờ Du tải file vào `assets/music/`.
 - TikTok chưa làm (cần tài khoản developer). YouTube đang ở chế độ `manual`: bot gửi gói, Du tự đăng.
 - Free tier của Gemini: giọng đọc ~15 lần gọi/ngày mỗi model. Đủ cho 1 video/ngày nhờ đọc gộp,
@@ -107,6 +108,12 @@ Mỗi ngày (tính theo giờ Hàn) đúng một lượt `daily` được phép 
   với toàn văn bài nguồn. Thiếu căn cứ thì trả về viết lại một lần; vẫn còn thì kịch bản ở
   lại `draft`. (Đã bắt được câu mở đầu tự chế "Sai lầm 99% người ăn chay mắc phải...".)
 - **Ý tưởng không đọc được bài nguồn bị loại trước khi chấm điểm** (ví dụ bài Reddit bị chặn).
+- **Ý tưởng từ bảng số liệu phải được kể thành chuyện:** Biên kịch nhận thêm luật riêng
+  (`crew.DATA_STORY`), và kịch bản nhắc quá 5 mốc năm bị trả lại — biểu đồ đã vẽ cả chuỗi năm,
+  lời đọc không đọc lại bảng.
+- **Đạo diễn đồ họa được dùng số của dữ liệu nguồn** để vẽ biểu đồ (lời đọc không cần đọc hết
+  từng điểm), vẫn qua cổng chống bịa số; hai con số cùng đơn vị của hai đối tượng thì thành một
+  cảnh so găng.
 - **Lời đọc được gỡ hashtag, emoji, đuôi "| tên kênh"** trước khi tới giọng đọc.
 
 ### Giọng đọc và quota

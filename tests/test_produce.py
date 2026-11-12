@@ -72,12 +72,23 @@ class ValidateSpecTest(unittest.TestCase):
     def test_series_colours_follow_the_country_names(self):
         from src.render.templates import chart_series
         colors = {"accent": "#A", "vietnam": "#VN", "korea": "#KR", "good": "#G", "bad": "#B"}
-        got = chart_series({"series": [{"label": "Việt Nam", "ys": [1]}, {"label": "Hàn Quốc", "ys": [2]},
-                                       {"label": "Nhật Bản", "ys": [3]}]}, colors)
-        self.assertEqual([c for _, _, c in got], ["#VN", "#KR", "#A"])
-        two_unknown = chart_series({"series": [{"label": "A", "ys": [1]}, {"label": "B", "ys": [2]}]}, colors)
-        self.assertEqual([c for _, _, c in two_unknown], ["#A", "#G"])     # hai đường không trùng màu
-        self.assertEqual(chart_series({"ys": [1, 2]}, colors), [("", [1, 2], "#A")])
+        got = chart_series({"xs": [1, 2], "series": [
+            {"label": "Việt Nam", "ys": [1, 1]}, {"label": "Hàn Quốc", "ys": [2, 2], "xs": [1, 3]},
+            {"label": "Nhật Bản", "ys": [3, 3]}]}, colors)
+        self.assertEqual([c for *_, c in got], ["#VN", "#KR", "#A"])
+        self.assertEqual([xs for _, xs, _, _ in got], [[1, 2], [1, 3], [1, 2]])   # trục riêng nếu có
+        two_unknown = chart_series({"xs": [1], "series": [{"label": "A", "ys": [1]},
+                                                          {"label": "B", "ys": [2]}]}, colors)
+        self.assertEqual([c for *_, c in two_unknown], ["#A", "#G"])     # hai đường không trùng màu
+        self.assertEqual(chart_series({"xs": [5, 6], "ys": [1, 2]}, colors), [("", [5, 6], [1, 2], "#A")])
+
+    def test_each_series_may_have_its_own_years(self):
+        spec = produce.validate_spec([{"template": "line_chart", "params": {
+            "title": "Điện", "xs": [1990, 2024, 2025], "series": [
+                {"label": "Việt Nam", "xs": [1990, 2024], "ys": [98.9, 2756]},
+                {"label": "Hàn Quốc", "xs": [1990, 2025], "ys": [2462, 12071]},
+                {"label": "Sai", "xs": [1990, 2025], "ys": [1]}]}}], CFG)
+        self.assertEqual([s["label"] for s in spec[1]["params"]["series"]], ["Việt Nam", "Hàn Quốc"])
 
     def test_percent_outside_0_100_becomes_a_big_number(self):
         spec = produce.validate_spec([
@@ -126,23 +137,42 @@ class DesignScenesTest(unittest.TestCase):
         self.assertEqual(len(self.prompts), 1)
         self.assertIn("DỮ LIỆU NGUỒN", self.prompts[0])
 
-    def test_two_country_chart_from_source_data_passes_the_fabrication_gate(self):
-        spec = [self.scene("line_chart", (0, 1), title="GDP đầu người", xs=[2000, 2025], series=[
-                    {"label": "Việt Nam", "ys": [404, 5066]}, {"label": "Hàn Quốc", "ys": [12710, 36227]}]),
-                self.scene("statement", (2,), text="Con đường còn dài")]
-        self.assertEqual(self.design(spec), spec)
-        made_up = [dict(spec[0], params=dict(spec[0]["params"], series=[
-                       {"label": "Việt Nam", "ys": [404, 5066]}, {"label": "Hàn Quốc", "ys": [9999, 36227]}])),
-                   spec[1]]
-        got = self.design(made_up, made_up, made_up)             # 9.999 không có ở đâu cả
-        self.assertEqual(got[0]["template"], "statement")
+    def test_line_chart_numbers_come_from_the_table_not_from_the_model(self):
+        # Ca thật (kịch bản #17): model tự chế 11.500 / 11.800 kWh cho Hàn Quốc ba lần liền
+        made_up = [self.scene("line_chart", (0, 1), title="GDP đầu người", xs=[2000, 2025], series=[
+                       {"label": "Việt Nam", "ys": [404, 5066]}, {"label": "Hàn Quốc", "ys": [9999, 36227]}]),
+                   self.scene("statement", (2,), text="Con đường còn dài")]
+        got = self.design(made_up)
+        self.assertEqual(len(self.prompts), 1)                   # không còn gì để trả lại
+        self.assertIn("máy tự điền đúng xs/ys từ bảng", self.prompts[0])
+        p = got[0]["params"]
+        self.assertEqual(p["series"], [{"label": "Việt Nam", "xs": [2000, 2010, 2025], "ys": [404, 1683, 5066]},
+                                       {"label": "Hàn Quốc", "xs": [2000, 2025], "ys": [12710, 36227]}])
+        self.assertEqual(p["xs"], [2000, 2010, 2025])
+        only_vn = self.design([self.scene("line_chart", (0,), title="Việt Nam", series=[{"label": "việt nam"}]),
+                               self.scene("big_number", (1,), title="Hàn Quốc", value=36227),
+                               self.scene("statement", (2,), text="Con đường còn dài")])
+        self.assertEqual([s["label"] for s in only_vn[0]["params"]["series"]], ["Việt Nam"])
 
-    def test_chart_may_use_source_data_the_narration_does_not_read_out(self):
+    def test_chart_may_use_numbers_from_an_article_summary(self):
+        # Ý tưởng từ bài báo (không có bảng theo năm): model được dùng số trong tóm tắt
+        self.IDEA = dict(self.IDEA, summary="GDP đầu người năm 2000 là 404 USD, năm 2010 là 1.683 USD.")
         spec = [self.scene("line_chart", (0,), title="Việt Nam", xs=[2000, 2010, 2025],
                            ys=[404, 1683, 5066]),
                 self.scene("big_number", (1,), title="Hàn Quốc", value=36227),
                 self.scene("statement", (2,), text="Con đường còn dài")]
-        self.assertEqual(self.design(spec), spec)           # 404 và 1.683 chỉ có trong dữ liệu nguồn
+        self.assertEqual(self.design(spec), spec)
+        fake = [dict(spec[0], params=dict(spec[0]["params"], ys=[404, 9999, 5066])), spec[1], spec[2]]
+        self.assertEqual(self.design(fake, fake, fake)[0]["template"], "statement")
+
+    def test_same_value_written_differently_is_not_called_fabricated(self):
+        # Ca thật: nguồn ghi "4,90 lần", spec ghi 4.9 -> từng bị coi là bịa số
+        self.SCENES = [dict(s) for s in self.SCENES]
+        self.SCENES[1] = {"voice": "Hàn Quốc tăng gấp 4,90 lần, lên 36.227 USD."}
+        spec = [self.scene("big_number", (0,), title="Việt Nam", value=5066),
+                self.scene("big_number", (1,), title="Hàn Quốc tăng", value=4.9),
+                self.scene("statement", (2,), text="Con đường còn dài")]
+        self.assertEqual(self.design(spec), spec)
 
     def test_dropping_a_sentence_is_sent_back(self):
         short = [self.scene("big_number", (0,), title="Việt Nam", value=5066)]

@@ -85,6 +85,8 @@ Python, CrewAI (điều phối agent), cron/systemd timer (lịch chạy), bot T
 - **Phụ đề phải lấy chữ từ kịch bản**, Whisper chỉ cho mốc thời gian (Whisper nghe nhầm "phàn nàn" thành "phan an").
 - **Reddit chặn IP của VM** ở đường JSON và trang HTML; chỉ RSS vào được và bị giới hạn tần suất. Bài Reddit vì thế không đọc được nguồn và bị loại trước khi chấm điểm.
 - **Kịch bản phải qua cổng chuẩn** trước khi được dựng: đủ từ, ít nhất 4 con số viết bằng chữ số, Kiểm chứng đạt. Biên kịch được đưa toàn văn bài nguồn chứ không chỉ đoạn tóm tắt RSS.
+- **Nguồn World Bank (12/11)** cho ý tưởng giàu số nhất; ý tưởng từ bảng số phải được kể thành chuyện (luật `DATA_STORY`, chặn kịch bản nhắc quá 5 mốc năm) — bản đầu tiên đọc 9 mốc năm x 2 nước như đọc bảng.
+- **Lớp chống trùng YouTube phải xét cùng đề tài**: đếm mọi video view cao trong kết quả tìm kiếm thì "…Việt Nam và Hàn Quốc…" ra toàn video bóng đá, ý tưởng bị loại oan.
 - **Agent Kiểm chứng bằng LLM không đủ để chặn số bịa**: nó chỉ soát danh sách "claims" Biên kịch tự khai. Đã lọt câu mở đầu "Sai lầm 99% người ăn chay..." (kịch bản #10) và ba con số không có trong nguồn ở kịch bản #6 (video #2, Du đã duyệt trước khi có cổng này). Từ 12/11 code đối chiếu TỪNG con số trong lời đọc với bài nguồn (`crew.unsourced_numbers`); đừng gỡ cổng này.
 
 ## Cách làm việc

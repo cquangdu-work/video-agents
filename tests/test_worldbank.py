@@ -60,6 +60,16 @@ class BuildItemTest(unittest.TestCase):
         self.assertIn("Hàn Quốc theo năm: 1960: 159; 1980: 1.746; 1990: 6.813; 2000: 12.710;"
                       " 2020: 33.646; 2025: 36.227.", s)
 
+    def test_series_can_be_read_back_from_the_summary(self):
+        item = wb.build_item(GDP, COUNTRIES, SERIES)
+        got = wb.parse_series(item["summary"])
+        self.assertEqual([s["label"] for s in got], ["Việt Nam", "Hàn Quốc"])
+        self.assertEqual(got[0]["xs"], [1985, 1990, 2000, 2010, 2020, 2025])
+        self.assertEqual(got[0]["ys"], [239.0, 98.8, 404.0, 1683.0, 3534.0, 5066.0])
+        self.assertEqual(got[1]["ys"][-1], 36227.0)
+        self.assertEqual(wb.parse_series("Bài báo bình thường, năm 2020 có 5 người."), [])
+        self.assertEqual(wb.parse_vn_number("0,75"), 0.75)
+
     def test_thin_data_gives_no_idea(self):
         self.assertIsNone(wb.build_item(GDP, COUNTRIES, {"VNM": SERIES["VNM"][:3], "KOR": SERIES["KOR"]}))
 
