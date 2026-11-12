@@ -20,3 +20,10 @@ Không cookie, không theo dõi.
    Địa chỉ: `https://cquangdu-work.github.io/thegioiquaconso/`.
 4. TikTok: Manage apps → URL properties → xác minh **URL prefix** bằng file chữ ký TikTok cấp
    (tải file đó vào thư mục này, đẩy lên lại).
+
+## Gốc tên miền (repo `cquangdu-work/cquangdu-work.github.io`, tạo 12/11/2026)
+
+Chỉ chứa file xác minh TikTok (cùng tên, cùng nội dung với file ở thư mục này) và một trang
+chuyển hướng về `/thegioiquaconso/` — để xác minh qua được dù nhập URL prefix là gốc tên miền
+hay `/thegioiquaconso/`. DNS của `github.io` do GitHub quản lý nên không dùng được kiểu xác minh
+bằng bản ghi TXT.
