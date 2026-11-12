@@ -50,6 +50,23 @@ def digits_of(value) -> set:
     return out
 
 
+def spec_values(params: dict) -> list:
+    """Mọi con số SỐ LIỆU mà một cảnh hiển thị (không tính trục năm xs, số thứ tự n).
+    Dùng chung cho cổng chống bịa số (crew) và Kiểm định (qc) — thêm template mới có
+    trường số mới thì chỉ sửa ở đây."""
+    if not isinstance(params, dict):
+        return []
+    vals = [params.get("value")]
+    vals += [i.get("value") for i in params.get("items") or [] if isinstance(i, dict)]
+    vals += [params[side].get("value") for side in ("left", "right")
+             if isinstance(params.get(side), dict)]
+    vals += list(params.get("ys") or [])
+    for s in params.get("series") or []:
+        if isinstance(s, dict):
+            vals += list(s.get("ys") or [])
+    return [v for v in vals if v is not None]
+
+
 def extract_json(text: str):
     """LLM hay trả JSON kèm chữ thừa/markdown — hàm này móc khối JSON đầu tiên ra."""
     text = re.sub(r"```(?:json)?", "", text).strip("` \n")

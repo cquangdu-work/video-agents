@@ -117,12 +117,9 @@ def check_narration(script_id: int) -> dict:
 
 def param_digits(params: dict) -> set:
     """Chuỗi chữ số của mọi con số mà cảnh này ĐƯỢC PHÉP vẽ (lấy từ spec của chính nó)."""
-    from .utils import digits_of
-    values = [params.get("value"), params.get("n")]
-    values += [i.get("value") for i in params.get("items", []) if isinstance(i, dict)]
-    values += [params.get(side, {}).get("value") for side in ("left", "right")
-               if isinstance(params.get(side), dict)]
-    values += list(params.get("ys") or []) + list(params.get("xs") or [])
+    from .utils import digits_of, spec_values
+    # số liệu của cảnh + trục năm + số thứ tự của cảnh chữ kiểu 2 — đều do spec bảo vẽ
+    values = spec_values(params) + list(params.get("xs") or []) + [params.get("n")]
     out = set()
     for v in values:
         out |= digits_of(v)

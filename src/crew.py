@@ -87,9 +87,18 @@ quan điểm, định tính, không đo đếm được gì thì LOẠI dù nghe
 CẨN THẬN ĐƠN VỊ khi nhắc số liệu từ nguồn tiếng Hàn/Anh: 만 = 10.000 (54만 = 540.000),
 억 = 100 triệu; million = triệu, billion = tỷ. Không chắc thì đừng ghi con số vào góc.""",
         expected_output="""JSON array, mỗi phần tử:
-{"id": <id gốc>, "angle": "<góc cụ thể, 1-2 câu tiếng Việt>", "reason": "<vì sao chọn>"}""",
+{"id": <id gốc>, "angle": "<góc cụ thể, 1-2 câu tiếng Việt>",
+ "keyword": "<3-6 từ TIẾNG VIỆT nói đúng đề tài, như người Việt gõ tìm trên YouTube,
+             ví dụ 'tỷ suất sinh Hàn Quốc' — dùng để kiểm tra đã có ai làm chưa>",
+ "reason": "<vì sao chọn>"}""",
     )
-    return extract_json(out)
+    try:
+        picked = extract_json(out)
+    except ValueError:
+        picked = []
+    # Model dự phòng hay trả sai khuôn: chỉ giữ phần tử đúng dạng, có id và góc
+    return [c for c in (picked if isinstance(picked, list) else [])
+            if isinstance(c, dict) and "id" in c and c.get("angle")]
 
 
 # ------------------------------------------------------------------ Biên tập
@@ -343,6 +352,9 @@ TEMPLATE_GUIDE = """Các template có sẵn và tham số (CHỈ dùng đúng c�
    "source": str, "decimals": int} — xếp hạng 3-6 mục.
 4. "line_chart": {"title": str, "xs": [số...], "ys": [số...], "unit": str, "source": str,
    "decimals": int} — xu hướng theo thời gian, xs/ys cùng độ dài.
+   SO HAI NƯỚC QUA CÁC NĂM (dạng mạnh nhất của kênh): thay "ys" bằng
+   "series": [{"label": "Việt Nam", "ys": [...]}, {"label": "Hàn Quốc", "ys": [...]}],
+   mỗi "ys" dài bằng "xs" (cùng các năm). Màu đỏ/xanh của hai nước tự gán theo nhãn.
 5. "statement": {"text": str (<= 14 từ), "source": str} — câu chữ lớn giữa màn,
    KHÔNG có số. Dùng cho hook, câu dẫn, câu chuyển, câu kết.
 6. "percent": {"title": str, "value": số từ 0 đến 100, "label": str, "source": str,
@@ -413,7 +425,7 @@ Yêu cầu:
 
     # Tập chữ số có thật — chuẩn đối chiếu chống bịa: lời kịch bản, tiêu đề ý tưởng (kịch
     # bản hay viết số bằng chữ: "tám nghìn...") và dữ liệu nguồn của ý tưởng.
-    from .utils import digit_set, digits_of
+    from .utils import digit_set, digits_of, spec_values
     script_digits = digit_set(
         " ".join(str(s.get("voice", "")) for s in scenes)
         + " " + str(idea.get("title", "")) + " " + str(idea.get("angle", ""))
@@ -423,14 +435,7 @@ Yêu cầu:
         """Những con số trong spec KHÔNG có trong kịch bản (trừ xs trục thời gian)."""
         fakes = []
         for sc in spec:
-            p = sc.get("params", {})
-            vals = [p.get("value")]
-            vals += [i.get("value") for i in p.get("items", [])]
-            vals += [p.get(side, {}).get("value") for side in ("left", "right")]
-            vals += p.get("ys", [])
-            for v in vals:
-                if v is None:
-                    continue
+            for v in spec_values(sc.get("params")):
                 if digits_of(v) and not (digits_of(v) & script_digits):
                     fakes.append(v)
         return fakes
@@ -505,9 +510,7 @@ Yêu cầu:
     fakes = set(str(f) for f in fabricated(spec))
     for sc in spec:
         p = sc.get("params", {})
-        vals = ([p.get("value")] + [i.get("value") for i in p.get("items", [])]
-                + [p.get(s, {}).get("value") for s in ("left", "right")] + p.get("ys", []))
-        if any(str(v) in fakes for v in vals if v is not None):
+        if any(str(v) in fakes for v in spec_values(p)):
             text = str(p.get("title") or sc.get("voice") or "")
             log.warning("Cảnh '%s' còn số không rõ nguồn sau 3 lần — đổi thành cảnh chữ", text[:40])
             sc["template"] = "statement"

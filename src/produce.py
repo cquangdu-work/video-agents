@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 
 from . import db
 from .main import load_config
+from .utils import spec_values
 
 log = logging.getLogger("produce")
 
@@ -29,7 +30,7 @@ REQUIRED = {
     "big_number": ["title", "value"],
     "versus": ["title", "left", "right"],
     "bar_chart": ["title", "items"],
-    "line_chart": ["title", "xs", "ys"],
+    "line_chart": ["title", "xs"],          # + "ys" (một đường) hoặc "series" (nhiều đường)
     "percent": ["title", "value"],
 }
 STATEMENT_STYLES = 3      # số kiểu bố cục của cảnh chữ (src/render/templates.py)
@@ -71,22 +72,35 @@ def validate_spec(raw: list, cfg: dict) -> list:
                             i + 1, params["value"])
                 tpl = sc["template"] = "big_number"
                 params.setdefault("suffix", "%")
-        if tpl in ("big_number", "percent", "versus"):
-            values = ([params.get("value")] if tpl != "versus"
-                      else [params["left"].get("value"), params["right"].get("value")])
-            need = max(_decimals_for(v) for v in values)
+        if tpl in ("big_number", "percent", "versus", "line_chart", "bar_chart"):
+            values = spec_values(params)
+            need = max((_decimals_for(v) for v in values), default=0)
             if need > int(params.get("decimals") or 0):
-                params["decimals"] = need
+                params["decimals"] = need       # tỷ suất sinh 0,75 từng hiện thành "1"
         if tpl == "statement":
             # xoay vòng 3 kiểu bố cục để hai cảnh chữ liền nhau không giống hệt nhau
             params["style"] = statements % STATEMENT_STYLES
             params["n"] = statements + 1
             statements += 1
         if tpl == "line_chart":
-            if len(params["xs"]) != len(params["ys"]):
+            xs = params["xs"]
+            if params.get("series"):
+                # Đường nào thiếu/thừa điểm so với trục năm thì bỏ đường đó, không bỏ cả cảnh
+                good = [s for s in params["series"] if isinstance(s, dict)
+                        and isinstance(s.get("ys"), list) and len(s["ys"]) == len(xs)]
+                if len(good) < len(params["series"]):
+                    log.warning("Cảnh %d: bỏ %d đường lệch độ dài với xs", i + 1,
+                                len(params["series"]) - len(good))
+                if not good:
+                    continue
+                params["series"] = good
+                params.pop("ys", None)
+            elif not isinstance(params.get("ys"), list) or len(xs) != len(params["ys"]):
                 log.warning("Cảnh %d: xs/ys lệch độ dài — bỏ", i + 1)
                 continue
-            xs = params["xs"]
+            if len(xs) < 2:
+                log.warning("Cảnh %d: biểu đồ đường cần ít nhất 2 mốc — bỏ", i + 1)
+                continue
             if any(b <= a for a, b in zip(xs, xs[1:])):
                 # LLM hay dùng số tháng vắt qua năm (12,1,2...) -> trục x loạn.
                 # Đổi thành chỉ số mốc 1..n cho đường vẽ đúng chiều thời gian.

@@ -122,32 +122,74 @@ class Versus(BrandScene):
         self.wait(self.seconds * 0.35)
 
 
+def chart_series(p: dict, colors: dict) -> list:
+    """Các đường của một line_chart -> [(nhãn, ys, màu)].
+
+    Một đường: {xs, ys, color?}. Nhiều đường (so hai nước qua các năm):
+    {xs, series: [{label, ys, color?}, ...]}. Màu đặt theo tên trong bộ nhận diện
+    ("vietnam" đỏ, "korea" xanh); không ghi màu thì nhãn "Việt Nam"/"Hàn Quốc" tự nhận màu."""
+    auto = {"việt nam": "vietnam", "vn": "vietnam", "hàn quốc": "korea", "kr": "korea"}
+    if p.get("series"):
+        keys = [s.get("color") or auto.get(str(s.get("label", "")).strip().lower())
+                for s in p["series"]]
+        spare = [k for k in ("accent", "good", "korea", "bad", "vietnam") if k not in keys]
+        out = []
+        for s, key in zip(p["series"], keys):
+            if not key:                          # đường không rõ nước: lấy màu chưa ai dùng
+                key = spare.pop(0) if spare else "accent"
+            out.append((str(s.get("label", "")), list(s["ys"]), colors.get(key, colors["accent"])))
+        return out
+    return [("", list(p["ys"]), colors.get(p.get("color", "accent"), colors["accent"]))]
+
+
 class LineChart(BrandScene):
     """Đường xu hướng tự vẽ — params:
-    {title, xs: [...], ys: [...], unit, source, color(=accent), decimals(=0)}"""
+    {title, xs: [...], ys: [...], unit, source, color(=accent), decimals(=0)}
+    hoặc nhiều đường trên cùng trục (Việt Nam vs Hàn Quốc qua các năm):
+    {title, xs: [...], series: [{label, ys, color?}, ...], unit, source, decimals}"""
 
     def construct(self):
         p, c = self.params, self.b["colors"]
         self.add_signature(p.get("source"))
         self.add(self.title_text(p["title"]))
-        xs, ys = p["xs"], p["ys"]
-        color = c.get(p.get("color", "accent"), c["accent"])
+        xs = p["xs"]
+        lines = chart_series(p, c)
+        top = max(max(ys) for _, ys, _ in lines)
+        dec = p.get("decimals", 0)
         ax = Axes(x_range=[min(xs), max(xs), max((max(xs) - min(xs)) // 4, 1)],
-                  y_range=[0, max(ys) * 1.15, max(max(ys) / 4, 1)],
+                  y_range=[0, top * 1.15, max(top / 4, 1e-9)],
                   x_length=7.2, y_length=6.0, tips=False,
                   axis_config={"color": c["muted"], "stroke_width": 2,
                                "include_numbers": False}).move_to([0.1, -0.4, 0])
-        graph = ax.plot_line_graph(xs, ys, line_color=color, stroke_width=7,
-                                   add_vertex_dots=False)
-        end = Dot(ax.c2p(xs[-1], ys[-1]), color=color, radius=0.1)
-        endval = Text(fmt_num(ys[-1], p.get("decimals", 0)), font=pick_font("number"),
-                      font_size=40, color=color, weight="BOLD")
-        endval.next_to(end, UP + LEFT, buff=0.12)
+        graphs, ends = [], VGroup()
+        for k, (label, ys, color) in enumerate(lines):
+            graphs.append(ax.plot_line_graph(xs, ys, line_color=color, stroke_width=7,
+                                             add_vertex_dots=False))
+            end = Dot(ax.c2p(xs[-1], ys[-1]), color=color, radius=0.1)
+            val = Text(fmt_num(ys[-1], dec), font=pick_font("number"), font_size=40,
+                       color=color, weight="BOLD")
+            val.next_to(end, UP + LEFT, buff=0.12)
+            ends.add(end, val)
+        # Hai đường kết thúc gần nhau -> hai nhãn số dính vào nhau (đo được: hở 0,15 đơn vị
+        # là đã dính khi xem trên điện thoại). Nhãn của đường THẤP chuyển xuống dưới điểm cuối.
+        pairs = [(ends[k], ends[k + 1]) for k in range(0, len(ends), 2)]
+        if len(pairs) == 2:
+            (dot_lo, val_lo), (_, val_hi) = sorted(pairs, key=lambda d_v: d_v[0].get_center()[1])
+            if val_hi.get_bottom()[1] - val_lo.get_top()[1] < 0.35:
+                val_lo.next_to(dot_lo, DOWN + LEFT, buff=0.12)
         span = Text(f"{xs[0]} → {xs[-1]}" + (f"  ·  {p['unit']}" if p.get("unit") else ""),
                     font=pick_font(), font_size=28, color=c["muted"]).move_to([0, -4.5, 0])
         self.add(ax, span)
-        self.play(Create(graph, run_time=self.seconds * 0.6))
-        self.play(FadeIn(end), FadeIn(endval), run_time=0.3)
+        if len(lines) > 1:                       # chú thích màu ngay dưới tiêu đề
+            legend = VGroup(*[
+                VGroup(Line(ORIGIN, RIGHT * 0.6, color=color, stroke_width=8),
+                       Text(label, font=pick_font(), font_size=34, color=color, weight="BOLD")
+                       ).arrange(RIGHT, buff=0.2)
+                for label, _, color in lines]).arrange(RIGHT, buff=0.8).move_to([0, 3.4, 0])
+            fit_width(legend, 8.0)
+            self.add(legend)
+        self.play(*[Create(g) for g in graphs], run_time=self.seconds * 0.6)
+        self.play(FadeIn(ends), run_time=0.3)
         self.wait(max(self.seconds * 0.4 - 0.3, 0.1))
 
 

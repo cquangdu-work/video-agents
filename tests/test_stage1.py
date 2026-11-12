@@ -112,6 +112,16 @@ class ScriptStandardTest(unittest.TestCase):
         with mock.patch.object(crew, "_run_single_task", lambda **kw: '["ok"]'):
             self.assertFalse(crew.fact_check(script(), {"source_url": "u"}, "n", CFG)["pass"])
 
+    def test_hunter_keeps_only_well_formed_picks(self):
+        answer = ('[{"id": 1, "angle": "góc", "keyword": "tỷ suất sinh Hàn Quốc"}, "rác",'
+                  ' {"id": 2}, {"angle": "thiếu id"}]')
+        with mock.patch.object(crew, "_run_single_task", lambda **kw: answer):
+            got = crew.hunt_ideas([{"id": 1, "source_name": "S", "lang": "vi", "title": "t",
+                                    "summary": ""}], CFG)
+        self.assertEqual(got, [{"id": 1, "angle": "góc", "keyword": "tỷ suất sinh Hàn Quốc"}])
+        with mock.patch.object(crew, "_run_single_task", lambda **kw: "Không có ý tưởng nào hay."):
+            self.assertEqual(crew.hunt_ideas([], CFG), [])
+
     def test_hunter_is_told_how_many_numbers_each_idea_has(self):
         seen = []
         raw = [{"id": 1, "source_name": "OWID", "lang": "en", "title": "540.000 deaths a year",

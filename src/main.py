@@ -60,19 +60,22 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
         idea = by_id.get(c["id"])
         if not idea:
             continue
-        idea = dict(idea, angle=c["angle"])
+        idea = dict(idea, angle=c["angle"], keyword=str(c.get("keyword") or "").strip())
         db.set_status(con, idea["id"], "candidate", angle=c["angle"])
         enriched.append(idea)
     log.info("Săn ý tưởng chọn %d ứng viên", len(enriched))
 
-    # --- Lọc trùng lớp 2: YouTube (bỏ qua nếu chưa có API key)
+    # --- Lọc trùng lớp 2: YouTube (bỏ qua nếu chưa có API key). Tìm bằng TỪ KHÓA TIẾNG
+    # VIỆT do Săn ý tưởng viết; thiếu thì dùng tiêu đề (tiêu đề báo Hàn/Anh tìm video
+    # tiếng Việt thì gần như vô nghĩa).
     yt_cfg = cfg["dedup"]["youtube_check"]
     survivors = []
     for idea in enriched:
-        n = count_popular_vietnamese_videos(idea["title"], yt_cfg)
+        query = idea["keyword"] or idea["title"]
+        n = count_popular_vietnamese_videos(query, yt_cfg)
         if n is not None and n > yt_cfg["max_popular_allowed"]:
             db.set_status(con, idea["id"], "rejected",
-                          reason=f"Đã có {n} video tiếng Việt view cao")
+                          reason=f"Đã có {n} video tiếng Việt view cao cùng đề tài “{query}”")
             continue
         survivors.append(idea)
 

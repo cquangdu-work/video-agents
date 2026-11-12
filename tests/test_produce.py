@@ -45,6 +45,40 @@ class ValidateSpecTest(unittest.TestCase):
             {"template": "big_number", "params": {"title": "t", "value": 1479, "decimals": 0}}], CFG)
         self.assertEqual([s["params"].get("decimals", 0) for s in spec[1:]], [1, 0, 2, 0])
 
+    def test_two_country_line_chart_is_kept_and_bad_series_dropped(self):
+        xs = [1960, 1990, 2024]
+        spec = produce.validate_spec([
+            {"template": "line_chart", "params": {"title": "Tỷ suất sinh", "xs": xs, "series": [
+                {"label": "Việt Nam", "ys": [6.27, 3.6, 1.9]},
+                {"label": "Hàn Quốc", "ys": [5.99, 1.57, 0.75]},
+                {"label": "Thiếu điểm", "ys": [1, 2]}]}},
+            {"template": "line_chart", "params": {"title": "Hỏng", "xs": xs,
+                                                  "series": [{"label": "x", "ys": [1]}]}},
+            {"template": "line_chart", "params": {"title": "Một mốc", "xs": [2024], "ys": [1]}}], CFG)
+        self.assertEqual([s["params"]["title"] for s in spec[1:]], ["Tỷ suất sinh"])
+        p = spec[1]["params"]
+        self.assertEqual([s["label"] for s in p["series"]], ["Việt Nam", "Hàn Quốc"])
+        self.assertEqual(p["decimals"], 2)                       # 0,75 không bị làm tròn thành "1"
+
+    def test_chart_numbers_include_every_series(self):
+        from src.utils import spec_values
+        p = {"xs": [2000, 2024], "series": [{"label": "VN", "ys": [404, 5066]},
+                                            {"label": "KR", "ys": [12710, 36227]}]}
+        self.assertEqual(spec_values(p), [404, 5066, 12710, 36227])   # năm trên trục không tính
+        self.assertEqual(sorted(spec_values({"left": {"value": 1}, "right": {"value": 2},
+                                             "items": [{"value": 3}]})), [1, 2, 3])
+        self.assertEqual(spec_values(None), [])
+
+    def test_series_colours_follow_the_country_names(self):
+        from src.render.templates import chart_series
+        colors = {"accent": "#A", "vietnam": "#VN", "korea": "#KR", "good": "#G", "bad": "#B"}
+        got = chart_series({"series": [{"label": "Việt Nam", "ys": [1]}, {"label": "Hàn Quốc", "ys": [2]},
+                                       {"label": "Nhật Bản", "ys": [3]}]}, colors)
+        self.assertEqual([c for _, _, c in got], ["#VN", "#KR", "#A"])
+        two_unknown = chart_series({"series": [{"label": "A", "ys": [1]}, {"label": "B", "ys": [2]}]}, colors)
+        self.assertEqual([c for _, _, c in two_unknown], ["#A", "#G"])     # hai đường không trùng màu
+        self.assertEqual(chart_series({"ys": [1, 2]}, colors), [("", [1, 2], "#A")])
+
     def test_percent_outside_0_100_becomes_a_big_number(self):
         spec = produce.validate_spec([
             {"template": "percent", "params": {"title": "Tăng", "value": 250}},
@@ -91,6 +125,17 @@ class DesignScenesTest(unittest.TestCase):
         self.assertEqual(self.design(spec), spec)
         self.assertEqual(len(self.prompts), 1)
         self.assertIn("DỮ LIỆU NGUỒN", self.prompts[0])
+
+    def test_two_country_chart_from_source_data_passes_the_fabrication_gate(self):
+        spec = [self.scene("line_chart", (0, 1), title="GDP đầu người", xs=[2000, 2025], series=[
+                    {"label": "Việt Nam", "ys": [404, 5066]}, {"label": "Hàn Quốc", "ys": [12710, 36227]}]),
+                self.scene("statement", (2,), text="Con đường còn dài")]
+        self.assertEqual(self.design(spec), spec)
+        made_up = [dict(spec[0], params=dict(spec[0]["params"], series=[
+                       {"label": "Việt Nam", "ys": [404, 5066]}, {"label": "Hàn Quốc", "ys": [9999, 36227]}])),
+                   spec[1]]
+        got = self.design(made_up, made_up, made_up)             # 9.999 không có ở đâu cả
+        self.assertEqual(got[0]["template"], "statement")
 
     def test_chart_may_use_source_data_the_narration_does_not_read_out(self):
         spec = [self.scene("line_chart", (0,), title="Việt Nam", xs=[2000, 2010, 2025],
