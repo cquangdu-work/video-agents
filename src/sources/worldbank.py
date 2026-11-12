@@ -236,6 +236,11 @@ def build_world_item(ind: dict, year: int, table: dict, names: dict, focus: list
             gap = round(shown(table[hi]) - shown(table[lo]), 6)
             gap_text = (f"{vn_number(gap)} điểm phần trăm" if unit.startswith("%") else val(gap))
             lines.append(f"Năm {year}: {names[hi]} hơn {names[lo]} {gap_text}.")
+    # Góc kể chuyện mạnh nhất của kênh: "Việt Nam hôm nay bằng Hàn Quốc năm nào"
+    match = catch_up_year(table[a], history.get(b) or []) if a in table and b else None
+    if match and match[0] < year:
+        lines.append(f"{names[a]} năm {year} ({val(table[a])}) tương đương {names[b]} năm {match[0]}"
+                     f" ({val(match[1])}) — cách nhau {year - match[0]} năm.")
     for c in focus:                                   # chuỗi theo năm -> biểu đồ đường hai nước
         s = history.get(c) or []
         picks = [p for i, p in enumerate(s) if p[0] % 5 == 0 or i in (0, len(s) - 1)]

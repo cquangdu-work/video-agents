@@ -143,7 +143,8 @@ class WorldTableFormatTest(unittest.TestCase):
 class BuildWorldItemTest(unittest.TestCase):
     def test_idea_tells_where_vietnam_stands_and_carries_the_full_table(self):
         table, names = fake_world()
-        history = {"VNM": [(1990, 70.0), (1995, 71.0), (2024, 74.7)], "KOR": [(1990, 72.0), (2024, 83.6)]}
+        history = {"VNM": [(1990, 70.0), (1995, 71.0), (2024, 74.7)],
+                   "KOR": [(1990, 72.0), (1997, 74.9), (2024, 83.6)]}
         item = wb.build_world_item(LE, 2024, table, names, ["VNM", "KOR"], history)
         rank = datatable.ranks_desc(table)
         s = item["summary"]
@@ -152,6 +153,8 @@ class BuildWorldItemTest(unittest.TestCase):
         self.assertIn("1. Hàn Quốc — 83,6 tuổi", s)
         self.assertIn("Trong 6 nước Đông Nam Á có số liệu, Việt Nam đứng thứ 3; cao nhất là Singapore", s)
         self.assertIn("Hàn Quốc hơn Việt Nam 8,9 tuổi", s)                  # chênh ít: "hơn", không "gấp 1,12 lần"
+        self.assertIn("Việt Nam năm 2024 (74,7 tuổi) tương đương Hàn Quốc năm 1997 (74,9 tuổi)"
+                      " — cách nhau 27 năm", s)
         self.assertEqual([x["label"] for x in datatable.parse_series(s)], ["Việt Nam", "Hàn Quốc"])
         world = datatable.parse_world_table(s)
         self.assertEqual(len(world["items"]), len(table))
