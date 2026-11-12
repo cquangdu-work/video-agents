@@ -4,6 +4,7 @@
 from .rss import fetch_rss_sources
 from .arxiv import fetch_arxiv
 from .reddit import fetch_reddit
+from .worldbank import fetch_worldbank
 
 
 def fetch_all(cfg: dict) -> list:
@@ -12,4 +13,7 @@ def fetch_all(cfg: dict) -> list:
     items += fetch_rss_sources(cfg["sources"].get("rss", []))
     items += fetch_arxiv(cfg["sources"].get("arxiv", {}))
     items += fetch_reddit(cfg["sources"].get("reddit", {}))
+    # World Bank để CUỐI: main lấy 60 ý tưởng thô mới nhất, nguồn này ít bài nên phải nằm
+    # trong nhóm mới nhất kẻo bị 150 bài tin tức đẩy ra ngoài.
+    items += fetch_worldbank(cfg["sources"].get("worldbank", {}))
     return items

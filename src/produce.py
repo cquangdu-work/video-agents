@@ -98,8 +98,8 @@ def validate_spec(raw: list, cfg: dict) -> list:
 
 
 def fetch_script(con, script_id: int = None):
-    q = ("SELECT s.id, s.idea_id, s.body, s.hooks, i.title, i.angle, i.source_url"
-         " FROM scripts s JOIN ideas i ON i.id=s.idea_id")
+    q = ("SELECT s.id, s.idea_id, s.body, s.hooks, i.title, i.angle, i.source_url,"
+         " i.summary, i.source_name FROM scripts s JOIN ideas i ON i.id=s.idea_id")
     if script_id:
         row = con.execute(q + " WHERE s.id=?", (script_id,)).fetchone()
     else:
@@ -127,7 +127,10 @@ def main():
     log.info("Kịch bản #%d: %s (%d cảnh)", s["id"], s["title"][:60], len(scenes))
 
     from .crew import design_scenes
-    idea = {"title": s["title"], "angle": s["angle"], "source_url": s["source_url"]}
+    # summary: dữ liệu nguồn của ý tưởng (bảng số World Bank, tóm tắt bài báo) — agent Sản
+    # xuất được lấy số ở đó để vẽ biểu đồ
+    idea = {"title": s["title"], "angle": s["angle"], "source_url": s["source_url"],
+            "summary": s["summary"], "source_name": s["source_name"]}
     spec = validate_spec(design_scenes(idea, scenes, cfg), cfg)
 
     SPEC_DIR.mkdir(parents=True, exist_ok=True)

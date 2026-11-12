@@ -115,12 +115,28 @@ def check_narration(script_id: int) -> dict:
             "ok": not problems}
 
 
-def real_issue(verdict: dict, voice: str) -> bool:
+def param_digits(params: dict) -> set:
+    """Chuỗi chữ số của mọi con số mà cảnh này ĐƯỢC PHÉP vẽ (lấy từ spec của chính nó)."""
+    from .utils import digits_of
+    values = [params.get("value"), params.get("n")]
+    values += [i.get("value") for i in params.get("items", []) if isinstance(i, dict)]
+    values += [params.get(side, {}).get("value") for side in ("left", "right")
+               if isinstance(params.get(side), dict)]
+    values += list(params.get("ys") or []) + list(params.get("xs") or [])
+    out = set()
+    for v in values:
+        out |= digits_of(v)
+    return out
+
+
+def real_issue(verdict: dict, voice: str, allowed: set = frozenset()) -> bool:
     """Lời phán của model nhìn ảnh có phải LỖI THẬT không.
 
     Model nhỏ hay chê những thứ không phải lỗi ("hình thiếu chữ 'nữa'", "chữ bị đảo").
     Nên: chỉ nhận 3 loại lỗi đã định nghĩa, và loại "sai số" thì code tự đối chiếu lại
-    chữ số — con số model đọc trên hình mà CÓ trong lời đọc thì không phải sai số.
+    chữ số — con số model đọc trên hình mà CÓ trong lời đọc, hoặc đúng là con số spec bảo
+    vẽ (`allowed`: biểu đồ dùng số của dữ liệu nguồn mà lời không nhắc hết), thì không
+    phải sai số. Spec đã được đối chiếu với nguồn từ lúc dựng (crew.design_scenes).
     """
     from .utils import digit_set
     if verdict.get("ok", True):
@@ -128,6 +144,9 @@ def real_issue(verdict: dict, voice: str) -> bool:
     kind = str(verdict.get("kind", "")).strip().lower()
     if kind == "number":
         on_image, in_voice = digit_set(str(verdict.get("image_number", ""))), digit_set(voice)
+        # So ĐÚNG từng chữ số (không bỏ số 0 ở đuôi): 54.000 và 540.000 phải bị coi là khác nhau
+        if on_image and on_image <= set(allowed):
+            return False
         # lời không có chữ số nào (số viết bằng chữ) thì không đủ căn cứ để kết luận
         return bool(on_image) and bool(in_voice) and not (on_image & in_voice)
     return kind in ("opposite", "clipped")
@@ -142,7 +161,8 @@ def check_visuals_match(video: Path, spec: list, duration: float) -> dict:
         secs = float(sc.get("seconds", 3))
         if sc.get("voice"):
             # Lấy mẫu ở 85% cảnh: hoạt hình đếm số đã chạy xong, số trên hình là số cuối
-            voiced.append((min(t + secs * 0.85, duration - 0.2), sc["voice"]))
+            voiced.append((min(t + secs * 0.85, duration - 0.2), sc["voice"],
+                           param_digits(sc.get("params") or {})))
         t += secs
     samples = spread(voiced, MAX_VISION_SAMPLES)
 
@@ -174,19 +194,19 @@ def check_visuals_match(video: Path, spec: list, duration: float) -> dict:
         return json.loads(re.search(r"\{.*\}", txt, re.S).group(0))
 
     issues, unchecked = [], 0
-    for ts, voice in samples:
+    for ts, voice, allowed in samples:
         frame = ROOT / "data" / "render" / "qc_frame.png"
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{ts:.2f}", "-i", str(video),
                         "-frames:v", "1", str(frame)], check=True)
         img = base64.b64encode(frame.read_bytes()).decode()
         try:
             verdict = ask(img, voice)
-            if real_issue(verdict, voice):
+            if real_issue(verdict, voice, allowed):
                 # Model nhỏ hay bắt bẻ nhầm. Lỗi thật thì hỏi lại vẫn ra lỗi; báo nhầm thì
                 # hiếm khi nhầm hai lần liền.
                 log.warning("Vision %.0fs nghi có lỗi: %s — hỏi lại lần 2", ts, verdict.get("note", ""))
                 again = ask(img, voice)
-                if real_issue(again, voice):
+                if real_issue(again, voice, allowed):
                     issues.append(f"{ts:.0f}s: {str(again.get('note', ''))[:80]}")
             elif not verdict.get("ok", True):
                 log.info("Vision %.0fs: bỏ qua nhận xét không thuộc loại lỗi nào (%s)",

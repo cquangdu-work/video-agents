@@ -370,25 +370,36 @@ def design_scenes(idea: dict, scenes: list, cfg: dict) -> list:
     target_secs = total_words / words_per_second(cfg)
     lo_total, hi_total = int(target_secs * 0.75), int(target_secs * 1.25)
 
+    # Dữ liệu gốc của ý tưởng (bảng số World Bank, tóm tắt bài báo): agent được phép lấy số
+    # ở đây để vẽ biểu đồ — một đường xu hướng cần 6-10 điểm, lời đọc không thể đọc hết.
+    source_data = str(idea.get("summary") or "").strip()[:3000]
+    data_block = (f"\nDỮ LIỆU NGUỒN (số thật, ĐƯỢC dùng cho biểu đồ kể cả khi lời đọc không nhắc"
+                  f" hết):\n\"\"\"\n{source_data}\n\"\"\"\n" if source_data else "")
+
     base_description = f"""Video của kênh "{cfg['channel']['name']}", ý tưởng: {idea['title']}
 
 Kịch bản (lời đọc tổng cộng {total_words} từ ≈ {target_secs:.0f} giây):
 {listing}
-
+{data_block}
 {TEMPLATE_GUIDE}
 
 Yêu cầu:
 - Bám thứ tự kịch bản. ĐƯỢC gộp 2-3 cảnh kịch bản liền nhau thành MỘT cảnh đồ họa
   khi các con số cùng nhóm (so hạng -> "bar_chart", theo thời gian -> "line_chart",
   hai phe -> "versus"), nhưng cảnh gộp phải CỘNG DỒN thời lượng lời của các cảnh gốc.
-- TỔNG "seconds" toàn video BẮT BUỘC trong khoảng {lo_total}-{hi_total} giây
-  (video phải phủ hết lời đọc, không được rút ngắn nội dung).
+- KHÔNG bỏ câu nào: mọi câu của kịch bản phải nằm nguyên văn trong "voice" của một cảnh.
+  "seconds" chỉ là ước lượng thời gian đọc của cảnh (tổng khoảng {lo_total}-{hi_total} giây);
+  máy sẽ đo lại theo giọng đọc thật.
 - LUẬT SỐ LIỆU (quan trọng nhất): MỌI con số trong spec phải xuất hiện NGUYÊN VĂN
-  trong lời kịch bản. Cảnh nào lời đọc KHÔNG chứa con số -> BẮT BUỘC dùng "statement",
-  TUYỆT ĐỐI không tự chế số liệu, không ước lượng, không minh họa bằng số tượng trưng.
+  trong lời kịch bản hoặc trong DỮ LIỆU NGUỒN. Cảnh nào lời đọc KHÔNG chứa con số ->
+  BẮT BUỘC dùng "statement" (trừ khi vẽ biểu đồ bằng số của DỮ LIỆU NGUỒN đúng với ý
+  câu đó). TUYỆT ĐỐI không tự chế số liệu, không ước lượng, không minh họa tượng trưng.
 - LUẬT ĐA DẠNG: "big_number" chiếm tối đa 40%% số cảnh; hai cảnh liền nhau hạn chế
   cùng template; con số nhỏ tầm thường (1, 2, 3...) không đáng làm big_number.
-- "seconds" mỗi cảnh: {pacing['scene_seconds_min']}-{pacing['scene_seconds_max']} giây.
+  HAI con số cùng đơn vị của hai đối tượng (hai nước, hai món, trước và sau) -> MỘT cảnh
+  "versus" thay vì hai cảnh "big_number". Số của MỘT đối tượng qua nhiều năm -> "line_chart".
+  Từ 3 đối tượng cùng đơn vị trở lên -> "bar_chart".
+- "seconds" mỗi cảnh thường {pacing['scene_seconds_min']}-{pacing['scene_seconds_max']} giây; cảnh gộp hai câu thì dài hơn.
 - "title" ngắn <= 9 từ, tiếng Việt; "source" ghi nguồn của cảnh đó.
 - Mỗi cảnh có trường "voice": lời đọc NGUYÊN VĂN của (các) cảnh kịch bản tương ứng,
   không sửa chữ; cảnh gộp thì nối các câu lại.
@@ -400,13 +411,13 @@ Yêu cầu:
     expected = """JSON array, mỗi phần tử:
 {"template": "<tên template>", "seconds": <số>, "voice": "<lời đọc nguyên văn>", "params": {...}}"""
 
-    # Tập chữ số có thật trong kịch bản — chuẩn đối chiếu chống bịa.
-    # Tính cả tiêu đề ý tưởng (kịch bản hay viết số bằng chữ: "tám nghìn...")
-    # TODO: truyền thêm claims của kịch bản vào đây cho đủ nguồn số thật.
+    # Tập chữ số có thật — chuẩn đối chiếu chống bịa: lời kịch bản, tiêu đề ý tưởng (kịch
+    # bản hay viết số bằng chữ: "tám nghìn...") và dữ liệu nguồn của ý tưởng.
     from .utils import digit_set, digits_of
     script_digits = digit_set(
         " ".join(str(s.get("voice", "")) for s in scenes)
-        + " " + str(idea.get("title", "")) + " " + str(idea.get("angle", "")))
+        + " " + str(idea.get("title", "")) + " " + str(idea.get("angle", ""))
+        + " " + source_data)
 
     def fabricated(spec: list) -> list:
         """Những con số trong spec KHÔNG có trong kịch bản (trừ xs trục thời gian)."""
@@ -424,46 +435,83 @@ Yêu cầu:
                     fakes.append(v)
         return fakes
 
-    description, spec = base_description, None
+    def as_spec(obj) -> list:
+        """Đưa câu trả lời về đúng dạng danh sách cảnh (model dự phòng hay trả sai khuôn)."""
+        if isinstance(obj, dict):
+            obj = next((v for v in obj.values() if isinstance(v, list)), [])
+        if not isinstance(obj, list):
+            return []
+        scenes_out = [s for s in obj if isinstance(s, dict)]
+        for s in scenes_out:
+            if not isinstance(s.get("params"), dict):
+                s["params"] = {}
+        return scenes_out
+
+    def spoken_words(spec: list) -> int:
+        """Số từ lời đọc mà spec mang theo, mỗi câu tính MỘT lần (câu trải nhiều cảnh
+        liền nhau được ghi lặp ở các cảnh đó — xem assemble.voice_groups)."""
+        n, prev = 0, None
+        for s in spec:
+            v = " ".join(str(s.get("voice") or "").split())
+            if v and v != prev:
+                n += len(v.split())
+            prev = v
+        return n
+
+    description, best, best_problems = base_description, [], None
     for attempt in range(3):
-        spec = extract_json(_run_single_task(
-            role="Đạo diễn đồ họa dữ liệu",
-            goal="Dịch kịch bản thành cảnh đồ họa, số liệu tuyệt đối trung thực",
-            description=description, expected_output=expected))
+        try:
+            spec = as_spec(extract_json(_run_single_task(
+                role="Đạo diễn đồ họa dữ liệu",
+                goal="Dịch kịch bản thành cảnh đồ họa, số liệu tuyệt đối trung thực",
+                description=description, expected_output=expected)))
+        except ValueError:
+            spec = []
         # Đơn điệu chỉ tính trên các template SỐ LIỆU: kịch bản ít con số thì
         # nhiều statement là đúng đắn, không được ép vẽ biểu đồ (sẽ sinh bịa số).
         counts = collections.Counter(s.get("template") for s in spec)
         data_counts = {k: v for k, v in counts.items() if k not in ("statement", "intro")}
         share = max(data_counts.values(), default=0) / max(len(spec), 1)
-        # Tính tổng bằng thời lượng ĐÃ KẸP 2-4s (chặn chiêu khai mỗi cảnh 8s cho đủ tổng)
-        s_lo, s_hi = pacing["scene_seconds_min"], pacing["scene_seconds_max"]
-        total = sum(min(s_hi, max(s_lo, float(s.get("seconds", 3)))) for s in spec)
         problems = []
+        if not spec:
+            problems.append("không đọc được danh sách cảnh — phải trả về đúng một JSON array")
         fakes = fabricated(spec)
         if fakes:
-            problems.append(f"BỊA SỐ LIỆU: các số {fakes[:8]} không hề có trong kịch bản."
-                            " Cảnh không có số thật thì dùng 'statement'")
-        if len(spec) >= 6 and share > 0.55:
-            problems.append(f"đơn điệu: {dict(counts)} — gộp số liệu cùng nhóm thành"
-                            " bar_chart/line_chart/versus, câu dẫn dùng statement")
-        if total < lo_total:
-            problems.append(f"tổng chỉ {total:.0f}s, phải đạt {lo_total}-{hi_total}s —"
-                            " KHÔNG được bỏ bớt nội dung kịch bản, thêm cảnh cho đủ")
+            problems.append(f"BỊA SỐ LIỆU: các số {fakes[:8]} không có trong kịch bản lẫn dữ liệu"
+                            " nguồn. Cảnh không có số thật thì dùng 'statement'")
+        if len(spec) >= 6 and share > 0.45:
+            problems.append(f"đơn điệu: {dict(counts)} — hai con số cùng đơn vị ở hai cảnh liền"
+                            " nhau thì gộp thành MỘT cảnh 'versus' (voice nối hai câu); số qua"
+                            " các năm thì 'line_chart'; từ 3 hạng mục thì 'bar_chart'")
+        # Spec phải mang ĐỦ lời đọc. (Trước đây kiểm bằng tổng "seconds" đã kẹp 2-4s mỗi
+        # cảnh: gộp hai câu vào một cảnh 'versus' làm tổng tụt xuống và bị trả lại, nên
+        # model né 'versus', toàn tách thành 'big_number'.)
+        covered = spoken_words(spec)
+        if spec and covered < 0.9 * total_words:
+            problems.append(f"spec chỉ mang {covered}/{total_words} từ lời đọc — KHÔNG được bỏ câu"
+                            " nào của kịch bản; mỗi câu phải nằm nguyên văn trong 'voice' của một cảnh")
+        elif covered > 1.15 * total_words:
+            problems.append(f"lời đọc bị chép lặp ({covered} từ so với {total_words} từ của kịch"
+                            " bản) — mỗi câu chỉ thuộc một cảnh, hoặc các cảnh LIỀN NHAU")
+        if best_problems is None or len(problems) <= len(best_problems):
+            best, best_problems = spec, problems
         if not problems:
             return spec
         log.warning("Spec bị trả lại (lần %d): %s", attempt + 1, "; ".join(problems))
         description = base_description + "\n\nBẢN TRƯỚC BỊ TRẢ LẠI vì: " + "; ".join(problems)
-    # Hết lượt mà vẫn bịa số -> cắt các cảnh bịa, giữ phần sạch (an toàn hơn là liều)
+    spec = best
+    # Hết lượt mà vẫn bịa số -> cảnh đó thành cảnh chữ, GIỮ NGUYÊN lời đọc. (Trước đây
+    # cắt bỏ cả cảnh: an toàn về số liệu nhưng video mất luôn câu lời của cảnh đó.)
     fakes = set(str(f) for f in fabricated(spec))
-    if fakes:
-        def clean(sc):
-            p = sc.get("params", {})
-            vals = ([p.get("value")] + [i.get("value") for i in p.get("items", [])]
-                    + [p.get(s, {}).get("value") for s in ("left", "right")] + p.get("ys", []))
-            return not any(str(v) in fakes for v in vals if v is not None)
-        kept = [sc for sc in spec if clean(sc)]
-        log.warning("Cắt %d cảnh còn bịa số sau 3 lần", len(spec) - len(kept))
-        spec = kept
+    for sc in spec:
+        p = sc.get("params", {})
+        vals = ([p.get("value")] + [i.get("value") for i in p.get("items", [])]
+                + [p.get(s, {}).get("value") for s in ("left", "right")] + p.get("ys", []))
+        if any(str(v) in fakes for v in vals if v is not None):
+            text = str(p.get("title") or sc.get("voice") or "")
+            log.warning("Cảnh '%s' còn số không rõ nguồn sau 3 lần — đổi thành cảnh chữ", text[:40])
+            sc["template"] = "statement"
+            sc["params"] = {"text": " ".join(text.split()[:14]), "source": p.get("source", "")}
     return spec
 
 

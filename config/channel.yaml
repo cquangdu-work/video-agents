@@ -40,6 +40,42 @@ sources:
     categories: ["econ.GN", "physics.soc-ph", "cs.CY"]   # kinh tế, xã hội định lượng
     max_results: 15
 
+  # Kho dữ liệu mở World Bank (không cần key): mỗi chỉ số thành một ý tưởng "Việt Nam –
+  # Hàn Quốc qua một con số", phần tóm tắt là bảng số liệu thật qua các năm.
+  # Mã chỉ số tra tại https://data.worldbank.org/indicator — thêm dòng là có ý tưởng mới.
+  worldbank:
+    per_day: 2            # mỗi ngày đưa vào kho bấy nhiêu chỉ số (xoay vòng theo ngày)
+    start_year: 1960
+    countries:            # hai nước đem ra so; nước đầu là "ta", nước sau là mốc so sánh
+      - {iso3: VNM, iso2: VN, name: "Việt Nam"}
+      - {iso3: KOR, iso2: KR, name: "Hàn Quốc"}
+    indicators:
+      - {code: NY.GDP.PCAP.CD,       name: "GDP bình quân đầu người",                    unit: "USD"}
+      - {code: SP.DYN.TFRT.IN,       name: "Tổng tỷ suất sinh",                          unit: "con mỗi phụ nữ"}
+      - {code: SP.DYN.LE00.IN,       name: "Tuổi thọ trung bình",                        unit: "tuổi"}
+      - {code: SP.POP.65UP.TO.ZS,    name: "Tỷ lệ dân số từ 65 tuổi trở lên",            unit: "%"}
+      - {code: IT.NET.USER.ZS,       name: "Tỷ lệ người dùng Internet",                  unit: "%"}
+      - {code: SP.URB.TOTL.IN.ZS,    name: "Tỷ lệ dân số sống ở thành thị",              unit: "%"}
+      - {code: NE.EXP.GNFS.ZS,       name: "Xuất khẩu so với GDP",                       unit: "% GDP"}
+      - {code: SL.UEM.TOTL.ZS,       name: "Tỷ lệ thất nghiệp",                          unit: "%"}
+      - {code: SE.XPD.TOTL.GD.ZS,    name: "Chi tiêu công cho giáo dục so với GDP",      unit: "% GDP"}
+      - {code: SH.XPD.CHEX.GD.ZS,    name: "Chi tiêu y tế so với GDP",                   unit: "% GDP"}
+      - {code: GB.XPD.RSDV.GD.ZS,    name: "Chi cho nghiên cứu và phát triển so với GDP", unit: "% GDP"}
+      - {code: SP.POP.TOTL,          name: "Dân số",                                     unit: "người"}
+      - {code: NY.GDP.MKTP.KD.ZG,    name: "Tăng trưởng GDP hằng năm",                   unit: "%"}
+      - {code: SL.TLF.CACT.FE.ZS,    name: "Tỷ lệ phụ nữ tham gia lực lượng lao động",   unit: "%"}
+      - {code: EG.USE.ELEC.KH.PC,    name: "Điện tiêu thụ bình quân đầu người",          unit: "kWh"}
+      - {code: SP.DYN.IMRT.IN,       name: "Tỷ suất tử vong trẻ dưới 1 tuổi",            unit: "trên 1.000 trẻ sinh ra"}
+      - {code: FP.CPI.TOTL.ZG,       name: "Lạm phát giá tiêu dùng",                     unit: "%"}
+      - {code: BX.KLT.DINV.WD.GD.ZS, name: "Vốn FDI vào so với GDP",                     unit: "% GDP"}
+      - {code: NY.GDP.MKTP.CD,       name: "Quy mô GDP",                                 unit: "USD"}
+      - {code: SP.DYN.CBRT.IN,       name: "Tỷ suất sinh thô",                           unit: "trên 1.000 dân"}
+      - {code: AG.LND.FRST.ZS,       name: "Tỷ lệ che phủ rừng",                         unit: "% diện tích"}
+      - {code: IT.CEL.SETS.P2,       name: "Thuê bao di động trên 100 dân",              unit: "thuê bao"}
+      - {code: SE.TER.ENRR,          name: "Tỷ lệ nhập học đại học",                     unit: "%"}
+      - {code: NV.IND.MANF.ZS,       name: "Công nghiệp chế biến chế tạo so với GDP",    unit: "% GDP"}
+      - {code: SL.AGR.EMPL.ZS,       name: "Tỷ lệ lao động làm nông nghiệp",             unit: "%"}
+
   # Reddit chặn đường JSON công khai (403) với nhiều IP, nhất là IP đám mây của VM;
   # src/sources/reddit.py tự chuyển sang đường RSS (vẫn vào được, không cần key).
   reddit:

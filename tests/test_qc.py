@@ -123,6 +123,20 @@ class VisionTest(unittest.TestCase):
         self.assertTrue(qc.real_issue({"ok": False, "kind": "opposite"}, voice))
         self.assertFalse(qc.real_issue({"ok": True, "kind": "clipped"}, voice))
 
+    def test_chart_numbers_from_source_data_are_not_number_errors(self):
+        # Biểu đồ đường vẽ bằng số của dữ liệu nguồn; lời đọc chỉ nhắc con số cuối
+        voice = "GDP đầu người Việt Nam đã lên 5.066 USD vào năm 2025."
+        params = {"title": "t", "xs": [2000, 2010, 2025], "ys": [404, 1683, 5066]}
+        allowed = qc.param_digits(params)
+        claim = lambda n: {"ok": False, "kind": "number", "image_number": n, "note": "số khác"}
+        self.assertFalse(qc.real_issue(claim("1.683"), voice, allowed))      # có trong spec
+        self.assertFalse(qc.real_issue(claim("2000 → 2025"), voice, allowed))
+        self.assertTrue(qc.real_issue(claim("1.863"), voice, allowed))       # hình vẽ sai số
+        self.assertTrue(qc.real_issue(claim("50.660"), voice, allowed))      # lệch một bậc vẫn bị bắt
+        both = qc.param_digits({"left": {"label": "VN", "value": 74.7},
+                                "right": {"label": "KR", "value": 83.6}, "items": [{"value": 3}]})
+        self.assertTrue({"747", "836", "3"} <= both)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -82,7 +82,7 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
     # (lần chạy 12/11: 3 trong 5 suất bị phí như vậy).
     readable = []
     for idea in survivors:
-        text = fetch_page_text(idea["source_url"])
+        text = source_text_for(idea, fetch_page_text)
         if not text.strip():
             db.set_status(con, idea["id"], "rejected", reason="Không tải được bài nguồn")
             log.warning("Bỏ “%s”: không tải được bài nguồn", idea["title"][:50])
@@ -142,6 +142,19 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
             print("\n" + "=" * 60 + "\n" + msg)
     log.info("Kịch bản đạt chuẩn trong lượt này: %d/%d", good, want)
     return sent
+
+
+def source_text_for(idea: dict, fetch) -> str:
+    """Văn bản nguồn để Biên kịch lấy số và để đối chiếu.
+
+    Ý tưởng từ kho dữ liệu (World Bank): phần tóm tắt CHÍNH LÀ bảng số liệu gốc, còn
+    trang web của nó là ứng dụng JavaScript không có số trong HTML -> dùng tóm tắt.
+    Các nguồn khác: tải toàn văn bài báo.
+    """
+    from .sources.worldbank import SOURCE_NAME as DATA_SOURCE
+    if idea.get("source_name") == DATA_SOURCE:
+        return idea.get("summary") or ""
+    return fetch(idea["source_url"])
 
 
 def _script_one(crew, idea: dict, source_text: str, cfg: dict) -> tuple:
