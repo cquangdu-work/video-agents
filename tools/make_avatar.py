@@ -2,6 +2,7 @@
 
     python tools/make_avatar.py            # -> assets/brand/avatar_*.png (800x800)
                                            #    + output/avatar_preview.png (thử ở cỡ nhỏ)
+    python tools/make_avatar.py --size 1024  # -> assets/brand/avatar_*_1024.png (icon app TikTok)
 
 Vì sao vẽ bằng code: avatar nhìn cùng "họ" với video (nền xanh đen, vàng hổ phách, Việt Nam
 đỏ, Hàn Quốc xanh), nét ở mọi cỡ, và không vướng giấy phép (bản đồ Natural Earth thuộc phạm
@@ -147,7 +148,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     made = {"race": make_race(c), "vnkr": make_vnkr(c)}
     for name, im in made.items():
-        im.save(OUT / f"avatar_{name}.png")
+        im.save(OUT / (f"avatar_{name}.png" if SIZE == 800 else f"avatar_{name}_{SIZE}.png"))
     (ROOT / "output").mkdir(exist_ok=True)              # bảng thử là file tạm, không vào git
     preview(made, ROOT / "output" / "avatar_preview.png")
     print("Đã tạo:", ", ".join(f"assets/brand/avatar_{k}.png" for k in made),
@@ -157,4 +158,6 @@ def main():
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if "--size" in sys.argv:              # TikTok đòi icon ứng dụng 1024x1024
+        SIZE = int(sys.argv[sys.argv.index("--size") + 1])
     main()
