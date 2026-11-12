@@ -231,7 +231,9 @@ def build_world_item(ind: dict, year: int, table: dict, names: dict, focus: list
         if table[lo] > 0 and table[hi] / table[lo] >= 1.5:    # "gấp 1,12 lần" nghe gượng
             lines.append(f"Năm {year}: {names[hi]} gấp {vn_number(table[hi] / table[lo])} lần {names[lo]}.")
         else:                    # hiệu của hai tỷ lệ % là "điểm phần trăm", không phải %
-            gap = table[hi] - table[lo]
+            # trừ trên số ĐÃ LÀM TRÒN như được đọc lên (83,6 - 74,7 = 8,9, không phải 8,89)
+            shown = lambda v: parse_vn_number(vn_number(v))
+            gap = round(shown(table[hi]) - shown(table[lo]), 6)
             gap_text = (f"{vn_number(gap)} điểm phần trăm" if unit.startswith("%") else val(gap))
             lines.append(f"Năm {year}: {names[hi]} hơn {names[lo]} {gap_text}.")
     for c in focus:                                   # chuỗi theo năm -> biểu đồ đường hai nước

@@ -133,7 +133,23 @@ def _check_scene(i: int, sc: dict):
             # Đổi thành chỉ số mốc 1..n cho đường vẽ đúng chiều thời gian.
             params["xs"] = list(range(1, len(xs) + 1))
             log.warning("Cảnh %d: xs không tăng dần — thay bằng mốc 1..%d", i + 1, len(xs))
+    official_names(params)
     return sc
+
+
+# Vùng lãnh thổ phải ghi theo cách gọi chính thức của Việt Nam (geo.PREFERRED_NAMES):
+# model hay rút gọn "Hồng Kông (Trung Quốc)" thành "Hồng Kông" trên biểu đồ (ca thật kịch bản #7)
+OFFICIAL_CODES = ("HKG", "MAC", "TWN")
+
+
+def official_names(params: dict) -> None:
+    from .render.geo import code_of, display_name
+    holders = [it for key in ("items", "series") for it in params.get(key) or [] if isinstance(it, dict)]
+    holders += [params[side] for side in ("left", "right") if isinstance(params.get(side), dict)]
+    for h in holders:
+        code = code_of(h.get("label"))
+        if code in OFFICIAL_CODES:
+            h["label"] = display_name(code)
 
 
 def fallback_statement(sc: dict):

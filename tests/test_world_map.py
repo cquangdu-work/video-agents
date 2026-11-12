@@ -191,6 +191,19 @@ class WorldSceneTest(unittest.TestCase):
     def setUp(self):
         logging.disable(logging.WARNING); self.addCleanup(logging.disable, logging.NOTSET)
 
+    def test_territories_keep_their_official_vietnamese_names_on_charts(self):
+        # ca thật kịch bản #7: model rút "Hồng Kông (Trung Quốc)" thành "Hồng Kông"
+        spec = produce.validate_spec([
+            {"template": "bar_chart", "params": {"title": "Top", "items": [
+                {"label": "Monaco", "value": 86.5}, {"label": "Hồng Kông", "value": 85.4},
+                {"label": "Đài Loan", "value": 81.0}]}},
+            {"template": "versus", "params": {"title": "So", "left": {"label": "Ma Cao", "value": 1},
+                                              "right": {"label": "Việt Nam", "value": 2}}}], CFG)
+        self.assertEqual([i["label"] for i in spec[1]["params"]["items"]],
+                         ["Monaco", "Hồng Kông (Trung Quốc)", "Đài Loan (Trung Quốc)"])
+        self.assertEqual(spec[2]["params"]["left"]["label"], "Ma Cao (Trung Quốc)")
+        self.assertEqual(spec[2]["params"]["right"]["label"], "Việt Nam")
+
     def test_map_scene_is_filled_from_the_world_table_with_ranks(self):
         named = {"Việt Nam": 74.7, "Hàn Quốc": 83.6, "Nhật Bản": 84.7, "Đức": 81.0, "Chad": 55.2,
                  "Na Uy": 83.6}
