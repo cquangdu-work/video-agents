@@ -19,6 +19,7 @@ import logging
 import re
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
@@ -161,7 +162,9 @@ def _publish_api(con, video: dict, cfg: dict) -> None:
 
     msg = f"🚀 Đã upload video #{video['id']}:\n{res['url']}\nChế độ hiển thị: {res['privacy']}"
     if res["publish_at"]:
-        msg += f"\nHẹn công khai lúc (UTC): {res['publish_at']}"
+        # nhớ giờ hẹn: quá giờ mà video vẫn riêng tư (project chưa audit) thì bot báo Du
+        db.set_state(con, f"yt_publish_at_{video['id']}", res["publish_at"])
+        msg += f"\nHẹn công khai lúc {_local_times(res['publish_at'], yt)}"
     if res["privacy"] != res["requested_privacy"]:
         msg += (f"\n\n⚠️ Yêu cầu “{res['requested_privacy']}” nhưng YouTube đặt “{res['privacy']}”."
                 " Nhiều khả năng dự án API chưa qua audit nên video bị khoá riêng tư —"
@@ -169,6 +172,13 @@ def _publish_api(con, video: dict, cfg: dict) -> None:
     elif res["privacy"] == "private" and not res["publish_at"]:
         msg += "\nVideo đang RIÊNG TƯ — vào YouTube Studio chuyển Công khai khi sẵn sàng."
     tg.send_message(msg)
+
+
+def _local_times(utc_iso: str, yt: dict) -> str:
+    """'2026-11-13T12:00:00Z' -> '19:00 13/11 giờ Việt Nam (21:00 giờ Hàn)'."""
+    t = datetime.fromisoformat(utc_iso.replace("Z", "+00:00"))
+    vn = t + timedelta(hours=float(yt.get("utc_offset_hours", 7)))
+    return f"{vn:%H:%M %d/%m} giờ Việt Nam ({t + timedelta(hours=9):%H:%M} giờ Hàn)"
 
 
 def publish(con, video: dict, cfg: dict) -> None:
@@ -238,11 +248,56 @@ def _handle_callback(con, cq: dict, cfg: dict) -> None:
             publish(con, video, cfg)
 
 
+RENEW_COMMANDS = {"/capquyen", "/cap_quyen", "capquyen", "cấp quyền", "gia hạn", "/giahan"}
+
+
+def _start_renewal(con) -> None:
+    """Gửi link cấp quyền YouTube để Du gia hạn ngay trên điện thoại."""
+    from .publish import youtube
+    try:
+        a = youtube.start_phone_auth()
+    except youtube.YouTubeAuthError as exc:
+        tg.send_message(f"⚠️ Không tạo được link cấp quyền: {exc}")
+        return
+    db.set_state(con, "yt_auth_state", a["state"])
+    db.set_state(con, "yt_auth_verifier", a["verifier"])
+    tg.send_message(
+        "🔑 Gia hạn quyền đăng YouTube (≈1 phút):\n"
+        "1. Mở link dưới, đăng nhập, chọn kênh “Thế giới qua con số”.\n"
+        "2. Có cảnh báo “chưa xác minh” thì bấm Advanced → Go to video-agents; tích cả 3 quyền.\n"
+        "3. Trang cuối báo KHÔNG kết nối được tới 127.0.0.1:8765 — đúng như vậy. Chép NGUYÊN địa chỉ"
+        " trên thanh địa chỉ rồi gửi vào đây (trong vài phút, mã hết hạn nhanh).\n\n" + a["url"])
+
+
+def _finish_renewal(con, text: str) -> None:
+    from .publish import youtube
+    state, verifier = db.get_state(con, "yt_auth_state"), db.get_state(con, "yt_auth_verifier")
+    if not state or not verifier:
+        tg.send_message("Chưa có yêu cầu cấp quyền nào đang chờ — gửi /capquyen để bắt đầu.")
+        return
+    try:
+        youtube.finish_phone_auth(text, state, verifier)
+        who = youtube.whoami()
+    except Exception as exc:
+        tg.send_message(f"⚠️ Gia hạn chưa được: {exc}")
+        return
+    db.set_state(con, "yt_auth_state", "")
+    db.set_state(con, "yt_auth_verifier", "")
+    tg.send_message(f"✅ Đã gia hạn quyền đăng YouTube cho kênh “{who.get('title', '?')}”."
+                    + ("" if who.get("title") else "\n⚠️ Không đọc được tên kênh — kiểm tra đã chọn đúng kênh chưa."))
+
+
 def _handle_message(con, msg: dict) -> None:
     if not _from_owner(msg.get("chat"), msg.get("from")):
         return
     text = (msg.get("text") or "").strip()
     if not text:
+        return
+    if text.lower() in RENEW_COMMANDS:
+        _start_renewal(con)
+        return
+    if "127.0.0.1:8765" in text:
+        _finish_renewal(con, text)
         return
     reply_mid = (msg.get("reply_to_message") or {}).get("message_id")
     replied = None
@@ -274,13 +329,83 @@ def handle_update(con, upd: dict, cfg: dict) -> None:
         _handle_message(con, upd["message"])
 
 
+# ------------------------------------------------------------ Việc định kỳ
+CHECK_AFTER_MINUTES = 30        # quá giờ hẹn chừng này mới soát (YouTube cần vài phút để công khai)
+
+
+def remind_token(con, yt: dict, now: datetime = None) -> bool:
+    """App OAuth ở chế độ Testing: refresh token chết sau `oauth_token_days` ngày. Nhắc Du
+    gia hạn từ 1 ngày trước, mỗi ngày tối đa một lần. Trả về True nếu vừa nhắc."""
+    from .publish import youtube
+    days = yt.get("oauth_token_days")
+    age = youtube.token_age_days(now)
+    if yt.get("mode") != "api" or not days or age is None or age < float(days) - 1:
+        return False
+    today = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%d")
+    if db.get_state(con, "yt_token_reminded") == today:
+        return False
+    db.set_state(con, "yt_token_reminded", today)
+    left = float(days) - age
+    when = f"còn khoảng {left * 24:.0f} giờ" if left > 0 else "đã HẾT HẠN"
+    tg.send_message(f"🔑 Quyền đăng YouTube {when} (ứng dụng Google đang ở chế độ Testing:"
+                    f" {days} ngày phải gia hạn một lần). Gửi /capquyen để gia hạn ngay trên điện thoại.")
+    return True
+
+
+def check_scheduled(con, now: datetime = None) -> list:
+    """Video đã qua giờ hẹn công khai: hỏi YouTube chế độ hiển thị thật. Vẫn riêng tư thì báo Du
+    (project API chưa qua audit thì YouTube khoá video ở riêng tư — giờ hẹn không có tác dụng).
+    Trả về [(video_id, chế độ hiển thị)] của những video vừa soát."""
+    from .publish import youtube
+    now = now or datetime.now(timezone.utc)
+    done = []
+    rows = con.execute("SELECT id, youtube_id, youtube_url FROM videos"
+                       " WHERE status='published' AND youtube_id IS NOT NULL").fetchall()
+    for r in rows:
+        at = db.get_state(con, f"yt_publish_at_{r['id']}")
+        if not at:
+            continue
+        if now < datetime.fromisoformat(at.replace("Z", "+00:00")) + timedelta(minutes=CHECK_AFTER_MINUTES):
+            continue
+        privacy = (youtube.get_status(r["youtube_id"]) or {}).get("privacyStatus")
+        db.update_video(con, r["id"], youtube_privacy=privacy)
+        db.set_state(con, f"yt_publish_at_{r['id']}", "")          # mỗi video chỉ soát một lần
+        if privacy == "public":
+            tg.send_message(f"🌐 Video #{r['id']} đã công khai đúng giờ: {r['youtube_url']}")
+        else:
+            tg.send_message(
+                f"⚠️ Video #{r['id']} đã quá giờ hẹn nhưng vẫn “{privacy}”: {r['youtube_url']}\n"
+                "Nhiều khả năng YouTube khoá vì project API chưa qua audit. Vào YouTube Studio →"
+                " Nội dung → đổi chế độ hiển thị thành Công khai. Bot sẽ báo lại mỗi video cho tới khi"
+                " audit xong (README, mục Đăng tự động qua API).")
+        done.append((r["id"], privacy))
+    return done
+
+
+def housekeeping(con, cfg: dict, now: datetime = None) -> None:
+    """Các việc chạy định kỳ trong vòng lặp listen; lỗi ở đây không được làm sập bot."""
+    yt = cfg["publish"]["youtube"]
+    for job in (lambda: remind_token(con, yt, now), lambda: check_scheduled(con, now)):
+        try:
+            job()
+        except Exception:
+            log.exception("Việc định kỳ lỗi (bỏ qua, lần sau thử lại)")
+
+
+HOUSEKEEPING_EVERY = 30 * 60    # giây
+
+
 def listen(once: bool = False) -> None:
     """Vòng lặp chờ sự kiện. Vị trí đã đọc lưu trong DB nên khởi động lại không xử lý lặp."""
     cfg, con = load_config(), db.connect()
+    last_housekeeping = 0.0
     try:
         offset = int(db.get_state(con, "tg_offset", "0"))
         log.info("Đang chờ Du bấm nút trên Telegram… (Ctrl+C để dừng)")
         while True:
+            if not once and time.time() - last_housekeeping >= HOUSEKEEPING_EVERY:
+                last_housekeeping = time.time()
+                housekeeping(con, cfg)
             updates = tg.get_updates(offset, timeout=0 if once else 50)
             for upd in updates or []:
                 offset = upd["update_id"] + 1

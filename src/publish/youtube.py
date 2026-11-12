@@ -23,6 +23,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 import sys
 import time
@@ -66,52 +67,37 @@ def _client() -> tuple:
 
 
 # ------------------------------------------------------------------ OAuth
-def authorize(open_browser: bool = True) -> Path:
-    """Luồng cấp quyền một lần (Authorization Code + PKCE, redirect về 127.0.0.1)."""
-    import http.server
-    import webbrowser
+# Gia hạn bằng điện thoại: Google chuyển về địa chỉ này -> điện thoại báo "không kết nối được"
+# (127.0.0.1 là chính điện thoại), nhưng MÃ cấp quyền nằm sẵn trên thanh địa chỉ: Du chép
+# địa chỉ đó gửi bot Telegram, bot trên VM đổi mã lấy token. App OAuth loại "Desktop" cho
+# phép mọi cổng 127.0.0.1, nên không cần máy nào thật sự nghe ở cổng này.
+PHONE_REDIRECT = "http://127.0.0.1:8765"
 
-    cid, secret = _client()
-    state = secrets.token_urlsafe(16)
+
+def _pkce() -> tuple:
+    """(verifier, challenge) của PKCE: mã bị lộ giữa đường cũng không đổi được token nếu
+    không có verifier — verifier chỉ nằm trên máy xin quyền."""
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(
         hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
-    got = {}
+    return verifier, challenge
 
-    class Handler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self):
-            got.update(urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query))
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            self.wfile.write("Xong. Quay lại cửa sổ dòng lệnh.".encode("utf-8"))
 
-        def log_message(self, *args):   # không in log HTTP (có chứa mã cấp quyền)
-            pass
-
-    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)   # cổng 0 = hệ điều hành tự chọn
-    redirect = f"http://127.0.0.1:{server.server_port}"
-    url = AUTH_URL + "?" + urllib.parse.urlencode({
-        "client_id": cid, "redirect_uri": redirect, "response_type": "code",
+def auth_url(redirect: str, state: str, challenge: str) -> str:
+    return AUTH_URL + "?" + urllib.parse.urlencode({
+        "client_id": _client()[0], "redirect_uri": redirect, "response_type": "code",
         "scope": " ".join(SCOPES), "state": state,
         "access_type": "offline",     # xin refresh token
         "prompt": "consent",          # luôn hỏi lại để chắc chắn được cấp refresh token
         "code_challenge": challenge, "code_challenge_method": "S256",
     })
-    print("Mở link này trong trình duyệt, đăng nhập và CHỌN ĐÚNG KÊNH (Brand Account):\n")
-    print(url + "\n")
-    if open_browser:
-        webbrowser.open(url)
-    while "code" not in got and "error" not in got:
-        server.handle_request()
-    server.server_close()
 
-    if got.get("error"):
-        raise YouTubeAuthError(f"Google từ chối: {got['error'][0]}")
-    if got.get("state", [""])[0] != state:
-        raise YouTubeAuthError("state không khớp — huỷ để an toàn, chạy lại lệnh auth")
+
+def _exchange_and_save(code: str, verifier: str, redirect: str) -> Path:
+    """Đổi mã cấp quyền lấy refresh token và lưu vào TOKEN_PATH (chỉ chủ file đọc được)."""
+    cid, secret = _client()
     r = requests.post(TOKEN_URL, timeout=30, data={
-        "client_id": cid, "client_secret": secret, "code": got["code"][0],
+        "client_id": cid, "client_secret": secret, "code": code,
         "code_verifier": verifier, "grant_type": "authorization_code",
         "redirect_uri": redirect})
     body = r.json()
@@ -127,6 +113,74 @@ def authorize(open_browser: bool = True) -> Path:
     except OSError:
         pass
     return TOKEN_PATH
+
+
+def start_phone_auth() -> dict:
+    """Bước 1 của gia hạn qua Telegram -> {"url", "state", "verifier"} (bên gọi giữ state + verifier)."""
+    state = secrets.token_urlsafe(16)
+    verifier, challenge = _pkce()
+    return {"url": auth_url(PHONE_REDIRECT, state, challenge), "state": state, "verifier": verifier}
+
+
+def finish_phone_auth(pasted: str, state: str, verifier: str) -> Path:
+    """Bước 2: Du dán địa chỉ "http://127.0.0.1:8765/?state=...&code=..." -> lưu token mới."""
+    m = re.search(r"https?://127\.0\.0\.1:8765/?\?\S+", pasted or "")
+    q = urllib.parse.parse_qs(urllib.parse.urlparse(m.group(0) if m else "").query)
+    if q.get("error"):
+        raise YouTubeAuthError(f"Google từ chối: {q['error'][0]}")
+    if not q.get("code"):
+        raise YouTubeAuthError("Không thấy mã trong địa chỉ — chép nguyên cả dòng địa chỉ")
+    if q.get("state", [""])[0] != state:
+        raise YouTubeAuthError("Link cấp quyền này đã cũ — gửi /capquyen để lấy link mới")
+    return _exchange_and_save(q["code"][0], verifier, PHONE_REDIRECT)
+
+
+def token_age_days(now: datetime = None):
+    """Token đã cấp được bao nhiêu ngày (None nếu chưa có token). App OAuth ở chế độ
+    Testing thì refresh token chết sau 7 ngày — bot dùng số này để nhắc gia hạn."""
+    try:
+        got = json.loads(TOKEN_PATH.read_text(encoding="utf-8"))["obtained_at"]
+    except (OSError, ValueError, KeyError):
+        return None
+    return ((now or datetime.now(timezone.utc)) - datetime.fromisoformat(got)).total_seconds() / 86400
+
+
+def authorize(open_browser: bool = True) -> Path:
+    """Luồng cấp quyền một lần (Authorization Code + PKCE, redirect về 127.0.0.1)."""
+    import http.server
+    import webbrowser
+
+    state = secrets.token_urlsafe(16)
+    verifier, challenge = _pkce()
+    got = {}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            got.update(urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query))
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write("Xong. Quay lại cửa sổ dòng lệnh.".encode("utf-8"))
+
+        def log_message(self, *args):   # không in log HTTP (có chứa mã cấp quyền)
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)   # cổng 0 = hệ điều hành tự chọn
+    redirect = f"http://127.0.0.1:{server.server_port}"
+    url = auth_url(redirect, state, challenge)
+    print("Mở link này trong trình duyệt, đăng nhập và CHỌN ĐÚNG KÊNH (Brand Account):\n")
+    print(url + "\n")
+    if open_browser:
+        webbrowser.open(url)
+    while "code" not in got and "error" not in got:
+        server.handle_request()
+    server.server_close()
+
+    if got.get("error"):
+        raise YouTubeAuthError(f"Google từ chối: {got['error'][0]}")
+    if got.get("state", [""])[0] != state:
+        raise YouTubeAuthError("state không khớp — huỷ để an toàn, chạy lại lệnh auth")
+    return _exchange_and_save(got["code"][0], verifier, redirect)
 
 
 def access_token() -> str:

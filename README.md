@@ -97,6 +97,14 @@ Hai chế độ đăng, đổi ở `config/channel.yaml` → `publish.youtube.mo
    Brand Account "Thế giới qua con số"** → cho phép. Kiểm tra: `python -m src.publish.youtube whoami`.
 6. Chép token lên VM: `scp .secrets/youtube_token.json <vm>:video-agents/.secrets/`
    (thư mục `.secrets/` không vào git).
+**Gia hạn quyền (12/11: app đang ở Testing vì Production đòi trang chủ + chính sách quyền riêng
+tư):** token sống 7 ngày. Bot nhắc trước 1 ngày; Du gửi **/capquyen** cho bot → mở link trên điện
+thoại → cho phép → chép địa chỉ `http://127.0.0.1:8765/?...` (trang báo không kết nối được — đúng
+vậy) gửi lại bot → bot trên VM tự lưu token mới. Không cần laptop.
+
+**Video hẹn giờ:** quá giờ hẹn 30 phút, bot hỏi YouTube chế độ hiển thị thật; vẫn riêng tư (bị khoá
+vì chưa audit) thì báo Du vào Studio bấm Công khai.
+
 7. **Audit của YouTube API:** theo tài liệu của Google, video upload từ project API **chưa qua audit**
    bị khoá ở chế độ **riêng tư**. Trước khi audit xong: bot vẫn upload (đỡ việc tải file + gõ chữ), báo
    rõ chế độ hiển thị thực tế, Du chỉ cần vào YouTube Studio bấm Công khai. Nộp đơn audit tại

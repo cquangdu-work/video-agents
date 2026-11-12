@@ -223,6 +223,63 @@ class ReviewFlowTest(DbCase):
         with self.assertRaises(ValueError):
             review.publish(self.con, db.get_video(self.con, self.vid), CFG)
 
+    # ---- gia hạn quyền YouTube ngay trên Telegram (app OAuth ở chế độ Testing: 7 ngày)
+    def yt_env(self):
+        d = tempfile.TemporaryDirectory(); self.addCleanup(d.cleanup)
+        for p in (mock.patch.object(youtube, "TOKEN_PATH", Path(d.name) / "tok.json"),
+                  mock.patch.dict(os.environ, {"YT_CLIENT_ID": "cid", "YT_CLIENT_SECRET": "sec"})):
+            p.start(); self.addCleanup(p.stop)
+        return Path(d.name) / "tok.json"
+
+    def test_phone_renewal_flow(self):
+        tok = self.yt_env()
+        review.handle_update(self.con, text("/capquyen"), CFG)
+        self.assertIn("accounts.google.com", self.calls("send_message")[-1][1][0])
+        self.assertIn("127.0.0.1%3A8765", self.calls("send_message")[-1][1][0])
+        state, verifier = db.get_state(self.con, "yt_auth_state"), db.get_state(self.con, "yt_auth_verifier")
+        # địa chỉ từ một link cũ (state khác) -> từ chối, không đổi mã
+        review.handle_update(self.con, text("http://127.0.0.1:8765/?state=cu&code=4/x"), CFG)
+        self.assertIn("đã cũ", self.calls("send_message")[-1][1][0])
+        self.assertFalse(tok.exists())
+        post = mock.Mock(return_value=types.SimpleNamespace(json=lambda: {"refresh_token": "RT", "scope": "s"}))
+        with mock.patch.object(youtube.requests, "post", post), \
+             mock.patch.object(youtube, "whoami", return_value={"title": "Thế giới qua con số"}):
+            review.handle_update(self.con, text(f"http://127.0.0.1:8765/?state={state}&code=4/abc&scope=x"), CFG)
+        data = post.call_args.kwargs["data"]
+        self.assertEqual((data["code"], data["code_verifier"], data["redirect_uri"]),
+                         ("4/abc", verifier, youtube.PHONE_REDIRECT))
+        self.assertEqual(json.loads(tok.read_text())["refresh_token"], "RT")
+        self.assertIn("Đã gia hạn", self.calls("send_message")[-1][1][0])
+        self.assertEqual(db.get_state(self.con, "yt_auth_state"), "")    # link đã dùng thì hết hiệu lực
+
+    def test_token_reminder_once_a_day_before_it_dies(self):
+        tok = self.yt_env()
+        now = datetime(2026, 11, 19, 3, tzinfo=timezone.utc)
+        yt = dict(CFG["publish"]["youtube"], mode="api", oauth_token_days=7)
+        tok.write_text(json.dumps({"refresh_token": "r", "obtained_at": "2026-11-13T00:00:00+00:00"}))
+        self.assertFalse(review.remind_token(self.con, yt, datetime(2026, 11, 15, tzinfo=timezone.utc)))
+        self.assertTrue(review.remind_token(self.con, yt, now))          # ngày thứ 6: nhắc
+        self.assertIn("/capquyen", self.calls("send_message")[-1][1][0])
+        self.assertFalse(review.remind_token(self.con, yt, now))         # cùng ngày: không nhắc lại
+        self.assertFalse(review.remind_token(self.con, dict(yt, oauth_token_days=None), now))  # Production
+
+    def test_scheduled_video_still_private_after_its_time_is_reported(self):
+        res = {"id": "abcdefghijk", "url": "https://youtube.com/shorts/abcdefghijk", "privacy": "private",
+               "requested_privacy": "private", "publish_at": "2026-11-13T12:00:00Z"}
+        cfg = json.loads(json.dumps(CFG)); cfg["publish"]["youtube"]["mode"] = "api"
+        with mock.patch.object(youtube, "upload", return_value=res):
+            review.handle_update(self.con, cb(f"ok:{self.vid}"), cfg)
+        self.assertIn("19:00 13/11 giờ Việt Nam (21:00 giờ Hàn)", self.calls("send_message")[-1][1][0])
+        before = datetime(2026, 11, 13, 12, 10, tzinfo=timezone.utc)
+        after = datetime(2026, 11, 13, 13, 0, tzinfo=timezone.utc)
+        with mock.patch.object(youtube, "get_status", return_value={"privacyStatus": "private"}) as st:
+            self.assertEqual(review.check_scheduled(self.con, before), [])      # chưa tới lúc soát
+            self.assertEqual(review.check_scheduled(self.con, after), [(self.vid, "private")])
+            self.assertEqual(review.check_scheduled(self.con, after), [])       # chỉ soát một lần
+        self.assertEqual(st.call_count, 1)
+        self.assertIn("audit", self.calls("send_message")[-1][1][0])
+        self.assertIn("YouTube Studio", self.calls("send_message")[-1][1][0])
+
     def api_cfg(self):
         cfg = json.loads(json.dumps(CFG))
         cfg["publish"]["youtube"]["mode"] = "api"

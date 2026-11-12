@@ -231,6 +231,10 @@ publish:
     # Hẹn giờ công khai (chỉ áp dụng mode api + privacy private). null = không hẹn.
     publish_time_local: "19:00" # giờ tối Việt Nam; null = công khai ngay khi upload
     utc_offset_hours: 7         # múi giờ của người xem chính (Việt Nam = +7)
+    # Ứng dụng OAuth của Du đang ở chế độ Testing (chưa có trang chủ + chính sách quyền riêng tư
+    # để chuyển Production) -> token sống 7 ngày; bot nhắc trước 1 ngày, Du gửi /capquyen để
+    # gia hạn ngay trên Telegram. Khi đã chuyển In production thì đặt null.
+    oauth_token_days: 7
   hashtags_fixed: ["#thegioiquaconso", "#Shorts"]   # luôn có ở mọi video
   max_hashtags: 5               # YouTube bỏ qua toàn bộ hashtag nếu nhét quá nhiều
   disclosure: "Giọng đọc được tạo bằng AI. Số liệu được đối chiếu với nguồn trước khi đăng."
