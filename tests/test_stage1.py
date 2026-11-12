@@ -74,6 +74,33 @@ class ScriptStandardTest(unittest.TestCase):
         for junk in (None, "xin lỗi", ["a", "b"], {"scenes": "không phải mảng"}, 42):
             self.assertEqual(crew.as_script(junk), {"scenes": [], "hooks": [], "claims": []})
 
+    def test_reading_out_a_table_year_by_year_is_rejected(self):
+        # Ca thật (kịch bản #16): "Năm 1995 Việt Nam 159 kWh... Hàn Quốc năm 1995 3.957 kWh..."
+        dump = script()
+        for k, year in enumerate(range(1990, 2025, 5)):
+            dump["scenes"][k]["voice"] = f"Năm {year}, Việt Nam đạt {100 + k} kWh mỗi người dân từ từ"
+        problems = crew.script_problems(dump, CFG)
+        self.assertTrue(any("đọc lần lượt 7 mốc năm" in p for p in problems))
+        story = script()
+        story["scenes"][0]["voice"] = "Việt Nam năm 2024 mới bằng Hàn Quốc năm 1991, cách 33 năm từ"
+        self.assertEqual(crew.script_problems(story, CFG), [])
+
+    def test_data_ideas_get_storytelling_rules(self):
+        from src.sources.worldbank import SOURCE_NAME
+        seen = []
+
+        def fake(**kw):
+            seen.append(kw["description"])
+            return json.dumps(script())
+        with mock.patch.object(crew, "_run_single_task", fake), \
+                mock.patch.object(crew, "_formula_block", lambda: ""):
+            crew.write_script({"title": "T", "angle": "G", "source_url": "u", "source_name": SOURCE_NAME},
+                              CFG, source_text="bảng")
+            crew.write_script({"title": "T", "angle": "G", "source_url": "u", "source_name": "Hani"},
+                              CFG, source_text="bài")
+        self.assertIn("ĐÂY LÀ Ý TƯỞNG TỪ BẢNG SỐ LIỆU", seen[0])
+        self.assertNotIn("ĐÂY LÀ Ý TƯỞNG TỪ BẢNG SỐ LIỆU", seen[1])
+
     def test_writer_survives_a_fallback_model_that_answers_with_a_list(self):
         # Ca thật trên VM 12/11/2026: model chính 503, model dự phòng trả mảng -> script.get() nổ
         answers = ['["chỉ có hook", "không có cảnh"]', "Xin lỗi, tôi không làm được.",]

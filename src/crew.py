@@ -244,6 +244,26 @@ def as_script(obj) -> dict:
     return obj
 
 
+MAX_SPOKEN_YEARS = 5     # lời đọc nhắc quá nhiều mốc năm = đang đọc bảng số, không kể chuyện
+
+DATA_STORY = """
+ĐÂY LÀ Ý TƯỞNG TỪ BẢNG SỐ LIỆU (không phải bài báo) — phần này ƯU TIÊN hơn dàn bài chung:
+- Video sẽ có biểu đồ đường vẽ TOÀN BỘ chuỗi năm của hai nước. Vì vậy lời đọc KHÔNG đọc lần
+  lượt từng mốc năm ("năm 1995 là..., năm 2000 là...") — người xem sẽ lướt đi ngay.
+- Kể thành CÂU CHUYỆN: hook là điều bất ngờ nhất trong bảng (ví dụ "Việt Nam hôm nay mới bằng
+  Hàn Quốc năm X", "tăng gấp N lần"); rồi điểm xuất phát, hiện tại, khoảng cách hai nước.
+- Chỉ dùng 5-8 con số đắt nhất, tối đa 4 mốc năm khác nhau trong toàn bài.
+- Giữa các con số là phần giải thích Ý NGHĨA (chênh lệch đó nói gì về đời sống, kinh tế) —
+  phần giải thích KHÔNG được thêm con số nào ngoài bảng, không khuyên người xem làm gì.
+- Đây là số liệu thống kê đã ghi nhận, KHÔNG gọi là "dự báo"."""
+
+
+def spoken_years(script: dict) -> set:
+    """Các mốc năm (1900-2099) được nhắc trong lời đọc."""
+    voice = " ".join(str(s.get("voice", "")) for s in script.get("scenes", []))
+    return set(re.findall(r"\b(?:19|20)\d{2}\b", voice))
+
+
 def script_problems(script: dict, cfg: dict) -> list:
     """Kịch bản hụt chuẩn ở đâu -> danh sách lý do (rỗng = đạt). Dùng chung cho vòng
     viết lại của Biên kịch và cho main (kịch bản còn lỗi thì KHÔNG được đem đi dựng)."""
@@ -257,6 +277,11 @@ def script_problems(script: dict, cfg: dict) -> list:
         problems.append(f"{words} từ (cần {lo_words}-{hi_words})")
     if numbers < SCRIPT_MIN_NUMBERS:
         problems.append(f"chỉ {numbers} con số trong lời đọc (cần ít nhất {SCRIPT_MIN_NUMBERS})")
+    years = spoken_years(script)
+    if len(years) > MAX_SPOKEN_YEARS:
+        # Ca thật 12/11: kịch bản điện tiêu thụ đọc 9 mốc năm x 2 nước như đọc bảng
+        problems.append(f"đọc lần lượt {len(years)} mốc năm như đọc bảng số — biểu đồ đã vẽ cả"
+                        f" chuỗi năm, lời đọc chỉ giữ tối đa {MAX_SPOKEN_YEARS - 1} mốc đắt nhất")
     return problems
 
 
@@ -271,6 +296,8 @@ def write_script(idea: dict, cfg: dict, feedback: str = None, source_text: str =
     """
     ch = cfg["channel"]
     lo_words, hi_words = word_budget(cfg)
+    from .sources.worldbank import SOURCE_NAME as DATA_SOURCE
+    data_story = DATA_STORY if idea.get("source_name") == DATA_SOURCE else ""
     excerpt = (source_text or "").strip()[:5000]
     source_block = (f"\nTRÍCH BÀI NGUỒN (mọi con số trong kịch bản phải lấy từ đây hoặc từ tóm tắt"
                     f" bên trên, tuyệt đối không tự nghĩ ra):\n\"\"\"\n{excerpt}\n\"\"\"\n"
@@ -302,7 +329,7 @@ Yêu cầu CỨNG về cấu trúc (video đổi cảnh mỗi 2-4 giây):
 - TUYỆT ĐỐI không tự chế con số để giật gân ("99% người...", "9 trên 10 người...") — hook
   cũng chỉ được dùng con số có trong bài nguồn. Máy sẽ đối chiếu TỪNG con số với nguồn.
 - Kết không kêu gọi hành động sáo rỗng.
-- Mọi con số trong lời đọc phải ghi rõ lấy từ nguồn nào."""
+- Mọi con số trong lời đọc phải ghi rõ lấy từ nguồn nào.""" + data_story
     if feedback:
         base_description += f"""
 
@@ -334,8 +361,9 @@ AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — 
         description = base_description + f"""
 
 BẢN NHÁP TRƯỚC BỊ TRẢ LẠI vì: {'; '.join(problems)}.
-Phải đạt 16-26 cảnh, {lo_words}-{hi_words} từ, và ÍT NHẤT 6 con số cụ thể viết bằng chữ số
-(lấy từ TRÍCH BÀI NGUỒN). Tách mỗi ý thành một cảnh riêng, mỗi con số một cảnh, đừng gộp."""
+Phải đạt 16-26 cảnh, {lo_words}-{hi_words} từ, ÍT NHẤT 6 con số cụ thể viết bằng chữ số
+(lấy từ TRÍCH BÀI NGUỒN), và nhắc tối đa {MAX_SPOKEN_YEARS - 1} mốc năm khác nhau.
+Tách mỗi ý thành một cảnh riêng, đừng gộp."""
     log.warning("Vẫn hụt chuẩn sau %d lần viết — giữ bản ít lỗi nhất (%s)", tries,
                 "; ".join(best_problems))
     return best
