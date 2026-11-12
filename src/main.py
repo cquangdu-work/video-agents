@@ -118,13 +118,14 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
 
     # --- Biên kịch + Kiểm chứng từng ý tưởng (sai số liệu thì trả về viết lại 1 lần)
     sent = good = 0
+    recent = db.recent_hooks(con)          # câu mở đầu gần đây: kịch bản mới phải mở khác đi
     for idea in selected:
         if good >= want:
             break
         # Biên kịch nhận toàn văn bài nguồn (đã tải ở bước lọc trên) để có số liệu mà viết
         source_text = idea["source_text"]
         try:
-            script, fc, status = _script_one(crew, idea, source_text, cfg)
+            script, fc, status = _script_one(crew, idea, source_text, cfg, recent)
         except Exception as exc:
             # Một ý tưởng hỏng (LLM trả sai khuôn, mọi model quá tải...) không được kéo
             # sập cả khâu: ghi lại rồi sang ý tưởng kế tiếp.
@@ -133,6 +134,8 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
                         type(exc).__name__, str(exc)[:200])
             continue
         good += status == "verified"
+        if script.get("scenes"):
+            recent.insert(0, str(script["scenes"][0].get("voice") or ""))
         db.save_script(con, idea["id"], script["hooks"],
                        yaml.safe_dump(script["scenes"], allow_unicode=True),
                        factcheck=fc, status=status)
@@ -160,10 +163,10 @@ def source_text_for(idea: dict, fetch) -> str:
     return fetch(idea["source_url"])
 
 
-def _script_one(crew, idea: dict, source_text: str, cfg: dict) -> tuple:
+def _script_one(crew, idea: dict, source_text: str, cfg: dict, recent_hooks: list = None) -> tuple:
     """Biên kịch -> Kiểm chứng (sai số liệu thì viết lại 1 lần) -> cổng chuẩn.
     Trả về (kịch bản, hồ sơ kiểm chứng, 'verified' | 'draft')."""
-    script = crew.write_script(idea, cfg, source_text=source_text)
+    script = crew.write_script(idea, cfg, source_text=source_text, recent_hooks=recent_hooks)
     fc = crew.fact_check(script, idea, source_text, cfg)
     # Kiểm chứng bằng LLM chỉ soát các "claims" được khai; code tự soát TỪNG con số trong
     # lời đọc xem có trong bài nguồn không (bắt kiểu hook "99% người..." tự chế)
@@ -175,7 +178,8 @@ def _script_one(crew, idea: dict, source_text: str, cfg: dict) -> tuple:
             + [f"- BỊA SỐ: con số {n} trong lời đọc không có trong bài nguồn — bỏ đi hoặc"
                f" thay bằng con số có thật trong nguồn" for n in unsourced])
         log.warning("Kiểm chứng trượt — trả về Biên kịch viết lại:\n%s", feedback)
-        script = crew.write_script(idea, cfg, feedback=feedback, source_text=source_text)
+        script = crew.write_script(idea, cfg, feedback=feedback, source_text=source_text,
+                                   recent_hooks=recent_hooks)
         fc = crew.fact_check(script, idea, source_text, cfg)
         unsourced = crew.unsourced_numbers(script, idea, source_text)
     problems = crew.script_problems(script, cfg)

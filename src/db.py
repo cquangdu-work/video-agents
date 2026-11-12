@@ -147,6 +147,20 @@ def save_script(con, idea_id: int, hooks, body: str, factcheck=None, status: str
 
 
 # ------------------------------------------------------------ Giai đoạn 4
+def recent_hooks(con, n: int = 8) -> list:
+    """Câu mở đầu (lời cảnh 1) của n kịch bản mới nhất — Biên kịch phải mở khác đi."""
+    import yaml
+    out = []
+    for r in con.execute("SELECT body FROM scripts ORDER BY id DESC LIMIT ?", (n,)):
+        try:
+            scenes = yaml.safe_load(r["body"] or "") or []
+            if scenes and isinstance(scenes[0], dict) and scenes[0].get("voice"):
+                out.append(str(scenes[0]["voice"]))
+        except yaml.YAMLError:
+            continue
+    return out
+
+
 def get_script_with_idea(con, script_id: int):
     """Kịch bản + ý tưởng gốc của nó (tiêu đề, góc, nguồn) — agent Đăng bài cần cả hai."""
     row = con.execute(

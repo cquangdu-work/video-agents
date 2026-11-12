@@ -26,12 +26,13 @@ CFG = {
 
 
 def script(scenes=17, words_each=14, numbers=6):
-    """Kịch bản giả: `numbers` cảnh đầu mỗi cảnh có một con số khác nhau."""
+    """Kịch bản giả: `numbers` con số khác nhau, rải CÁCH MỘT CẢNH (cảnh 0, 2, 4...) — kịch bản
+    đạt chuẩn không được đọc số liền nhau như đọc bảng (story.longest_number_run)."""
     out = []
     for i in range(scenes):
         body = ["từ"] * words_each
-        if i < numbers:
-            body[0] = str(1000 + i)
+        if i % 2 == 0 and i // 2 < numbers:
+            body[0] = str(1000 + i // 2)
         out.append({"voice": " ".join(body), "visual": "hình", "data_source": "nguồn"})
     return {"hooks": ["a", "b", "c"], "scenes": out, "claims": []}
 
@@ -181,7 +182,7 @@ class StandardGateTest(unittest.TestCase):
         from src import main, page_text
         written, self.feedback = [], []
 
-        def write(idea, cfg, feedback=None, source_text=""):
+        def write(idea, cfg, feedback=None, source_text="", recent_hooks=None):
             written.append(idea["id"])
             self.feedback.append(feedback)
             assert source_text == self.SOURCE                    # bài nguồn được tải TRƯỚC khi viết
