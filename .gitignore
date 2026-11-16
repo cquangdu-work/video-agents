@@ -17,3 +17,7 @@ assets/music/*
 !assets/music/README.md
 data/cache/
 data/tmp/
+
+# Remotion
+render-web/node_modules/
+render-web/out/
