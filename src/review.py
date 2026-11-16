@@ -175,6 +175,8 @@ def _publish_api(con, video: dict, cfg: dict) -> None:
         tg.send_message(f"⚠️ Upload video #{video['id']} lỗi:\n{exc}",
                         buttons=[[("🔁 Thử lại", f"retry:{video['id']}")]])
         return
+    if not video.get("script_id"):          # video dài (src/longform.py): không phải Shorts
+        res["url"] = f"https://youtu.be/{res['id']}"
     db.update_video(con, video["id"], youtube_id=res["id"], youtube_url=res["url"],
                     youtube_privacy=res["privacy"])
     db.transition_video(con, video["id"], "publishing", "published")
@@ -205,7 +207,8 @@ def publish(con, video: dict, cfg: dict) -> None:
         raise ValueError(f"Video #{video['id']} chưa được duyệt (status={video['status']})")
     mode = cfg["publish"]["youtube"].get("mode", "manual")
     (_publish_api if mode == "api" else _publish_manual)(con, video, cfg)
-    push_tiktok(con, video, cfg)
+    if video.get("script_id"):              # video dài 16:9 không hợp TikTok
+        push_tiktok(con, video, cfg)
 
 
 # --------------------------------------------------------------- TikTok (bản nháp)

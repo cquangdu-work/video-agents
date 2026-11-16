@@ -1,0 +1,10 @@
+# Mỗi thứ Bảy 09:30 giờ Hàn (sau lượt Shorts 06:00, trước buổi trưa)
+[Unit]
+Description=video-agents: hen gio video dai hang tuan
+
+[Timer]
+OnCalendar=Sat *-*-* 09:30:00 Asia/Seoul
+Persistent=true
+
+[Install]
+WantedBy=timers.target

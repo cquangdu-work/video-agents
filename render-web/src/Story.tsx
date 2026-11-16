@@ -41,7 +41,7 @@ const SceneView: React.FC<{ scene: Scene; brand: StoryProps["brand"] }> = ({ sce
   }
 };
 
-export const Story: React.FC<StoryProps> = ({ brand, scenes, words, source, sfx, world }) => {
+export const Story: React.FC<StoryProps> = ({ brand, scenes, words, source, sfx, world, hideCaptions }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
@@ -57,7 +57,7 @@ export const Story: React.FC<StoryProps> = ({ brand, scenes, words, source, sfx,
           <SceneView scene={sc} brand={brand} />
         </Sequence>
       ))}
-      <Captions words={words} t={t} brand={brand} />
+      {!hideCaptions && <Captions words={words} t={t} brand={brand} />}
       {src && current?.kind !== "clip" && (
         <div style={{ position: "absolute", bottom: 46, left: 40, right: 40, textAlign: "center", fontSize: 24,
           fontWeight: 500, color: brand.muted }}>Nguồn: {src}</div>

@@ -71,7 +71,7 @@ mkdir -p "$UNIT_DIR"
 for f in video-agents-daily.service video-agents-daily.timer \
          video-agents-daily-retry.service video-agents-daily-retry.timer \
          video-agents-review.service \
-         video-agents-weekly.service video-agents-weekly.timer; do
+         video-agents-weekly.service video-agents-weekly.timer \n         video-agents-longform.service video-agents-longform.timer; do
     sed "s|@REPO@|$REPO|g" "deploy/$f" > "$UNIT_DIR/$f"
 done
 systemctl --user daemon-reload
@@ -90,9 +90,9 @@ XONG PHẦN CÀI ĐẶT. Chưa có gì tự chạy. Làm lần lượt:
   2. Bật bot chờ duyệt (chạy suốt):
        systemctl --user enable --now video-agents-review.service
   3. Khi đã ưng, bật lịch: mỗi sáng 06:00, chạy bù 17:40 (khi sáng hết quota), báo cáo Chủ nhật:
-       systemctl --user enable --now video-agents-daily.timer video-agents-daily-retry.timer video-agents-weekly.timer
+       systemctl --user enable --now video-agents-daily.timer video-agents-daily-retry.timer video-agents-weekly.timer video-agents-longform.timer
 
   Xem lịch:   systemctl --user list-timers
   Xem log:    journalctl --user -u video-agents-daily -n 50     (và thư mục logs/)
-  Tắt hết:    systemctl --user disable --now video-agents-daily.timer video-agents-daily-retry.timer video-agents-weekly.timer video-agents-review.service
+  Tắt hết:    systemctl --user disable --now video-agents-daily.timer video-agents-daily-retry.timer video-agents-weekly.timer video-agents-longform.timer video-agents-review.service
 MSG

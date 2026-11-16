@@ -73,14 +73,14 @@ def brand_props() -> dict:
     return {**b["colors"], "channel": b["intro"]["text"]}
 
 
-def render(props: dict, out: Path, concurrency: int = 3, crf: int = 23) -> Path:
+def render(props: dict, out: Path, concurrency: int = 3, crf: int = 23, composition: str = "Story") -> Path:
     """Ghi props ra JSON rồi gọi Remotion. Lần đầu trên máy mới cần `npm ci` trong render-web/.
     crf 23: video 72 giây ở mức mặc định (18) nặng 36 MB — sát trần 50 MB của bot Telegram."""
     out.parent.mkdir(parents=True, exist_ok=True)
     props_path = out.with_suffix(".props.json")
     props_path.write_text(json.dumps(props, ensure_ascii=False), encoding="utf-8")
     npx = shutil.which("npx") or shutil.which("npx.cmd") or "npx"
-    cmd = [npx, "remotion", "render", "src/index.ts", "Story", str(out.resolve()),
+    cmd = [npx, "remotion", "render", "src/index.ts", composition, str(out.resolve()),
            f"--props={props_path.resolve()}", f"--concurrency={concurrency}", f"--crf={crf}",
            "--enforce-audio-track", "--log=error"]
     log.info("Remotion render -> %s", out.name)

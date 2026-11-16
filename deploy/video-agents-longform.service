@@ -1,0 +1,13 @@
+# Video dài hằng tuần: ghép Shorts đã đăng trong tuần thành video 16:9 nhiều chương, gửi Du duyệt.
+[Unit]
+Description=video-agents: video dai hang tuan
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+ExecStart=@REPO@/venv/bin/python -m src.longform
+Environment=PYTHONUNBUFFERED=1
+Nice=10
+MemoryHigh=5G
+MemoryMax=7G
+TimeoutStartSec=3h

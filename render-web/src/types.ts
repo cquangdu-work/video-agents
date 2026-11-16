@@ -116,4 +116,5 @@ export type StoryProps = {
   source: string;
   sfx: Sfx[];
   world?: World | null;
+  hideCaptions?: boolean; // video dài (Wide): phụ đề vẽ to ở cột phải thay vì trong khung dọc
 };
