@@ -70,14 +70,25 @@ def main():
     db.update_video(con, v["id"], youtube_id=res["id"], youtube_url=res["url"], youtube_privacy=res["privacy"],
                     title=title, description=desc)
     db.set_state(con, f"yt_publish_at_{v['id']}", res["publish_at"])
-    youtube.unschedule(v["youtube_id"])
+    studio = f"https://studio.youtube.com/video/{v['youtube_id']}/edit"
+    try:
+        youtube.unschedule(v["youtube_id"])
+    except youtube.YouTubeUploadError as exc:
+        # Đo 16/11/2026: quyền OAuth hiện có (upload + readonly + analytics) KHÔNG cho sửa video
+        # (403 insufficient scopes) -> bản cũ vẫn hẹn cùng giờ. Phải để Du tắt trong Studio.
+        print("Không bỏ hẹn được bản cũ:", exc)
+        tg.send_message(
+            f"⚠️ CẦN DU LÀM TRƯỚC {_local_times(at, yt)}: đã tải bản dựng lại video #{v['id']}: {res['url']}"
+            f" (hẹn đúng giờ cũ), nhưng app không có quyền bỏ hẹn bản cũ — để nguyên thì công khai CẢ HAI.\n"
+            f"Vào {studio} -> Chế độ hiển thị -> Riêng tư (bỏ lịch) hoặc Xoá.")
+        sys.exit(2)
     new_st, old_st = youtube.get_status(res["id"]), youtube.get_status(v["youtube_id"])
     ok = new_st.get("publishAt") and not old_st.get("publishAt") and old_st.get("privacyStatus") == "private"
     print(json.dumps({"new": res, "new_status": new_st, "old_status": old_st}, ensure_ascii=False, indent=1))
     tg.send_message(
         f"🔁 Đã thay video #{v['id']} bằng bản dựng lại: {res['url']}\n"
         f"Hẹn công khai lúc {_local_times(res['publish_at'], yt)} (giữ giờ cũ).\n"
-        f"Bản cũ {v['youtube_url']} đã bỏ hẹn giờ, nằm riêng tư — không ai thấy; muốn xoá thì vào YouTube Studio."
+        f"Bản cũ {v['youtube_url']} đã bỏ hẹn giờ, nằm riêng tư — không ai thấy; muốn xoá: {studio}"
         + ("" if ok else "\n⚠️ Kiểm lại trên YouTube thấy chưa đúng như mong đợi — Du xem Studio giúp."))
     if not ok:
         sys.exit("Kiểm lại trạng thái chưa đúng — xem log")
