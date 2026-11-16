@@ -135,9 +135,10 @@ bot. Token truy cập 2 giờ, refresh token 180 ngày, tự làm mới (token x
 Cấu hình app TikTok: Platform **Web**, Website/Terms/Privacy = 3 trang của site (URL prefix đã xác
 minh bằng file chữ ký); **Login Kit** redirect URI = `https://cquangdu-work.github.io/thegioiquaconso/tiktok-callback.html`;
 **Content Posting API** chỉ quyền `video.upload` (tắt Direct Post); bỏ mọi sản phẩm/quyền khác.
-App chưa từng được duyệt thì phải thử ở **Sandbox** (tài khoản kênh là Target user) rồi mới quay
-video demo nộp duyệt. Đoạn giải thích cho ô "Explain how each product and scope works"
-(930/1000 ký tự):
+**Chạy bằng Sandbox, KHÔNG nộp duyệt** (chốt 17/11/2026): tài khoản kênh là Target user của
+Sandbox, bot đẩy bản nháp vào hộp thư và bài Du tự đăng từ đó hiện công khai bình thường (đã
+kiểm). Quy định duyệt app của TikTok không nhận app dùng riêng/cá nhân, nên đừng nộp; bản
+Production chỉ cần cho Direct Post. Đoạn mô tả app (đúng sự thật, giữ để tham khảo):
 
 > Thế giới qua con số uploader is a private tool used only by the owner of the Thế giới qua con số channel (a Vietnamese data-explainer channel) to send the channel's own videos to its own TikTok account. Login Kit (user.info.basic): the owner opens the authorization link sent by the channel's private Telegram bot, logs in with the channel's TikTok account and grants access. TikTok redirects to https://cquangdu-work.github.io/thegioiquaconso/tiktok-callback.html, which only displays the code for the owner to paste back to the bot; our server exchanges it for tokens. user.info.basic only shows which account is connected. Content Posting API (video.upload): after the owner approves a finished video in Telegram, the server uploads it (FILE_UPLOAD) to the owner's TikTok inbox as a draft. The owner opens TikTok, adds the caption, turns on the AI-generated content label and publishes manually. No Direct Post, no other users.
 
