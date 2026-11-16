@@ -14,7 +14,7 @@ tự lùi về Manim. Chạy thử không đè video thật: `python -m src.asse
 | statement | chữ hiện từng từ, số/viết tắt tô vàng, icon theo từ khoá (`ICON_KEYWORDS`), 3 bố cục xoay vòng |
 | big_number | số đếm lên + cờ; tỷ lệ dân số % -> lưới 100 hình người; "x / 100 dân" -> người + đồ vật |
 | versus | hai cờ, hai số đếm lên, cột so độ cao |
-| bar_chart | thanh ngang có cờ |
+| bar_chart | có cờ; xen kẽ thanh ngang / cột đứng trong cùng video (chống "nội dung theo mẫu") |
 | percent | vòng tròn phát sáng |
 | line_chart | **biểu đồ chính** (`ChartWorld`): sống xuyên các cảnh, toàn màn hình ở cảnh line_chart, thu xuống nửa dưới khi cảnh so găng/số lớn nói đúng một điểm số liệu (`_match_points`, chỉ khi chắc chắn duy nhất) |
 | map | bản đồ châu Á / thế giới: hình học (phép chiếu, Hoàng Sa + Trường Sa, ô phóng to Biển Đông, thứ hạng) do `src/render/web_map.py` tính, Remotion chỉ tô dần từ thấp lên cao |

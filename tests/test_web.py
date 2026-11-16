@@ -194,6 +194,13 @@ class TestBuildStory(unittest.TestCase):
         self.assertEqual(vn["flag"], "vn")
         self.assertFalse(r["items"][1]["strong"])
 
+    def test_ranking_scenes_alternate_layouts(self):
+        bars = {"template": "bar_chart", "seconds": 3, "voice": "Xếp hạng.",
+                "params": {"title": "Hạng", "items": [{"label": "Việt Nam", "value": 3}, {"label": "Lào", "value": 1}]}}
+        spec = [{"template": "intro", "seconds": 1.2, "params": {}}] + [dict(bars) for _ in range(3)]
+        st = web.build_story(spec, _timed(spec), "t4")["scenes"]
+        self.assertEqual([s["style"] for s in st[1:]], [0, 1, 0])
+
     def test_unsupported_without_clip_renderer_raises(self):
         spec = _spec()
         with self.assertRaises(ValueError):

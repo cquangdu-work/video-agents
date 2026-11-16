@@ -310,7 +310,7 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None) -> d
         if all(abs(at - x["at"]) > 0.45 for x in sfx):     # không dồn tiếng hiệu ứng sát nhau
             sfx.append({"name": name, "at": round(max(at, 0), 3), "volume": vol})
 
-    prev_family = None
+    prev_family, bar_charts = None, 0
     for i, sc in enumerate(spec):
         tpl, p = sc.get("template"), dict(sc.get("params") or {})
         start, end = round(t, 3), round(t + float(sc["seconds"]), 3)
@@ -381,8 +381,10 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None) -> d
             add_sfx("tick", start + 0.05 * dur, 0.3)
         elif kind == "bar_chart":
             items = sorted(p.get("items") or [], key=lambda it: -float(it["value"]))[:6]
-            out.update(title=str(p.get("title", "")), unit=str(p.get("unit") or ""),
+            # xen kẽ thanh ngang / cột đứng (video #18 có 6 cảnh xếp hạng cùng một khuôn)
+            out.update(title=str(p.get("title", "")), unit=str(p.get("unit") or ""), style=bar_charts % 2,
                        items=[_valued(it, dec, colors, "accent" if k == 0 else "muted") for k, it in enumerate(items)])
+            bar_charts += 1
             add_sfx("tick", start + 0.05 * dur, 0.3)
         elif kind == "percent":
             v = max(0.0, min(float(p["value"]), 100.0))

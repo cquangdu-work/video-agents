@@ -203,7 +203,48 @@ export const Versus: React.FC<P<VersusScene>> = ({ s, brand, tl, dur }) => {
 };
 
 // ------------------------------------------------------------------ xếp hạng
-export const BarChart: React.FC<P<BarChartScene>> = ({ s, brand, tl, dur }) => {
+export const BarChart: React.FC<P<BarChartScene>> = (props) =>
+  props.s.style === 1 ? <ColumnChart {...props} /> : <HorizontalBars {...props} />;
+
+/** Kiểu 1: cột đứng, cờ + tên dưới chân cột (xen kẽ với thanh ngang để video nhiều cảnh xếp
+ *  hạng không lặp một khuôn — "nội dung theo mẫu" là loại YouTube không cho kiếm tiền). */
+const ColumnChart: React.FC<P<BarChartScene>> = ({ s, brand, tl, dur }) => {
+  const items = s.items.slice(0, 6);
+  const n = items.length;
+  const vmax = Math.max(...items.map((i) => Math.abs(i.value)), 1e-9);
+  const k = countK(tl, dur);
+  const slot = 900 / Math.max(n, 1), colW = Math.min(150, slot * 0.62), base = 1150, maxH = 560;
+  return (
+    <AbsoluteFill style={{ opacity: exitOf(tl, dur) }}>
+      <SceneTitle text={s.title} brand={brand} tl={tl} />
+      <div style={{ position: "absolute", left: 80, right: 80, top: base, height: 3, background: brand.muted, opacity: 0.4 }} />
+      {items.map((it, i) => {
+        const cx = 90 + slot * (i + 0.5);
+        const grow = ramp(tl, 0.1 + i * 0.07, 0.62 * dur, Easing.out(Easing.cubic));
+        const h = Math.max(maxH * Math.max(it.value, 0) / vmax * grow, 4);
+        const appear = ramp(tl, 0.05 + i * 0.07, 0.3 + i * 0.07);
+        return (
+          <div key={i} style={{ opacity: appear }}>
+            <div style={{ position: "absolute", left: cx - colW / 2, width: colW, top: base - h, height: h,
+              borderRadius: "12px 12px 3px 3px", background: `linear-gradient(180deg, ${it.color}, ${it.color}66)`,
+              boxShadow: `0 0 34px ${it.color}33` }} />
+            <div style={{ position: "absolute", left: cx - slot / 2, width: slot, top: base - h - 56, textAlign: "center",
+              fontSize: n > 4 ? 34 : 42, fontWeight: 800, color: brand.text }}>{fmtDec(it.value * k, it.dec)}</div>
+            <div style={{ position: "absolute", left: cx - slot / 2, width: slot, top: base + 14, display: "flex",
+              flexDirection: "column", alignItems: "center", gap: 6 }}>
+              <Flag code={it.flag} w={50} />
+              <div style={{ fontSize: n > 4 ? 26 : 32, fontWeight: 800, color: it.color, textAlign: "center", lineHeight: 1.1 }}>{it.label}</div>
+            </div>
+          </div>
+        );
+      })}
+      {s.unit && <div style={{ position: "absolute", top: base + 140, left: 60, right: 60, textAlign: "center",
+        fontSize: 30, fontWeight: 600, color: brand.muted }}>{s.unit}</div>}
+    </AbsoluteFill>
+  );
+};
+
+const HorizontalBars: React.FC<P<BarChartScene>> = ({ s, brand, tl, dur }) => {
   const items = s.items.slice(0, 6);
   const vmax = Math.max(...items.map((i) => Math.abs(i.value)), 1e-9);
   const k = countK(tl, dur);

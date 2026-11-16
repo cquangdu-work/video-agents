@@ -46,7 +46,7 @@ export type BigNumberScene = Span & {
 export type VersusScene = Span & {
   kind: "versus"; title: string; left: Valued; right: Valued; suffix: string; chart?: ChartState;
 };
-export type BarChartScene = Span & { kind: "bar_chart"; title: string; items: Valued[]; unit: string };
+export type BarChartScene = Span & { kind: "bar_chart"; title: string; items: Valued[]; unit: string; style?: number };
 export type PercentScene = Span & { kind: "percent"; title: string; value: number; dec: number; label: string };
 export type LineChartScene = Span & { kind: "line_chart"; title: string; chart: ChartState };
 export type ClipScene = Span & { kind: "clip"; src: string }; // cảnh Manim dựng sẵn (khi chưa có bản Remotion)
