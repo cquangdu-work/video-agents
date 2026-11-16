@@ -71,7 +71,8 @@ mkdir -p "$UNIT_DIR"
 for f in video-agents-daily.service video-agents-daily.timer \
          video-agents-daily-retry.service video-agents-daily-retry.timer \
          video-agents-review.service \
-         video-agents-weekly.service video-agents-weekly.timer \n         video-agents-longform.service video-agents-longform.timer; do
+         video-agents-weekly.service video-agents-weekly.timer \
+         video-agents-longform.service video-agents-longform.timer; do
     sed "s|@REPO@|$REPO|g" "deploy/$f" > "$UNIT_DIR/$f"
 done
 systemctl --user daemon-reload
