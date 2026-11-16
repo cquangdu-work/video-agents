@@ -1,5 +1,13 @@
 # Thế giới qua con số — đội agent sản xuất video ngắn
 
+> **English summary.** An autonomous multi-agent studio that researches, writes, fact-checks,
+> voices, animates (Remotion/React) and publishes a data-driven short video every day, plus a
+> weekly 16:9 long-form compilation — on a free-tier ARM VM with $0/month model cost and a human
+> approval step via Telegram. LLM outputs are always verified by code (number gate, unit gate,
+> constrained vision QC). **Start here: [docs/PORTFOLIO.md](docs/PORTFOLIO.md)** for the
+> architecture, engineering decisions and measured results. The rest of this README and the code
+> comments are in Vietnamese (the channel's language).
+
 Dây chuyền tự động chạy mỗi sáng trên VM: tìm ý tưởng → chấm điểm → viết kịch bản → kiểm chứng → dựng spec cảnh → giọng đọc + hình + phụ đề → kiểm định → gửi video vào Telegram cho Du duyệt → Du bấm ✅ thì ra gói đăng. (Lộ trình và các quyết định thiết kế nằm trong [CLAUDE.md](CLAUDE.md).)
 
 ## Chạy
