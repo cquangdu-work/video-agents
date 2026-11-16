@@ -46,7 +46,8 @@ class TextTest(unittest.TestCase):
         vids = [_video(1, "Thuê bao di động trên 100 dân", 14), _video(2, "FDI so với GDP gấp 5 lần", 15),
                 _video(3, "GDP đầu người", 16, src="KOSIS — https://k")]
         title, desc, tags = longform.build_text(vids, [0.0, 72.4, 3700.0], "14/11–16/11", CFG)
-        self.assertTrue(title.startswith("3 câu chuyện qua con số tuần 14/11–16/11"))
+        self.assertEqual(title, "3 câu chuyện qua con số tuần 14/11–16/11 | Việt Nam, Hàn Quốc và thế giới")
+        self.assertNotIn("…", title)
         self.assertLessEqual(len(title), 100)
         # mốc chương: chương đầu 0:00 (YouTube cần), định dạng phút:giây / giờ:phút:giây
         self.assertIn("0:00 Thuê bao di động trên 100 dân", desc)

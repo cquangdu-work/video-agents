@@ -101,8 +101,9 @@ def build_text(videos: list, starts: list, span: str, cfg: dict) -> tuple:
     (YouTube tự chia chương: mốc đầu 0:00, từ 3 chương, mỗi chương >= 10 giây)."""
     from .publish import metadata
     n = len(videos)
-    lead = min((v["title"] for v in videos), key=len)
-    title = metadata._truncate_words(f"{n} câu chuyện qua con số tuần {span}: {lead}", metadata.TITLE_MAX)
+    # khuôn cố định, ngắn (bản đầu ghép tiêu đề một chương vào nên bị cắt "…Việt Nam và Hàn…")
+    title = metadata._truncate_words(f"{n} câu chuyện qua con số tuần {span} | Việt Nam, Hàn Quốc và thế giới",
+                                     metadata.TITLE_MAX)
     lines = [f"{n} câu chuyện dữ liệu Việt Nam – Hàn Quốc – thế giới trong tuần {span}, mỗi câu chuyện"
              " một chương:", ""]
     lines += [f"{ts(s)} {v['title']}" for v, s in zip(videos, starts)]
