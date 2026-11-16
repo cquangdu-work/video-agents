@@ -24,13 +24,21 @@ class WeekSelectionTest(unittest.TestCase):
         con.row_factory = sqlite3.Row
         con.execute("CREATE TABLE videos (id INTEGER PRIMARY KEY, script_id INTEGER, title TEXT, status TEXT,"
                     " youtube_id TEXT, published_at TEXT, description TEXT, tags TEXT)")
-        rows = [_video(1, "cũ quá", 10), _video(2, "b", 16), _video(3, "a", 15), _video(4, "loại", 17, status="rejected"),
+        con.execute("CREATE TABLE scripts (id INTEGER PRIMARY KEY, idea_id INTEGER)")
+        con.execute("CREATE TABLE ideas (id INTEGER PRIMARY KEY, title TEXT)")
+        con.execute("INSERT INTO scripts VALUES (103, 1)")
+        con.execute("INSERT INTO ideas VALUES (1, 'Vốn FDI vào so với GDP: Việt Nam và Hàn Quốc')")
+        rows = [_video(1, "cũ quá", 10), _video(2, "b", 16), _video(3, "FDI Việt Nam gấp 5,06 lần Hàn Quốc", 15),
+                _video(4, "loại", 17, status="rejected"),
                 _video(5, "video dài tuần trước", 18, script=False)]
         for r in rows:
             con.execute("INSERT INTO videos VALUES (:id,:script_id,:title,:status,:youtube_id,:published_at,"
                         ":description,:tags)", r)
         got = longform.week_videos(con, NOW)
         self.assertEqual([v["id"] for v in got], [3, 2])         # cũ trước mới sau
+        # tiêu đề Shorts cũ bỏ mất đơn vị -> tiêu đề chương tự thêm (ca thật video #6)
+        self.assertEqual(got[0]["title"], "FDI Việt Nam gấp 5,06 lần Hàn Quốc (so với GDP)")
+        self.assertEqual(got[1]["title"], "b")
 
 
 class TextTest(unittest.TestCase):

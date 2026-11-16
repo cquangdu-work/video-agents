@@ -47,9 +47,18 @@ def week_videos(con, now: datetime, days: int = 7) -> list:
     """Shorts đã đăng (có trên YouTube) trong `days` ngày qua, cũ trước mới sau."""
     since = (now - timedelta(days=days)).isoformat(timespec="seconds")
     rows = con.execute(
-        "SELECT * FROM videos WHERE status='published' AND script_id IS NOT NULL"
-        " AND youtube_id IS NOT NULL AND published_at >= ? ORDER BY published_at", (since,)).fetchall()
-    return [dict(r) for r in rows]
+        "SELECT v.*, i.title AS idea_title FROM videos v LEFT JOIN scripts s ON s.id = v.script_id"
+        " LEFT JOIN ideas i ON i.id = s.idea_id WHERE v.status='published' AND v.script_id IS NOT NULL"
+        " AND v.youtube_id IS NOT NULL AND v.published_at >= ? ORDER BY v.published_at", (since,)).fetchall()
+    return [dict(r, title=chapter_title(dict(r))) for r in rows]
+
+
+def chapter_title(v: dict) -> str:
+    """Tiêu đề chương = tiêu đề Shorts, nhưng THÊM đơn vị nếu tiêu đề cũ bỏ mất (Shorts đăng trước
+    luật metadata.title_drops_unit, vd video #6 "Vốn FDI… gấp 5,06 lần" khi số là % GDP)."""
+    from .publish import metadata
+    unit = metadata.title_drops_unit(v["title"], {"title": v.get("idea_title") or ""})
+    return f"{v['title'].rstrip()} ({unit})" if unit else v["title"]
 
 
 def chapter_source(script_id: int) -> tuple:
@@ -71,6 +80,10 @@ def chapter_source(script_id: int) -> tuple:
             return p, final
     TMP.mkdir(parents=True, exist_ok=True)
     out = TMP / f"src_{script_id}.mp4"
+    if out.exists() and props.exists():           # đã dựng lại ở lần chạy trước: dùng lại
+        p = json.loads(props.read_text(encoding="utf-8"))
+        if abs(ffprobe_duration(out) - float(p["duration"])) < 0.12:
+            return p, out
     log.info("Shorts #%s chưa có bản Remotion khớp — dựng lại (không tốn TTS)", script_id)
     subprocess.run([sys.executable, "-m", "src.assemble", str(script_id), "--engine", "web", "--out", str(out)],
                    cwd=ROOT, check=True)
