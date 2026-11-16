@@ -175,11 +175,15 @@ def fetch_and_store(con, videos: list, now: datetime) -> str:
     if youtube.TOKEN_PATH.exists() and os.getenv("YT_CLIENT_ID"):
         try:
             token = youtube.access_token()
+            got = set()
             for v in videos:
                 start = (v["published_at"] or today)[:10]
                 raw = youtube.analytics_video(v["youtube_id"], start, today, token)
-                if not raw:
+                # Analytics trễ 2-3 ngày: video mới trả rỗng hoặc toàn 0 (đo 16/11: video #6 có 717
+                # lượt xem công khai mà Analytics báo 0) -> để số công khai bên dưới điền thay
+                if not raw or not raw.get("views"):
                     continue
+                got.add(v["id"])
                 stats = {"views": raw.get("views"), "likes": raw.get("likes"),
                          "comments": raw.get("comments"), "shares": raw.get("shares"),
                          "subs_gained": raw.get("subscribersGained"),
@@ -191,6 +195,16 @@ def fetch_and_store(con, videos: list, now: datetime) -> str:
                     log.warning("Không lấy được đường giữ chân video #%s: %s", v["id"], exc)
                     retention = []
                 db.save_video_stats(con, v["id"], "analytics", stats, retention)
+            key = os.getenv("YOUTUBE_API_KEY")
+            late = [v for v in videos if v["id"] not in got]
+            if late and key:
+                try:
+                    pub = youtube.public_stats([v["youtube_id"] for v in late], key)
+                    for v in late:
+                        if v["youtube_id"] in pub:
+                            db.save_video_stats(con, v["id"], "public", pub[v["youtube_id"]])
+                except Exception as exc:
+                    log.warning("Không lấy được số công khai cho video Analytics chưa có số: %s", exc)
             return "analytics"
         except Exception as exc:       # token hỏng v.v. -> lùi về số công khai
             log.warning("YouTube Analytics lỗi (%s) — lùi về số liệu công khai", exc)

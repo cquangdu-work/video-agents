@@ -19,7 +19,7 @@ tự lùi về Manim. Chạy thử không đè video thật: `python -m src.asse
 | line_chart | **biểu đồ chính** (`ChartWorld`): sống xuyên các cảnh, toàn màn hình ở cảnh line_chart, thu xuống nửa dưới khi cảnh so găng/số lớn nói đúng một điểm số liệu (`_match_points`, chỉ khi chắc chắn duy nhất) |
 | map | bản đồ châu Á / thế giới: hình học (phép chiếu, Hoàng Sa + Trường Sa, ô phóng to Biển Đông, thứ hạng) do `src/render/web_map.py` tính, Remotion chỉ tô dần từ thấp lên cao |
 | bar_race | cuộc đua có cờ, thanh trượt đổi chỗ; số trên thanh luôn là số thật của năm đang hiện |
-| (line_chart thứ hai khác số liệu) | chưa có bản Remotion: dựng bằng Manim rồi lồng vào (`clip`) |
+| line_chart thứ hai khác số liệu | biểu đồ riêng chỉ sống trong cảnh đó (`line_solo`); số liệu hỏng mới dựng Manim lồng vào (`clip`) |
 
 ## Cài
 ```bash

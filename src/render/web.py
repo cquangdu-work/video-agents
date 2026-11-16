@@ -295,11 +295,29 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None) -> d
     colors = brand()["colors"]
     words = caption_words(timed_words)
     world = build_world(spec, colors)
-    world_numbers = []
-    if world:
-        for s in world["series"]:
-            world_numbers += s["xs"] + [round(y, s["dec"]) for y in s["ys"]]
-        world_numbers += _nice_ticks(world["yMax"]) + ([100] if world.get("reference") else [])
+
+    def numbers_of(w) -> list:
+        """Mọi con số một biểu đồ có thể hiện (số liệu, năm, vạch chia) — cho Kiểm định."""
+        if not w:
+            return []
+        out = []
+        for s in w["series"]:
+            out += s["xs"] + [round(y, s["dec"]) for y in s["ys"]]
+        return out + _nice_ticks(w["yMax"]) + ([100] if w.get("reference") else [])
+
+    def callout_for(w, start, end):
+        """Con số chốt: giá trị cuối của một đường mà lời đọc cảnh này nói ra -> chú thích lớn
+        đúng mốc của từ đó (chuỗi nhấn mạnh — Việt Nam — được xét trước)."""
+        for k in sorted(range(len(w["series"])), key=lambda k: not w["series"][k]["emphasis"]):
+            s = w["series"][k]
+            last = fmt_num(s["ys"][-1], label_decimals(s["ys"][-1], s["dec"]))
+            at = find_word(words, re.escape(last), after=start, before=end)
+            if at is not None:
+                add_sfx("thump", at, 0.45)
+                return {"s": k, "value": last, "at": at, "label": f"{w['unit']} · {s['xs'][-1]}".strip(" ·")}
+        return None
+
+    world_numbers = numbers_of(world)
     scenes, sfx, t = [], [], 0.0
     drawn = world["minX"] if world else 0
     clip_dir = CLIPS / str(script_id)
@@ -319,10 +337,23 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None) -> d
         hints = {int(y) for y in _YEAR.findall(" ".join([str(p.get("title", "")), voice]))}
         dec = int(p.get("decimals", 0) or 0)
         kind = tpl if tpl in WEB_KINDS else "clip"
-        if tpl == "line_chart" and (not world or not _same_series(p, world, colors)):
-            kind = "clip"                      # line_chart thứ hai khác số liệu: vẽ bằng Manim
         out = {"start": start, "end": end, "source": str(p.get("source") or ""), "kind": kind}
         extra_shown = []
+        if tpl == "line_chart" and (not world or not _same_series(p, world, colors)):
+            # line_chart thứ hai mang số liệu khác biểu đồ chính: biểu đồ riêng chỉ trong cảnh này;
+            # số liệu hỏng (không dựng được) thì mới lùi về Manim
+            solo = build_world([sc], colors)
+            if solo:
+                kind = out["kind"] = "line_solo"
+                chart = {"mode": "full", "drawTo": solo["maxX"]}
+                co = callout_for(solo, start, end)
+                if co:
+                    chart["callout"] = co
+                out.update(title=str(p.get("title", "")), world=solo, chart=chart)
+                extra_shown = numbers_of(solo)
+                add_sfx("rise", start + 0.08 * dur, 0.28)
+            else:
+                kind = out["kind"] = "clip"
         if kind in ("map", "bar_race"):
             from .web_map import map_props, race_props
             try:
@@ -396,16 +427,9 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None) -> d
             new_draw = to > drawn
             drawn = max(drawn, to)
             state = {"mode": "full", "drawTo": drawn}
-            # con số chốt: giá trị cuối của một đường mà lời đọc cảnh này nói ra -> chú thích lớn
-            for k in sorted(range(len(world["series"])), key=lambda k: not world["series"][k]["emphasis"]):
-                s = world["series"][k]
-                last = fmt_num(s["ys"][-1], label_decimals(s["ys"][-1], s["dec"]))
-                at = find_word(words, re.escape(last), after=start, before=end)
-                if at is not None:
-                    state["callout"] = {"s": k, "value": last, "at": at,
-                                        "label": f"{world['unit']} · {s['xs'][-1]}".strip(" ·")}
-                    add_sfx("thump", at, 0.45)
-                    break
+            co = callout_for(world, start, end)
+            if co:
+                state["callout"] = co
             out.update(title=str(p.get("title", "")), chart=state)
             if new_draw:
                 add_sfx("rise", start + 0.08 * dur, 0.28)

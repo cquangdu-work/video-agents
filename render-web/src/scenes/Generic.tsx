@@ -2,10 +2,12 @@ import React from "react";
 import { AbsoluteFill, Easing, Img, OffthreadVideo, staticFile } from "remotion";
 import { PersonStanding } from "lucide-react";
 import {
-  BarChartScene, BigNumberScene, Brand, ClipScene, LineChartScene, PercentScene, StatementScene, Valued, VersusScene,
+  BarChartScene, BigNumberScene, Brand, ClipScene, LineChartScene, LineSoloScene, PercentScene, StatementScene, Valued,
+  VersusScene,
 } from "../types";
 import { fmtDec, lerp, pop, ramp } from "../lib/anim";
 import { ICONS } from "../components/Icons";
+import { ChartWorld } from "../components/ChartWorld";
 
 // Các mẫu cảnh CHUNG — mỗi template của spec (src/produce.py) có một bản ở đây.
 // Luật thời gian giữ như engine Manim: hoạt hình đếm số xong trước 70% cảnh, vì Kiểm định
@@ -305,6 +307,20 @@ export const PercentRing: React.FC<P<PercentScene>> = ({ s, brand, tl, dur }) =>
 export const LineChartTitle: React.FC<P<LineChartScene>> = ({ s, brand, tl }) => (
   <AbsoluteFill><SceneTitle text={s.title} brand={brand} tl={tl} /></AbsoluteFill>
 );
+
+// biểu đồ đường thứ hai (số liệu khác biểu đồ chính): ChartWorld riêng, chỉ sống trong cảnh này
+export const LineSolo: React.FC<P<LineSoloScene>> = ({ s, brand, tl, dur }) => {
+  // ChartWorld ở đây chạy theo giờ CỦA CẢNH (tl) -> đổi mốc chú thích (giây tuyệt đối) về giờ cảnh
+  const co = s.chart.callout;
+  const chart = co ? { ...s.chart, callout: { ...co, at: co.at - s.start } } : s.chart;
+  return (
+    <AbsoluteFill style={{ opacity: exitOf(tl, dur) }}>
+      <ChartWorld world={s.world} t={tl} brand={brand}
+        scenes={[{ kind: "line_chart", start: 0, end: dur, title: s.title, chart }]} />
+      <SceneTitle text={s.title} brand={brand} tl={tl} />
+    </AbsoluteFill>
+  );
+};
 
 // ------------------------------------------------------------------ cảnh Manim dựng sẵn
 export const Clip: React.FC<P<ClipScene>> = ({ s, tl, dur }) => (

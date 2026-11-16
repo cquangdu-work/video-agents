@@ -4,7 +4,7 @@ import { loadFont } from "@remotion/google-fonts/BeVietnamPro";
 import { Background } from "./components/Background";
 import { Captions } from "./components/Captions";
 import { ChartWorld } from "./components/ChartWorld";
-import { BarChart, BigNumber, Clip, LineChartTitle, PercentRing, Statement, Versus } from "./scenes/Generic";
+import { BarChart, BigNumber, Clip, LineChartTitle, LineSolo, PercentRing, Statement, Versus } from "./scenes/Generic";
 import { BarRace, MapView } from "./scenes/MapRace";
 import { HeroLine } from "./scenes/HeroLine";
 import { Intro } from "./scenes/Intro";
@@ -30,6 +30,7 @@ const SceneView: React.FC<{ scene: Scene; brand: StoryProps["brand"] }> = ({ sce
     case "percent": return <PercentRing s={scene} {...common} />;
     case "line_chart": return <LineChartTitle s={scene} {...common} />;
     case "clip": return <Clip s={scene} {...common} />;
+    case "line_solo": return <LineSolo s={scene} {...common} />;
     case "map": return <MapView s={scene} {...common} />;
     case "bar_race": return <BarRace s={scene} {...common} />;
     // cảnh riêng của bản demo #30

@@ -38,6 +38,31 @@ def to_hashtag(text: str) -> str:
     return "#" + slug if slug else ""
 
 
+# Số liệu dạng TỶ LỆ / BÌNH QUÂN: tiêu đề bỏ mất đơn vị là đổi nghĩa con số. Ca thật video #6
+# (đã đăng 15/11): "Vốn FDI của Việt Nam năm 2025 gấp 5,06 lần Hàn Quốc" — số là FDI tính theo
+# % GDP (4,27% so với 0,84%), không phải lượng vốn. (mẫu tìm trong tiêu đề ý tưởng, tên đơn vị)
+RATIO_UNITS = [
+    (r"so với gdp|%\s*gdp|/\s*gdp|trên gdp|của gdp", "so với GDP"),
+    (r"(?:trên|/)\s*100\s*(?:dân|người)", "trên 100 dân"),
+    (r"bình quân|đầu người", "bình quân đầu người"),
+    (r"tỷ lệ|tỉ lệ", "tỷ lệ"),
+]
+# Dấu hiệu tiêu đề CÓ nói rõ đó là tỷ lệ/bình quân
+RATIO_MARKERS = r"%|so với gdp|/\s*gdp|(?:trên|/)\s*100|bình quân|đầu người|tỷ lệ|tỉ lệ|mỗi người|mỗi 100"
+
+
+def ratio_unit(idea: dict):
+    """Đơn vị tỷ lệ/bình quân của số liệu ý tưởng (theo tiêu đề ý tưởng), hoặc None."""
+    low = str(idea.get("title") or "").lower()
+    return next((name for rx, name in RATIO_UNITS if re.search(rx, low)), None)
+
+
+def title_drops_unit(title: str, idea: dict):
+    """Tên đơn vị mà tiêu đề video đã bỏ mất (số liệu là tỷ lệ mà tiêu đề đọc như số tổng)."""
+    unit = ratio_unit(idea)
+    return unit if unit and not re.search(RATIO_MARKERS, str(title or "").lower()) else None
+
+
 def title_fake_numbers(title: str, script_digits: set) -> list:
     """Những con số trong tiêu đề mà kịch bản không hề có."""
     return sorted(d for d in digit_set(title) if d not in script_digits)
@@ -63,6 +88,10 @@ def finalize(raw: dict, idea: dict, scenes: list, cfg: dict, music_credit: str =
     fakes = title_fake_numbers(title, script_digit_set(scenes))
     if fakes:
         warnings.append(f"Tiêu đề có số không nằm trong kịch bản: {fakes}")
+    unit = title_drops_unit(title, idea)
+    if title and unit:
+        warnings.append(f"Tiêu đề bỏ mất đơn vị '{unit}': số liệu là tỷ lệ/bình quân, đọc tiêu đề sẽ"
+                        f" hiểu thành số tổng — phải nói rõ (vd '{unit}', '% GDP', 'tỷ lệ')")
 
     # --- Hashtag: cố định của kênh trước, rồi của LLM; bỏ trùng; giới hạn số lượng
     tags_seen, hashtags = set(), []
@@ -128,5 +157,8 @@ def build_metadata(idea: dict, scenes: list, hooks: list, cfg: dict, music_credi
     fallback = (hooks or [scenes[0].get("voice", "")])[0]
     meta["title"] = _truncate_words(_clean_line(fallback), TITLE_MAX)
     meta["warnings"] = [w for w in meta["warnings"] if "iêu đề" not in w]
-    meta["warnings"].append("Tiêu đề LLM viết 2 lần đều sai số — đã dùng câu hook của kịch bản")
+    meta["warnings"].append("Tiêu đề LLM viết 2 lần đều bị trả lại — đã dùng câu hook của kịch bản")
+    unit = title_drops_unit(meta["title"], idea)
+    if unit:          # câu hook cũng không nói rõ đơn vị: không chặn, nhưng Du thấy ngay khi duyệt
+        meta["warnings"].append(f"Tiêu đề chưa nói rõ đơn vị '{unit}' — Du sửa tiêu đề trước khi bấm ✅")
     return meta

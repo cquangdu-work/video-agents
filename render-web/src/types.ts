@@ -50,6 +50,8 @@ export type BarChartScene = Span & { kind: "bar_chart"; title: string; items: Va
 export type PercentScene = Span & { kind: "percent"; title: string; value: number; dec: number; label: string };
 export type LineChartScene = Span & { kind: "line_chart"; title: string; chart: ChartState };
 export type ClipScene = Span & { kind: "clip"; src: string }; // cảnh Manim dựng sẵn (khi chưa có bản Remotion)
+/** Biểu đồ đường mang số liệu KHÁC biểu đồ chính: một ChartWorld riêng chỉ sống trong cảnh này. */
+export type LineSoloScene = Span & { kind: "line_solo"; title: string; world: World; chart: ChartState };
 
 // Bản đồ: mọi toạ độ là ĐIỂM ẢNH khung 1080x1920, do src/render/web_map.py tính (phép chiếu,
 // Hoàng Sa + Trường Sa, ô phóng to Biển Đông...). Remotion chỉ tô và cho chuyển động.
@@ -101,7 +103,7 @@ export type HeroLineScene = Span & {
 
 export type Scene =
   | IntroScene | StatementScene | BigNumberScene | VersusScene | BarChartScene | PercentScene
-  | LineChartScene | ClipScene | MapScene | BarRaceScene
+  | LineChartScene | LineSoloScene | ClipScene | MapScene | BarRaceScene
   | IsotypeScene | NetworkScene | OrbitScene | HeroLineScene;
 
 export type Sfx = { name: string; at: number; volume: number };

@@ -33,9 +33,12 @@ def _spec():
          "params": {"title": "Bản đồ", "unit": "thuê bao", "region": "asia", "year": 2024, "items": [
              {"label": "Việt Nam", "value": 128}, {"label": "Hàn Quốc", "value": 173},
              {"label": "Nhật Bản", "value": 170}]}},
-        # line_chart thứ hai khác số liệu biểu đồ chính -> chưa có bản Remotion, dựng Manim lồng vào
-        {"template": "line_chart", "seconds": 3.0, "voice": "Một chuỗi khác.",
-         "params": {"title": "Khác", "xs": [2000, 2010], "ys": [1.0, 2.0]}},
+        # line_chart thứ hai khác số liệu biểu đồ chính -> biểu đồ riêng chỉ trong cảnh này
+        {"template": "line_chart", "seconds": 3.0, "voice": "Năm 2010 đạt 2,5.",
+         "params": {"title": "Khác", "xs": [2000, 2010], "ys": [1.0, 2.5], "decimals": 1}},
+        # số liệu hỏng (xs, ys lệch độ dài) -> dựng Manim lồng vào
+        {"template": "line_chart", "seconds": 3.0, "voice": "Hỏng.",
+         "params": {"title": "Hỏng", "xs": [2000, 2010, 2020], "ys": [1.0]}},
     ]
 
 
@@ -120,10 +123,14 @@ class TestBuildStory(unittest.TestCase):
         props = web.build_story(spec, _timed(spec), "t1", render_clip=lambda sc, i: calls.append(i) or clip)
         st = props["scenes"]
         self.assertEqual([s["kind"] for s in st],
-                         ["intro", "statement", "versus", "line_chart", "big_number", "map", "clip"])
-        self.assertEqual(calls, [6])                       # chỉ line_chart lạ dựng bằng Manim
-        self.assertTrue((self.tmp / "clips" / "t1" / "scene_06.mp4").exists())
-        self.assertEqual(set(st[6]), {"start", "end", "source", "kind", "src"})
+                         ["intro", "statement", "versus", "line_chart", "big_number", "map", "line_solo", "clip"])
+        self.assertEqual(calls, [7])                       # chỉ cảnh số liệu hỏng dựng bằng Manim
+        self.assertTrue((self.tmp / "clips" / "t1" / "scene_07.mp4").exists())
+        self.assertEqual(set(st[7]), {"start", "end", "source", "kind", "src"})
+        solo = st[6]
+        self.assertEqual(solo["world"]["series"][0]["ys"], [1.0, 2.5])
+        self.assertEqual(solo["chart"]["callout"]["value"], "2,5")      # lời đọc nói "2,5"
+        self.assertIn(2.5, spec[6]["shown"])
         self.assertEqual(st[1]["icon"], "smartphone")
         # so găng 2024 nằm trên biểu đồ chính: 2 điểm số liệu thật, vẽ tới 2024
         self.assertEqual(st[2]["chart"], {"mode": "panel", "drawTo": 2024,

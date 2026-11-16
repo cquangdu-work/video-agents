@@ -897,6 +897,9 @@ Yêu cầu:
 - "title": tiếng Việt, <= 70 ký tự, gây tò mò nhưng TRUNG THỰC với nội dung.
   Không viết hoa cả câu, không doạ dẫm. Nếu dùng con số thì phải là con số có
   NGUYÊN VĂN trong lời đọc ở trên, viết bằng chữ số. Không tự thêm hashtag vào title.
+  Số liệu là TỶ LỆ hoặc BÌNH QUÂN (ý tưởng: "{idea.get('title', '')}") thì title PHẢI giữ
+  đơn vị đó ("% GDP", "trên 100 dân", "bình quân đầu người", "tỷ lệ"): "FDI Việt Nam gấp 5 lần
+  Hàn Quốc" khi số là FDI tính theo % GDP là SAI NGHĨA (người xem hiểu thành lượng vốn).
 - "description": 1-2 câu tiếng Việt tóm tắt video nói gì, có 1 con số đắt nhất.
   KHÔNG ghi nguồn, KHÔNG ghi hashtag (hệ thống tự thêm).
 - "hashtags": 3 hashtag chủ đề, không dấu, viết liền (vd "#khihau").
