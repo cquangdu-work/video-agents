@@ -93,7 +93,8 @@ def render(props: dict, out: Path, concurrency: int = 3, crf: int = 23) -> Path:
 # Không đổi gì phía Biên kịch/Sản xuất: cùng spec, chỉ đổi cách vẽ.
 # =====================================================================================
 
-WEB_KINDS = {"intro", "statement", "big_number", "versus", "bar_chart", "percent", "line_chart"}
+WEB_KINDS = {"intro", "statement", "big_number", "versus", "bar_chart", "percent", "line_chart",
+             "map", "bar_race"}
 CLIPS = WEB / "public" / "clips"
 FLAGS = WEB / "public" / "flags"
 FLAG_SRC = WEB / "node_modules" / "flag-icons" / "flags" / "4x3"
@@ -321,6 +322,20 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None) -> d
         if tpl == "line_chart" and (not world or not _same_series(p, world, colors)):
             kind = "clip"                      # line_chart thứ hai khác số liệu: vẽ bằng Manim
         out = {"start": start, "end": end, "source": str(p.get("source") or ""), "kind": kind}
+        extra_shown = []
+        if kind in ("map", "bar_race"):
+            from .web_map import map_props, race_props
+            try:
+                if kind == "map":
+                    out.update(map_props(p, colors))
+                    extra_shown = out.pop("ranksShown", [])
+                    add_sfx("rise", start + 0.35, 0.22)
+                else:
+                    out.update(race_props(p, colors, flag_of))
+                    add_sfx("rise", start + 0.5, 0.22)
+            except Exception as exc:          # số liệu lạ: dựng cảnh đó bằng Manim như trước
+                log.warning("Cảnh %d (%s) không dựng được bằng Remotion (%s) — dùng Manim", i + 1, tpl, exc)
+                kind = out["kind"] = "clip"
 
         if kind == "statement":
             text = str(p.get("text") or voice)
@@ -393,6 +408,7 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None) -> d
             if new_draw:
                 add_sfx("rise", start + 0.08 * dur, 0.28)
         elif kind == "clip":
+            out = {k: v for k, v in out.items() if k in ("start", "end", "source", "kind")}
             if render_clip is None:
                 raise ValueError(f"cảnh {i + 1}: template '{tpl}' chưa có bản Remotion")
             clip_dir.mkdir(parents=True, exist_ok=True)
@@ -405,7 +421,7 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None) -> d
             add_sfx("whoosh", start - 0.15, 0.25)
         prev_family = family
         scenes.append(out)
-        sc["shown"] = world_numbers
+        sc["shown"] = world_numbers + extra_shown
 
     sources = [s["source"] for s in scenes if s.get("source")]
     return {"brand": brand_props(), "duration": round(t, 3), "scenes": scenes, "words": words,

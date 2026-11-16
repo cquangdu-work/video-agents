@@ -5,6 +5,7 @@ import { Background } from "./components/Background";
 import { Captions } from "./components/Captions";
 import { ChartWorld } from "./components/ChartWorld";
 import { BarChart, BigNumber, Clip, LineChartTitle, PercentRing, Statement, Versus } from "./scenes/Generic";
+import { BarRace, MapView } from "./scenes/MapRace";
 import { HeroLine } from "./scenes/HeroLine";
 import { Intro } from "./scenes/Intro";
 import { Isotype } from "./scenes/Isotype";
@@ -29,6 +30,8 @@ const SceneView: React.FC<{ scene: Scene; brand: StoryProps["brand"] }> = ({ sce
     case "percent": return <PercentRing s={scene} {...common} />;
     case "line_chart": return <LineChartTitle s={scene} {...common} />;
     case "clip": return <Clip s={scene} {...common} />;
+    case "map": return <MapView s={scene} {...common} />;
+    case "bar_race": return <BarRace s={scene} {...common} />;
     // cảnh riêng của bản demo #30
     case "isotype": return <Isotype s={scene} {...common} />;
     case "network": return <Network s={scene} {...common} />;

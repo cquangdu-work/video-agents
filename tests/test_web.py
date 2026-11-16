@@ -29,7 +29,13 @@ def _spec():
          "params": chart},
         {"template": "big_number", "seconds": 3.0, "voice": "Khoảng cách chỉ là 6 năm.",
          "params": {"title": "Khoảng cách thời gian", "value": 6, "suffix": "năm"}},
-        {"template": "map", "seconds": 5.0, "voice": "Cả châu Á.", "params": {"title": "Bản đồ"}},
+        {"template": "map", "seconds": 5.0, "voice": "Cả châu Á.",
+         "params": {"title": "Bản đồ", "unit": "thuê bao", "region": "asia", "year": 2024, "items": [
+             {"label": "Việt Nam", "value": 128}, {"label": "Hàn Quốc", "value": 173},
+             {"label": "Nhật Bản", "value": 170}]}},
+        # line_chart thứ hai khác số liệu biểu đồ chính -> chưa có bản Remotion, dựng Manim lồng vào
+        {"template": "line_chart", "seconds": 3.0, "voice": "Một chuỗi khác.",
+         "params": {"title": "Khác", "xs": [2000, 2010], "ys": [1.0, 2.0]}},
     ]
 
 
@@ -114,9 +120,10 @@ class TestBuildStory(unittest.TestCase):
         props = web.build_story(spec, _timed(spec), "t1", render_clip=lambda sc, i: calls.append(i) or clip)
         st = props["scenes"]
         self.assertEqual([s["kind"] for s in st],
-                         ["intro", "statement", "versus", "line_chart", "big_number", "clip"])
-        self.assertEqual(calls, [5])                                     # chỉ bản đồ dựng bằng Manim
-        self.assertTrue((self.tmp / "clips" / "t1" / "scene_05.mp4").exists())
+                         ["intro", "statement", "versus", "line_chart", "big_number", "map", "clip"])
+        self.assertEqual(calls, [6])                       # chỉ line_chart lạ dựng bằng Manim
+        self.assertTrue((self.tmp / "clips" / "t1" / "scene_06.mp4").exists())
+        self.assertEqual(set(st[6]), {"start", "end", "source", "kind", "src"})
         self.assertEqual(st[1]["icon"], "smartphone")
         # so găng 2024 nằm trên biểu đồ chính: 2 điểm số liệu thật, vẽ tới 2024
         self.assertEqual(st[2]["chart"], {"mode": "panel", "drawTo": 2024,
@@ -136,6 +143,56 @@ class TestBuildStory(unittest.TestCase):
         self.assertTrue(all(a["end"] == b["start"] for a, b in zip(st, st[1:])))
         self.assertAlmostEqual(props["duration"], sum(sc["seconds"] for sc in spec), places=3)
         self.assertTrue(props["sfx"])
+
+    def _world_map(self):
+        items = [{"label": "Việt Nam", "value": 1.9, "code": "VNM"}, {"label": "Hàn Quốc", "value": 0.75, "code": "KOR"},
+                 {"label": "Chad", "value": 6.03, "code": "TCD"}, {"label": "Đức", "value": 1.4, "code": "DEU"}]
+        from src.render.web_map import map_props
+        return map_props({"title": "Sinh", "unit": "con", "region": "world", "year": 2024, "decimals": 2,
+                          "items": items}, web.brand()["colors"])
+
+    def test_maps_always_show_vietnams_archipelagos(self):
+        # Bản đồ có Việt Nam mà thiếu Hoàng Sa, Trường Sa là sai luật Việt Nam — đừng xoá test này
+        from src.render.geo import VN_ISLANDS
+        from src.render.web_map import map_props
+        colors = web.brand()["colors"]
+        spots = sum(len(s) for _, s, _, _ in VN_ISLANDS)
+        asia = map_props({"title": "x", "region": "asia", "items": [
+            {"label": "Việt Nam", "value": 5066}, {"label": "Hàn Quốc", "value": 36227},
+            {"label": "Ấn Độ", "value": 2702.5}]}, colors)
+        world = self._world_map()
+        for m in (asia, world):
+            self.assertEqual(len(m["islands"]), spots)
+            vn = next(f for f in m["fills"] if f["code"] == "VNM")
+            self.assertEqual(m["islandColor"], vn["color"])            # cùng màu Việt Nam
+            for x, y in m["islands"]:
+                self.assertTrue(0 <= x <= 1080 and 0 <= y <= 1920)
+        self.assertEqual({l["text"] for l in asia["islandLabels"]}, {"Hoàng Sa", "Trường Sa"})
+        # bản đồ thế giới quá nhỏ để ghi tên -> tên nằm trong ô phóng to, không tràn mép ô
+        inset = world["inset"]
+        self.assertEqual({l["text"] for l in inset["labels"]}, {"Hoàng Sa", "Trường Sa"})
+        (x0, y0), (x1, y1) = inset["frame"]
+        for x, y in inset["islands"]:
+            self.assertTrue(x0 <= x <= x1 and y0 <= y <= y1)
+        for l in inset["labels"]:
+            self.assertTrue(x0 <= l["x"] <= x1 and y0 <= l["y"] <= y1)
+
+    def test_world_map_ranks_and_names(self):
+        panel = {r["label"]: r["pos"] for r in self._world_map()["panel"]}
+        self.assertEqual(panel["Việt Nam"], "cao thứ 2/4")
+        self.assertEqual(panel["Hàn Quốc"], "thấp thứ 1/4")          # nửa dưới -> đếm từ dưới
+        self.assertIn("Cao nhất: Chad", panel)
+
+    def test_bar_race_shows_real_values_of_each_year(self):
+        from src.render.web_map import race_props
+        r = race_props({"title": "Đua", "years": [2000, 2020], "decimals": 1, "items": [
+            {"label": "Việt Nam", "values": [402.5, 3586.0]}, {"label": "Thái Lan", "values": [2007.0, 7001.3]}]},
+            web.brand()["colors"], web.flag_of)
+        vn = r["items"][0]
+        self.assertEqual(vn["shown"], ["402,5", "3.586"])                  # đúng số bảng, kiểu Việt Nam
+        self.assertTrue(vn["strong"])
+        self.assertEqual(vn["flag"], "vn")
+        self.assertFalse(r["items"][1]["strong"])
 
     def test_unsupported_without_clip_renderer_raises(self):
         spec = _spec()

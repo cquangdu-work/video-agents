@@ -49,7 +49,30 @@ export type VersusScene = Span & {
 export type BarChartScene = Span & { kind: "bar_chart"; title: string; items: Valued[]; unit: string };
 export type PercentScene = Span & { kind: "percent"; title: string; value: number; dec: number; label: string };
 export type LineChartScene = Span & { kind: "line_chart"; title: string; chart: ChartState };
-export type ClipScene = Span & { kind: "clip"; src: string }; // cảnh Manim dựng sẵn (bản đồ, cuộc đua...)
+export type ClipScene = Span & { kind: "clip"; src: string }; // cảnh Manim dựng sẵn (khi chưa có bản Remotion)
+
+// Bản đồ: mọi toạ độ là ĐIỂM ẢNH khung 1080x1920, do src/render/web_map.py tính (phép chiếu,
+// Hoàng Sa + Trường Sa, ô phóng to Biển Đông...). Remotion chỉ tô và cho chuyển động.
+type Pt = [number, number];
+export type MapLabel = { text: string; x: number; y: number; anchor: "start" | "middle"; size: number; color: string };
+export type MapScene = Span & {
+  kind: "map"; region: "asia" | "world"; title: string;
+  outline: string;
+  fills: { code: string; d: string; color: string; k: number; dot?: [number, number, number] }[];
+  islands: Pt[]; islandColor: string; islandLabels: MapLabel[];
+  marks: { d: string; color: string }[];
+  legend?: { stops: string[]; lo: string; hi: string; caption: string; y: number };
+  callouts?: { label: string; value: string; color: string; x: number; y: number; to: Pt }[];
+  inset?: {
+    frame: [Pt, Pt]; shapes: { d: string; fill?: string | null; stroke: string; vn: boolean }[];
+    islands: Pt[]; labels: MapLabel[]; mark: [Pt, Pt]; background: string;
+  };
+  panel?: { label: string; value: string; color: string; pos: string }[];
+};
+export type BarRaceScene = Span & {
+  kind: "bar_race"; title: string; years: number[]; unit: string;
+  items: { label: string; values: number[]; shown: string[]; fill: string; ink: string; strong: boolean; flag?: string }[];
+};
 
 // ---- cảnh riêng của bản demo #30 (tools/demo_web30.py)
 export type IsotypeScene = Span & {
@@ -78,7 +101,7 @@ export type HeroLineScene = Span & {
 
 export type Scene =
   | IntroScene | StatementScene | BigNumberScene | VersusScene | BarChartScene | PercentScene
-  | LineChartScene | ClipScene
+  | LineChartScene | ClipScene | MapScene | BarRaceScene
   | IsotypeScene | NetworkScene | OrbitScene | HeroLineScene;
 
 export type Sfx = { name: string; at: number; volume: number };
