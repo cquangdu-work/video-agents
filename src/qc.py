@@ -154,6 +154,7 @@ def real_issue(verdict: dict, voice: str, allowed: set = frozenset()) -> bool:
 
 def check_visuals_match(video: Path, spec: list, duration: float) -> dict:
     """Trích khung gần cuối các cảnh có lời, hỏi model vision: hình có khớp/mâu thuẫn lời?"""
+    from .utils import digits_of
     key = os.getenv("GEMINI_API_KEY")
     model = os.getenv("MODEL", "gemini/gemini-3.5-flash-lite").split("/")[-1]
     t, voiced = 0.0, []
@@ -161,8 +162,12 @@ def check_visuals_match(video: Path, spec: list, duration: float) -> dict:
         secs = float(sc.get("seconds", 3))
         if sc.get("voice"):
             # Lấy mẫu ở 85% cảnh: hoạt hình đếm số đã chạy xong, số trên hình là số cuối
-            voiced.append((min(t + secs * 0.85, duration - 0.2), sc["voice"],
-                           param_digits(sc.get("params") or {})))
+            # "shown": số engine Remotion có thể hiện thêm ở cảnh này (biểu đồ chính nằm dưới cảnh
+            # so găng: số liệu bảng gốc, vạch chia trục) — src/render/web.build_story ghi vào spec
+            allowed = param_digits(sc.get("params") or {})
+            for v in sc.get("shown") or []:
+                allowed |= digits_of(v)
+            voiced.append((min(t + secs * 0.85, duration - 0.2), sc["voice"], allowed))
         t += secs
     samples = spread(voiced, MAX_VISION_SAMPLES)
 
@@ -180,8 +185,9 @@ def check_visuals_match(video: Path, spec: list, duration: float) -> dict:
                          "\"number\" = một CON SỐ trên hình khác con số trong lời; "
                          "\"opposite\" = hình nói NGƯỢC lại lời (lời nói tăng, hình ghi giảm); "
                          "\"clipped\" = chữ bị tràn hoặc bị cắt ở mép khung. "
-                         "Dòng chữ nhỏ 1-3 từ ở nửa dưới là PHỤ ĐỀ chạy theo giọng "
-                         "(chỉ hiện vài từ đang đọc) và dòng 'Nguồn: ...' — không xét hai dòng này. "
+                         "Dòng 1-3 từ ở 1/4 dưới khung là PHỤ ĐỀ chạy theo giọng "
+                         "(chỉ hiện vài từ đang đọc), dòng 'Nguồn: ...', số trên TRỤC biểu đồ "
+                         "(vạch chia, năm) và chữ hiện dần từng từ — không xét những thứ này. "
                          "Không có lỗi thuộc 3 loại trên thì trả {\"ok\": true}. Có thì trả "
                          "{\"ok\": false, \"kind\": \"number|opposite|clipped\", "
                          "\"image_number\": \"<số trên hình, nếu kind=number>\", "

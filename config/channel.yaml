@@ -3,6 +3,11 @@
 # Đổi nguồn / trọng số ở đây, KHÔNG cần sửa code.
 # ============================================================
 
+# ---------- Engine dựng hình (Du chốt 16/11/2026: dùng hình mới) ----------
+render:
+  engine: web          # web = Remotion (render-web/), manim = engine cũ. Web lỗi thì tự lùi về manim.
+  web_concurrency: 3   # số tab Chrome render song song (VM 4 OCPU: để 3, chừa 1 cho dịch vụ khác)
+
 channel:
   name: "Thế giới qua con số"
   language: vi

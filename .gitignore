@@ -21,3 +21,7 @@ data/tmp/
 # Remotion
 render-web/node_modules/
 render-web/out/
+render-web/public/clips/
+render-web/public/flags/*.svg
+!render-web/public/flags/vn.svg
+!render-web/public/flags/kr.svg

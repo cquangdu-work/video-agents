@@ -164,15 +164,28 @@ def select(con, narration: str, salt: str, cfg: dict, folder: Path = MUSIC_DIR, 
     return dict(track, mood_wanted=wanted, gain_db=gain, credit=credit(track["name"]))
 
 
+SAME_FMT = "aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo"
+
+
 def mix_filter(duration: float, gain_db: float = -20.0, fade_in: float = 1.0,
-               fade_out: float = 1.5) -> str:
+               fade_out: float = 1.5, sfx: bool = False) -> str:
     """Đồ thị lọc cho ffmpeg với 3 đầu vào: [0] video câm, [1] giọng đọc, [2] nhạc (-stream_loop -1).
-    Kết quả: [aout] = giọng + nhạc đã hạ thấp và tự nhỏ khi có giọng, chuẩn -16 LUFS."""
+    Kết quả: [aout] = giọng + nhạc đã hạ thấp và tự nhỏ khi có giọng, chuẩn -16 LUFS.
+    sfx=True: [0] là video của engine Remotion, có sẵn track âm thanh hiệu ứng -> trộn thêm vào."""
     d = f"{duration:.3f}"
     out_start = max(duration - fade_out, 0.0)
     # Ép giọng (mono 24 kHz) và nhạc (thường stereo 44,1 kHz) về cùng một định dạng: ffmpeg 4.4
     # trên VM không tự thống nhất được cho sidechaincompress ("could not choose their formats").
-    same = "aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo"
+    same = SAME_FMT
+    if sfx:
+        return (
+            f"[2:a]atrim=0:{d},asetpts=N/SR/TB,{same},volume={gain_db}dB,"
+            f"afade=t=in:st=0:d={fade_in},afade=t=out:st={out_start:.3f}:d={fade_out}[m];"
+            f"[1:a]{same},asplit=2[v][key];[0:a]{same}[fx];"
+            f"[m][key]sidechaincompress=threshold=0.05:ratio=3:attack=20:release=250[duck];"
+            f"[v][duck][fx]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,"
+            f"loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[aout]"
+        )
     return (
         f"[2:a]atrim=0:{d},asetpts=N/SR/TB,{same},volume={gain_db}dB,"
         f"afade=t=in:st=0:d={fade_in},afade=t=out:st={out_start:.3f}:d={fade_out}[m];"

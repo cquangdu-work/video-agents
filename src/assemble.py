@@ -9,13 +9,19 @@ Luồng:
 2. Render từng cảnh Manim theo thời lượng đó, nối thành video câm
 3. Ghép audio các cảnh (đệm im lặng cho khớp từng cảnh video)
 4. Whisper lấy mốc từng từ -> phụ đề .ass kiểu cụm 3 từ
-5. ffmpeg: đốt phụ đề + trộn tiếng + loudnorm chuẩn -16 LUFS -> output/final_<id>.mp4
-   (chỗ cắm nhạc nền để sẵn: thêm input nhạc + sidechaincompress khi Du có nhạc)
+5. ffmpeg: đốt phụ đề + trộn tiếng + nhạc nền (tự hạ khi có giọng) + loudnorm -16 LUFS
+   -> output/final_<id>.mp4
+
+Engine "web" (Remotion, mặc định từ 16/11/2026 — config/channel.yaml render.engine) đổi thứ tự:
+tiếng (3) và mốc từng từ (4) làm TRƯỚC, rồi src/render/web.py dịch spec thành props và Remotion
+vẽ cả video một lượt (phụ đề lớn vẽ luôn trong hình), cuối cùng chỉ trộn tiếng. Cảnh chưa có bản
+Remotion (bản đồ, cuộc đua) vẫn dựng bằng Manim rồi lồng vào. Remotion lỗi -> tự lùi về Manim.
 """
 import argparse
 import hashlib
 import json
 import logging
+import shutil
 import subprocess
 import sys
 import time
@@ -124,6 +130,65 @@ def ffprobe_duration(path: Path) -> float:
     return float(out.stdout.strip())
 
 
+def build_audio(runs: list, wavs: dict, durations: list, audio_dir: Path) -> Path:
+    """Ghép giọng: mỗi run (nhóm cảnh dùng chung một file giọng) một đoạn, đệm im lặng cho dài
+    ĐÚNG bằng tổng thời lượng hình của các cảnh trong run. `durations`: thời lượng từng cảnh —
+    engine Manim đo từ file đã render, engine Remotion lấy thẳng từ spec (hình vẽ theo spec)."""
+    parts = []
+    for g in runs:
+        vdur = sum(durations[i] for i in g)
+        part = audio_dir / f"pad_{g[0]:02d}.wav"
+        if g[0] in wavs:
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(wavs[g[0]]),
+                            "-af", "apad", "-t", f"{vdur:.3f}",
+                            "-ar", "24000", "-ac", "1", str(part)], check=True)
+        else:                                      # cảnh không lời (intro) -> im lặng
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi",
+                            "-i", "anullsrc=r=24000:cl=mono", "-t", f"{vdur:.3f}",
+                            str(part)], check=True)
+        parts.append(part)
+    lst = audio_dir / "alist.txt"
+    lst.write_text("".join(f"file '{p.as_posix()}'\n" for p in parts), encoding="utf-8")
+    full_wav = audio_dir / "full.wav"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
+                    "-i", str(lst), "-c", "copy", str(full_wav)], check=True)
+    return full_wav
+
+
+def narration_words(full_wav: Path, spec: list, todo: list, audio_dir: Path) -> list:
+    """Mốc thời gian từng từ: chữ của KỊCH BẢN (đúng chính tả, đúng cách viết số), mốc giờ của
+    Whisper -> [(từ, bắt đầu, kết thúc)]. Ghi kèm meta.json cho agent Kiểm định."""
+    from .audio.batch import tokens
+    from .audio.subtitles import script_words_timed, transcribe_words
+    words = transcribe_words(full_wav)
+    script_words = " ".join(_voice(spec[g[0]]) for g in todo).split()
+    # Hai con số cho agent Kiểm định (qc.check_narration): đưa TTS đọc bao nhiêu từ,
+    # Whisper nghe lại được bao nhiêu -> lệch nhiều là giọng đọc lặp/cụt
+    (audio_dir / "meta.json").write_text(json.dumps({
+        "spoken_words": sum(len(tokens(_voice(spec[g[0]]))) for g in todo),
+        "heard_words": sum(len(tokens(w[0])) for w in words)}), encoding="utf-8")
+    return script_words_timed(script_words, words)
+
+
+def mix_web(raw: Path, full_wav: Path, track, final: Path) -> Path:
+    """Video Remotion (hình + phụ đề + track âm hiệu ứng) + giọng (+ nhạc) -> bản phát hành.
+    Hình giữ nguyên (copy), chỉ trộn tiếng và chuẩn âm lượng -16 LUFS như engine cũ."""
+    from .audio import music
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(raw), "-i", str(full_wav)]
+    if track:
+        cmd += ["-stream_loop", "-1", "-i", str(track["path"]), "-filter_complex",
+                music.mix_filter(ffprobe_duration(raw), track["gain_db"], sfx=True)]
+    else:
+        same = music.SAME_FMT
+        cmd += ["-filter_complex",
+                f"[1:a]{same}[v];[0:a]{same}[fx];[v][fx]amix=inputs=2:duration=first:dropout_transition=0:"
+                f"normalize=0,loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[aout]"]
+    cmd += ["-map", "0:v", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+            "-shortest", "-movflags", "+faststart", str(final)]
+    subprocess.run(cmd, check=True)
+    return final
+
+
 def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -132,6 +197,11 @@ def main():
     load_dotenv()
     ap = argparse.ArgumentParser()
     ap.add_argument("script_id", type=int)
+    ap.add_argument("--engine", choices=["web", "manim"], default=None,
+                    help="engine dựng hình (mặc định theo config/channel.yaml render.engine)")
+    ap.add_argument("--out", type=Path, default=None,
+                    help="CHẠY THỬ: ghi video ra file này (không đè output/final_<id>.mp4) và "
+                         "không ghi nhật ký kho chất liệu")
     args = ap.parse_args()
 
     spec_path = ROOT / "data" / "specs" / f"script_{args.script_id}.yaml"
@@ -211,79 +281,91 @@ def main():
                         n, total, len(r))
 
     # Lưu spec với thời lượng THẬT theo giọng — agent Kiểm định đối chiếu mốc này
-    (spec_path.parent / f"script_{args.script_id}_final.yaml").write_text(
-        yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    final_spec_path = spec_path.parent / f"script_{args.script_id}_final.yaml"
+    final_spec_path.write_text(yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
-    # ---- 2. Render hình theo thời lượng giọng
-    files = []
-    for i, sc in enumerate(spec):
-        log.info("Render cảnh %d/%d: %s (%.1fs)", i + 1, len(spec), sc["template"], sc["seconds"])
-        files.append(render_scene(sc, i))
-    silent = concat(files, RENDER / f"silent_{args.script_id}.mp4")
-
-    # ---- 3. Ghép audio: mỗi run một đoạn, dài đúng bằng tổng các cảnh video của run
-    parts = []
-    for g in runs:
-        vdur = sum(ffprobe_duration(files[i]) for i in g)
-        part = audio_dir / f"pad_{g[0]:02d}.wav"
-        if g[0] in wavs:
-            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(wavs[g[0]]),
-                            "-af", "apad", "-t", f"{vdur:.3f}",
-                            "-ar", "24000", "-ac", "1", str(part)], check=True)
-        else:                                      # cảnh không lời (intro) -> im lặng
-            subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi",
-                            "-i", "anullsrc=r=24000:cl=mono", "-t", f"{vdur:.3f}",
-                            str(part)], check=True)
-        parts.append(part)
-    lst = audio_dir / "alist.txt"
-    lst.write_text("".join(f"file '{p.as_posix()}'\n" for p in parts), encoding="utf-8")
-    full_wav = audio_dir / "full.wav"
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
-                    "-i", str(lst), "-c", "copy", str(full_wav)], check=True)
-
-    # ---- 4. Phụ đề từng từ
-    from .render.base import brand
-    from .audio.subtitles import build_ass, script_words_timed, transcribe_words
-    words = transcribe_words(full_wav)
-    # Phụ đề dùng chữ của KỊCH BẢN (đúng chính tả, đúng cách viết số), mốc giờ của Whisper
-    script_words = " ".join(_voice(spec[g[0]]) for g in todo).split()
-    ass = build_ass(script_words_timed(script_words, words), RENDER / "subs.ass", brand())
-    # Hai con số cho agent Kiểm định (qc.check_narration): đưa TTS đọc bao nhiêu từ,
-    # Whisper nghe lại được bao nhiêu -> lệch nhiều là giọng đọc lặp/cụt
-    (audio_dir / "meta.json").write_text(json.dumps({
-        "spoken_words": sum(len(tokens(_voice(spec[g[0]]))) for g in todo),
-        "heard_words": sum(len(tokens(w[0])) for w in words)}), encoding="utf-8")
-
-    # ---- 5. Đốt phụ đề + trộn tiếng (+ nhạc nền nếu kho có nhạc) + chuẩn âm lượng phát hành
     from .audio import music
     from .main import load_config
+    cfg = load_config()
+    rcfg = cfg.get("render") or {}
+    engine = args.engine or rcfg.get("engine", "manim")
     OUTPUT.mkdir(exist_ok=True)
-    final = OUTPUT / f"final_{args.script_id}.mp4"
+    final = args.out or OUTPUT / f"final_{args.script_id}.mp4"
     con = assets_db.init_assets()
     narration = " ".join(_voice(spec[g[0]]) for g in todo)
-    track = music.select(con, narration, f"script_{args.script_id}", load_config())
-    cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(silent), "-i", str(full_wav)]
+    track = music.select(con, narration, f"script_{args.script_id}", cfg)
     if track:
         log.info("Nhạc nền: %s (nhóm %s, lời đọc nghiêng về %s, chỉnh %+.1f dB)", track["name"],
                  track["mood"], track["mood_wanted"], track["gain_db"])
-        # nhạc lặp lại nếu ngắn hơn video; [0:v] đốt phụ đề, [aout] = giọng + nhạc đã trộn
-        cmd += ["-stream_loop", "-1", "-i", str(track["path"]),
-                "-filter_complex", f"[0:v]ass={ass.name}[vout];"
-                + music.mix_filter(ffprobe_duration(silent), track["gain_db"]),
-                "-map", "[vout]", "-map", "[aout]"]
-    else:
-        cmd += ["-vf", f"ass={ass.name}", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]
-    cmd += ["-c:v", "libx264", "-crf", "20", "-preset", "medium", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", "192k", "-shortest", str(final)]
-    subprocess.run(cmd, check=True, cwd=RENDER)   # cwd=RENDER: né lỗi escape đường dẫn Windows trong filter ass=
+
+    used = None
+    if engine == "web":
+        # ---- Engine mới (Remotion): tiếng trước, hình sau — phụ đề lớn và hình "bắt" đúng từ đang
+        # đọc cần mốc thời gian của từng từ TRƯỚC khi vẽ. Lỗi gì cũng lùi về Manim: thà hình cũ
+        # còn hơn sáng ra không có video.
+        try:
+            durations = [float(sc["seconds"]) for sc in spec]
+            full_wav = build_audio(runs, wavs, durations, audio_dir)
+            timed = narration_words(full_wav, spec, todo, audio_dir)
+            from .render import web
+            props = web.build_story(spec, timed, args.script_id,
+                                    render_clip=lambda sc, i: render_scene(sc, i))
+            final_spec_path.write_text(yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            raw = web.render(props, RENDER / f"web_{args.script_id}.mp4",
+                             concurrency=int(rcfg.get("web_concurrency", 3)))
+            mix_web(raw, full_wav, track, final)
+            shutil.rmtree(web.CLIPS / str(args.script_id), ignore_errors=True)
+            used = ["remotion_engine", "be_vietnam_pro", "lucide_icons", "flag_icons", "sfx_synth"]
+            if props.get("world"):
+                used.append("chart_world")
+        except Exception as exc:
+            log.error("Engine Remotion lỗi (%s: %s) — lùi về Manim", type(exc).__name__, exc)
+            engine = "manim"
+
+    if engine != "web":
+        # ---- 2. Render hình theo thời lượng giọng
+        files = []
+        for i, sc in enumerate(spec):
+            log.info("Render cảnh %d/%d: %s (%.1fs)", i + 1, len(spec), sc["template"], sc["seconds"])
+            files.append(render_scene(sc, i))
+        silent = concat(files, RENDER / f"silent_{args.script_id}.mp4")
+
+        # ---- 3. Ghép audio: mỗi run một đoạn, dài đúng bằng tổng các cảnh video của run
+        full_wav = build_audio(runs, wavs, [ffprobe_duration(f) for f in files], audio_dir)
+
+        # ---- 4. Phụ đề từng từ
+        from .render.base import brand
+        from .audio.subtitles import build_ass
+        ass = build_ass(narration_words(full_wav, spec, todo, audio_dir), RENDER / "subs.ass", brand())
+
+        # ---- 5. Đốt phụ đề + trộn tiếng (+ nhạc nền nếu kho có nhạc) + chuẩn âm lượng phát hành
+        cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(silent), "-i", str(full_wav)]
+        if track:
+            # nhạc lặp lại nếu ngắn hơn video; [0:v] đốt phụ đề, [aout] = giọng + nhạc đã trộn
+            cmd += ["-stream_loop", "-1", "-i", str(track["path"]),
+                    "-filter_complex", f"[0:v]ass={ass.name}[vout];"
+                    + music.mix_filter(ffprobe_duration(silent), track["gain_db"]),
+                    "-map", "[vout]", "-map", "[aout]"]
+        else:
+            cmd += ["-vf", f"ass={ass.name}", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]
+        cmd += ["-c:v", "libx264", "-crf", "20", "-preset", "medium", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", "192k", "-shortest", str(final)]
+        subprocess.run(cmd, check=True, cwd=RENDER)   # cwd=RENDER: né lỗi escape đường dẫn Windows trong filter ass=
 
     meta_path = audio_dir / "meta.json"            # ghi bài nhạc đã dùng (agent Phân tích có thể đối chiếu)
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     meta["music"] = track["name"] if track else None
     meta["music_credit"] = track["credit"] if track else None   # mô tả video ghi công bài nhạc
+    meta["engine"] = engine
     meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    if args.out:                                   # chạy thử: không tính là đã dùng chất liệu
+        log.info("BẢN CHẠY THỬ: %s (%.1fs, engine %s)", final, ffprobe_duration(final), engine)
+        print(final)
+        return
     if track:
         assets_db.record_use(con, track["name"], final.name)
+    for name in used or []:
+        assets_db.record_use(con, name, final.name)
     for sc in spec:
         assets_db.record_use(con, sc["template"], final.name)
         if sc["template"] == "map":                # dữ liệu ranh giới (Natural Earth) cũng là chất liệu

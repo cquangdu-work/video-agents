@@ -45,6 +45,16 @@ BUILTIN_TEMPLATES = [
      "assets/geo/asia.json — Natural Earth 1:50m, cắt bằng tools/build_asia_map.py"),
     ("map",      "world_map",  "bản đồ,thế giới,ranh giới",  "public-domain (Natural Earth, naturalearthdata.com)",
      "assets/geo/world.json — Natural Earth 1:50m, góc nhìn Việt Nam, dựng bằng tools/build_world_map.py"),
+    # Engine dựng hình mới (Remotion, render-web/) — Du chốt dùng 16/11/2026
+    ("engine",   "remotion_engine", "dựng hình,react",      "Remotion Free License (cá nhân/công ty ≤3 người, remotion.dev/docs/license)",
+     "render-web/ — engine dựng hình bằng React, render bằng Chrome Headless Shell"),
+    ("template", "chart_world", "biểu đồ chính,camera,xuyên cảnh", "own-code",
+     "Biểu đồ chính sống xuyên các cảnh: toàn màn hình / thu xuống nửa dưới / ẩn (render-web ChartWorld)"),
+    ("font",     "be_vietnam_pro", "font,nhận diện",          "SIL OFL 1.1 (Google Fonts)", "Be Vietnam Pro qua @remotion/google-fonts"),
+    ("illustration", "lucide_icons", "icon,minh hoạ,hình người", "ISC (lucide.dev)", "Icon cảnh chữ, lưới hình người"),
+    ("illustration", "flag_icons", "cờ,quốc gia",            "MIT (github.com/lipis/flag-icons)", "Cờ các nước trên biểu đồ, so găng"),
+    ("sfx",      "sfx_synth",  "âm thanh hiệu ứng",          "own-code (tổng hợp bằng ffmpeg, tools/make_web_assets.py)",
+     "render-web/public/sfx: vút, bụp, tích, thụp, vọt"),
 ]
 
 

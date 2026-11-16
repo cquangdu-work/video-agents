@@ -1,8 +1,23 @@
-# render-web — engine dựng hình bằng Remotion (đang thử nghiệm)
+# render-web — engine dựng hình bằng Remotion (mặc định từ 16/11/2026)
 
 Python vẫn quyết định mọi thứ quan trọng (số liệu từ bảng gốc, mốc thời gian từ giọng đọc +
 Whisper, chữ phụ đề từ kịch bản). Python ghi một file JSON "props" (khuôn ở `src/types.ts`),
-Remotion chỉ vẽ theo. Cầu nối phía Python: `src/render/web.py`.
+Remotion chỉ vẽ theo. Cầu nối phía Python: `src/render/web.py` (`build_story` dịch spec của
+`src/produce.py` sang props — KHÔNG đổi gì phía Biên kịch/Sản xuất).
+
+`src/assemble.py` dùng engine này khi `config/channel.yaml` có `render.engine: web`; lỗi gì cũng
+tự lùi về Manim. Chạy thử không đè video thật: `python -m src.assemble <id> --out data/tmp/x.mp4`.
+
+## Các mẫu chung (mỗi template của spec một bản)
+| template | cảnh Remotion |
+|---|---|
+| statement | chữ hiện từng từ, số/viết tắt tô vàng, icon theo từ khoá (`ICON_KEYWORDS`), 3 bố cục xoay vòng |
+| big_number | số đếm lên + cờ; tỷ lệ dân số % -> lưới 100 hình người; "x / 100 dân" -> người + đồ vật |
+| versus | hai cờ, hai số đếm lên, cột so độ cao |
+| bar_chart | thanh ngang có cờ |
+| percent | vòng tròn phát sáng |
+| line_chart | **biểu đồ chính** (`ChartWorld`): sống xuyên các cảnh, toàn màn hình ở cảnh line_chart, thu xuống nửa dưới khi cảnh so găng/số lớn nói đúng một điểm số liệu (`_match_points`, chỉ khi chắc chắn duy nhất) |
+| map, bar_race | chưa có bản Remotion: dựng bằng Manim rồi lồng vào (`clip`) |
 
 ## Cài
 ```bash
@@ -33,6 +48,10 @@ Xem/chỉnh trực quan: `npm run studio` (mở trình duyệt, kéo thanh thờ
 - Font Be Vietnam Pro: SIL OFL (tải qua `@remotion/google-fonts` lúc render).
 - Icon: lucide-react (ISC). Cờ: flag-icons (MIT, `public/flags/LICENSE-flag-icons.txt`).
 - Âm thanh hiệu ứng (`public/sfx`) và hạt nhiễu (`public/grain.png`): tự tổng hợp bằng code.
+
+## Kiểm định
+`build_story` gắn vào mỗi cảnh của spec trường `shown` (số liệu bảng gốc, vạch chia trục) để
+`src/qc.py` không coi số trên biểu đồ chính là "số lạ" khi model nhìn ảnh soát hình.
 
 ## Đã đo (16/11/2026)
 - VM ARM64: cảnh 10 giây 1080x1920 render 34,5 giây (concurrency 3), RAM đỉnh ~850 MB.
