@@ -107,6 +107,7 @@ Python, CrewAI (điều phối agent), cron/systemd timer (lịch chạy), bot T
 - **Agent Kiểm chứng bằng LLM không đủ để chặn số bịa**: nó chỉ soát danh sách "claims" Biên kịch tự khai. Đã lọt câu mở đầu "Sai lầm 99% người ăn chay..." (kịch bản #10) và ba con số không có trong nguồn ở kịch bản #6 (video #2, Du đã duyệt trước khi có cổng này). Từ 12/11 code đối chiếu TỪNG con số trong lời đọc với bài nguồn (`crew.unsourced_numbers`); đừng gỡ cổng này.
 
 ## Cách làm việc
+- **Repo CÔNG KHAI trên GitHub** (https://github.com/cquangdu-work/video-agents, đưa lên 17/11/2026 làm portfolio, lịch sử đã gỡ thông tin riêng bằng git-filter-repo). Đẩy: `git push vm master` (chạy thật) và `git push github master:main` (deploy key `~/.ssh/github_video_agents`, alias SSH `github-video-agents`). KHÔNG commit: khoá/token, ID kênh, IP/alias SSH của VM, tên dịch vụ khác của Du trên VM, thông tin cá nhân của Du.
 - Làm từng giai đoạn nhỏ, chạy thử được rồi mới sang bước tiếp. Commit git sau mỗi bước.
 - Hỏi Du trước khi: cài dịch vụ trả phí, tạo tài khoản, đăng bất cứ thứ gì công khai, xoá dữ liệu.
 - Trả lời Du bằng tiếng Việt.
