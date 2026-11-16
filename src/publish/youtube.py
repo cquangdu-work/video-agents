@@ -245,16 +245,18 @@ def build_body(title: str, description: str, tags: list, yt_cfg: dict,
 
 
 def upload(path: Path, title: str, description: str, tags: list, yt_cfg: dict,
-           max_retries: int = 5) -> dict:
+           max_retries: int = 5, publish_at: str = None) -> dict:
     """Upload kiểu "resumable": xin một phiên upload rồi đẩy file; đứt mạng thì hỏi
     YouTube đã nhận tới byte nào và gửi tiếp từ đó (không gửi lại từ đầu).
+    publish_at: giờ hẹn có sẵn (thay video đã hẹn — tools/replace_scheduled.py); bỏ trống thì
+    tính theo cấu hình.
 
     Trả về {"id", "url", "privacy" (thực tế), "requested_privacy", "publish_at"}.
     """
     path = Path(path)
     size = path.stat().st_size
     token = access_token()
-    publish_at = compute_publish_at(yt_cfg)
+    publish_at = publish_at or compute_publish_at(yt_cfg)
     body = build_body(title, description, tags, yt_cfg, publish_at)
 
     r = requests.post(
@@ -317,6 +319,22 @@ def get_status(video_id: str) -> dict:
     r.raise_for_status()
     items = r.json().get("items", [])
     return items[0]["status"] if items else {}
+
+
+def unschedule(video_id: str) -> dict:
+    """Bỏ giờ hẹn công khai, để video RIÊNG TƯ vô thời hạn (không xoá — xoá thì Du tự làm).
+    Cập nhật phần status là ghi đè cả phần đó, nên chép lại mọi thuộc tính đang có trừ publishAt."""
+    cur = get_status(video_id)
+    if not cur:
+        raise YouTubeUploadError(f"Không thấy video {video_id} trên kênh")
+    keep = {k: cur[k] for k in ("embeddable", "license", "publicStatsViewable",
+                                "selfDeclaredMadeForKids", "containsSyntheticMedia") if k in cur}
+    r = requests.put(f"{API_URL}/videos", timeout=30, params={"part": "status"},
+                     headers={"Authorization": f"Bearer {access_token()}"},
+                     json={"id": video_id, "status": dict(keep, privacyStatus="private")})
+    if r.status_code != 200:
+        raise YouTubeUploadError(f"Không bỏ hẹn giờ được ({r.status_code}): {r.text[:300]}")
+    return r.json().get("status", {})
 
 
 def whoami() -> dict:
