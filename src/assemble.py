@@ -352,16 +352,18 @@ def main():
                 "-c:a", "aac", "-b:a", "192k", "-shortest", str(final)]
         subprocess.run(cmd, check=True, cwd=RENDER)   # cwd=RENDER: né lỗi escape đường dẫn Windows trong filter ass=
 
+    if args.out:
+        # chạy thử: không tính là đã dùng chất liệu, KHÔNG ghi bài nhạc vào meta.json (mô tả video
+        # thật ghi công theo file này — bản thử có thể chọn bài khác; ca thật 16/11 với #30, #18)
+        log.info("BẢN CHẠY THỬ: %s (%.1fs, engine %s)", final, ffprobe_duration(final), engine)
+        print(final)
+        return
     meta_path = audio_dir / "meta.json"            # ghi bài nhạc đã dùng (agent Phân tích có thể đối chiếu)
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     meta["music"] = track["name"] if track else None
     meta["music_credit"] = track["credit"] if track else None   # mô tả video ghi công bài nhạc
     meta["engine"] = engine
     meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
-    if args.out:                                   # chạy thử: không tính là đã dùng chất liệu
-        log.info("BẢN CHẠY THỬ: %s (%.1fs, engine %s)", final, ffprobe_duration(final), engine)
-        print(final)
-        return
     if track:
         assets_db.record_use(con, track["name"], final.name)
     for name in used or []:
