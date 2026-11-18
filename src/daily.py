@@ -64,9 +64,12 @@ def videos_made_today(con, cfg: dict, now: datetime = None) -> int:
     local = (now or datetime.now(timezone.utc)).astimezone(tz)
     midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
     since = midnight.astimezone(timezone.utc).isoformat(timespec="seconds")
-    # Chỉ tính video ĐÃ TỚI Telegram (có tg_message_id); gửi hụt thì không tính
+    # Chỉ tính Shorts ĐÃ TỚI Telegram (có tg_message_id); gửi hụt thì không tính.
+    # Video dài hằng tuần (src/longform.py, script_id rỗng) không tính: thứ Bảy sáng hết
+    # quota TTS thì lượt chạy bù 17:40 vẫn phải làm Shorts dù video dài đã gửi lúc 09:30.
     return con.execute("SELECT COUNT(*) FROM videos WHERE created_at >= ?"
-                       " AND tg_message_id IS NOT NULL", (since,)).fetchone()[0]
+                       " AND tg_message_id IS NOT NULL AND script_id IS NOT NULL",
+                       (since,)).fetchone()[0]
 
 
 def script_words(body: str) -> int:
@@ -112,9 +115,13 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     rows = con.execute(
         "SELECT s.id, s.body, i.scores FROM scripts s JOIN ideas i ON i.id = s.idea_id"
         " WHERE s.status = 'verified' AND s.created_at >= ?"
-        # video gửi Telegram hụt (chưa có tg_message_id) vẫn được thử gửi lại
-        " AND s.id NOT IN (SELECT script_id FROM videos WHERE tg_message_id IS NOT NULL"
-        "                  OR status != 'pending_review')", (since,)).fetchall()
+        # video gửi Telegram hụt (chưa có tg_message_id) vẫn được thử gửi lại.
+        # PHẢI loại script_id rỗng (video dài hằng tuần): trong SQL, `x NOT IN (…, NULL)`
+        # không bao giờ đúng -> cả truy vấn ra rỗng. Ca thật 18/11: video dài #9 vào bảng
+        # chiều 17/11, sáng 18/11 có 3 kịch bản đạt mà daily báo "0 video".
+        " AND s.id NOT IN (SELECT script_id FROM videos WHERE script_id IS NOT NULL"
+        "                  AND (tg_message_id IS NOT NULL OR status != 'pending_review'))",
+        (since,)).fetchall()
     out = []
     for r in rows:
         if int(db.get_state(con, f"prod_fail_{r['id']}", "0")) >= MAX_FAILS_PER_SCRIPT:

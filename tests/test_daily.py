@@ -47,6 +47,12 @@ class DailyCase(unittest.TestCase):
                          (sid, sid, status, iso(days_ago), body))
         self.con.commit()
 
+    def longform_video(self):
+        """Bản ghi video dài hằng tuần như src/longform.py ghi: script_id rỗng, đã tới Telegram."""
+        self.con.execute("INSERT INTO videos (script_id, file, title, created_at, tg_message_id)"
+                         " VALUES (NULL, 'w.mp4', 'Tuần qua', ?, 70)", (iso(),))
+        self.con.commit()
+
     def runner(self, fail=(), out_of_quota=()):
         """Hàm giả thay run_step: ghi lại bước đã chạy; 'gửi duyệt' thì tạo bản ghi video."""
         def run(name, key, args, log_file):
@@ -78,6 +84,12 @@ class PickTest(DailyCase):
         self.script(8, 10.0)
         db.upsert_video(self.con, 8, "f", "T", "D", [], [])   # gửi Telegram hụt -> vẫn được thử lại
         self.assertEqual([c["id"] for c in daily.pick_candidates(self.con, CFG)], [5, 1, 2, 8])
+
+    def test_weekly_long_video_does_not_hide_every_script(self):
+        # Ca thật 18/11: `s.id NOT IN (… NULL …)` không bao giờ đúng -> 0 ứng viên, 0 video
+        self.script(1, 26.5)
+        self.longform_video()
+        self.assertEqual([c["id"] for c in daily.pick_candidates(self.con, CFG)], [1])
 
     def test_too_short_legacy_script_is_skipped_before_spending_tts(self):
         # Ca thật trên VM: kịch bản đời cũ 3 cảnh ~115 từ có điểm CAO NHẤT nên bị chọn trước
@@ -135,6 +147,14 @@ class RunTest(DailyCase):
         self.con.execute("UPDATE videos SET created_at='2026-11-10T21:30:00+00:00'")
         self.con.commit()
         self.assertEqual(daily.videos_made_today(self.con, CFG, at("2026-11-11T08:40:00+00:00")), 1)
+
+    def test_weekly_long_video_does_not_count_as_todays_short(self):
+        # Thứ Bảy: sáng hết quota TTS, video dài gửi 09:30 -> lượt bù 17:40 vẫn phải làm Shorts
+        self.script(1, 26.5)
+        self.longform_video()
+        self.assertEqual(daily.videos_made_today(self.con, CFG), 0)
+        self.assertEqual(daily.run_daily(skip_ideas=True, runner=self.runner()), 1)
+        self.assertEqual(daily.videos_made_today(self.con, CFG), 1)
 
     def test_second_run_at_the_same_time_backs_off(self):
         self.script(1, 26.5)
