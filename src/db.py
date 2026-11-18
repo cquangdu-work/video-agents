@@ -97,11 +97,17 @@ def insert_raw_ideas(con, items, sim_threshold: float = 0.55) -> int:
     """Nạp ý tưởng thô, bỏ qua cái đã có (trùng URL hoặc tiêu đề quá giống).
 
     Trả về số ý tưởng mới thực sự được thêm.
+
+    Ý tưởng từ BẢNG SỐ (World Bank, KOSIS, OWID) chỉ chống trùng bằng URL (mỗi bảng × năm số liệu
+    một URL): tiêu đề của chúng cùng một khuôn ("Bản đồ thế giới: … năm 2024 — Việt Nam thứ …"),
+    so độ giống tiêu đề thì "lượng thịt" và "lượng cá" bị coi là trùng (0,8) và bị loại oan.
     """
+    from .sources.datatable import is_data_source
     existing = [r["title"] for r in con.execute("SELECT title FROM ideas")]
     added = 0
     for it in items:
-        if any(similarity(it["title"], old) >= sim_threshold for old in existing):
+        if not is_data_source(it.get("source")) and any(
+                similarity(it["title"], old) >= sim_threshold for old in existing):
             continue
         try:
             con.execute(

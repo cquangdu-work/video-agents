@@ -75,7 +75,11 @@ def build(data: dict) -> dict:
             continue
         entry = countries.setdefault(code, {"name": None, "aliases": [], "rings": []})
         entry["rings"] += rings
-        if owner_adm == props["ADM0_A3"]:          # chính nước đó (không phải vùng được gộp vào)
+        # Tên lấy từ chính nước đó (không phải vùng được gộp vào). Vài vùng phụ thuộc mang CÙNG mã
+        # ISO với nước chủ (quần đảo Ashmore và Cartier: ADM0_A3=ATC nhưng ISO=AUS) -> chúng chỉ
+        # đặt tên khi chưa có, còn đối tượng có ADM0_A3 trùng mã thì luôn thắng. Ca thật 18/11:
+        # Úc bị ghi tên "Quần đảo Ashmore và Cartier" trên mọi bản đồ và cuộc đua.
+        if owner_adm == props["ADM0_A3"] and (entry["name"] is None or props["ADM0_A3"] == code):
             entry["name"] = PREFERRED_NAMES.get(code) or props.get("NAME_VI") or props.get("NAME")
             entry["aliases"] = sorted({a for a in (props.get("NAME_VI"), props.get("NAME"),
                                                    props.get("NAME_LONG")) if a} - {entry["name"]})

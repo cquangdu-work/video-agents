@@ -13,7 +13,9 @@ channel:
   language: vi
   description: >
     Kênh giải thích thế giới bằng dữ liệu: biểu đồ động, bản đồ,
-    cuộc đua số liệu dựng bằng code. Ưu tiên góc Việt–Hàn khi phù hợp.
+    cuộc đua số liệu dựng bằng code. Chủ đề trải rộng: khí hậu, năng lượng, thực phẩm,
+    công nghệ, đời sống, kinh tế của cả thế giới; Việt Nam (và Hàn Quốc khi hợp) là điểm
+    neo để người xem Việt so với mình.
   video_seconds_min: 60
   video_seconds_max: 90
 
@@ -49,7 +51,8 @@ sources:
   # Hàn Quốc qua một con số", phần tóm tắt là bảng số liệu thật qua các năm.
   # Mã chỉ số tra tại https://data.worldbank.org/indicator — thêm dòng là có ý tưởng mới.
   worldbank:
-    per_day: 2            # mỗi ngày đưa vào kho bấy nhiêu chỉ số (xoay vòng theo ngày)
+    per_day: 1            # mỗi ngày đưa vào kho bấy nhiêu chỉ số (xoay vòng theo ngày). Từ 18/11
+                          # còn 1 (trước là 2): kho ngập ý tưởng Việt–Hàn, nhường chỗ cho `owid`
     start_year: 1960
     countries:            # hai nước đem ra so; nước đầu là "ta", nước sau là mốc so sánh
       - {iso3: VNM, iso2: VN, name: "Việt Nam"}
@@ -129,6 +132,57 @@ sources:
          org_name: "Bộ Tư pháp Hàn Quốc", unit: "người",
          name: "Người Việt Nam cư trú tại Hàn Quốc theo loại visa"}
 
+  # Our World in Data (không cần key, giấy phép CC BY 4.0 — mô tả video tự ghi "Nguồn: Our World
+  # in Data — link"). Chủ đề THẾ GIỚI ngoài kinh tế vĩ mô Việt–Hàn (Du xin thêm chủ đề 18/11/2026).
+  # Mỗi ngày `per_day` biểu đồ, xoay vòng. Thêm dòng là có ý tưởng mới:
+  #   slug   = phần cuối link https://ourworldindata.org/grapher/<slug>
+  #   kind   = map (bản đồ thế giới, cần ≥ 100 nước có số) | race (cuộc đua thanh ngang)
+  #   group  = (race) top: 10 nước dẫn đầu (+ Việt Nam), hợp với số TỔNG
+  #            hoặc tên nhóm trong `groups` (danh sách cố định), hợp với số BÌNH QUÂN
+  #   scale  = hệ số chia cho đơn vị (vd 1000000 -> "triệu tấn"); origin = nguồn gốc số liệu
+  # Thứ tự xen kẽ chủ đề và dạng hình: mỗi ngày lấy 2 dòng liền nhau.
+  owid:
+    per_day: 2
+    focus: [VNM]          # nước được kể kỹ (hạng, chuỗi theo năm) — chỉ Việt Nam, KHÔNG kèm Hàn Quốc
+    groups:
+      major: [USA, CHN, JPN, DEU, GBR, FRA, IND, BRA, KOR, VNM]
+    charts:
+      - {slug: co-emissions-per-capita, kind: map, name: "Lượng CO2 thải ra bình quân mỗi người",
+         unit: "tấn", origin: "Global Carbon Budget"}
+      - {slug: electric-car-sales-share, kind: race, group: major, start_year: 2015, year_step: 2,
+         name: "Tỷ lệ ô tô điện trong số xe mới bán", unit: "%", origin: "Cơ quan Năng lượng Quốc tế (IEA)"}
+      - {slug: meat-supply-per-person, kind: map, name: "Lượng thịt bình quân mỗi người một năm",
+         unit: "kg", origin: "FAO"}
+      - {slug: annual-working-hours-per-worker, kind: race, group: major,
+         name: "Số giờ làm việc mỗi năm của một người lao động", unit: "giờ", origin: "Penn World Table"}
+      - {slug: share-electricity-renewables, kind: map, name: "Tỷ lệ điện từ năng lượng tái tạo",
+         unit: "%", origin: "Ember, Energy Institute"}
+      - {slug: coffee-bean-production, kind: race, group: top, scale: 1000,
+         name: "Sản lượng cà phê", unit: "nghìn tấn", origin: "FAO"}
+      - {slug: median-age, kind: map, name: "Tuổi trung vị của dân số", unit: "tuổi",
+         origin: "Liên Hợp Quốc (World Population Prospects)"}
+      - {slug: installed-solar-pv-capacity, kind: race, group: top, start_year: 2010,
+         name: "Công suất điện mặt trời đã lắp đặt", unit: "GW", origin: "IRENA"}
+      - {slug: fish-and-seafood-consumption-per-capita, kind: map,
+         name: "Lượng cá và hải sản bình quân mỗi người một năm", unit: "kg", origin: "FAO"}
+      - {slug: annual-co2-emissions-per-country, kind: race, group: top, scale: 1000000,
+         name: "Lượng CO2 thải ra mỗi năm", unit: "triệu tấn", origin: "Global Carbon Budget"}
+      - {slug: total-alcohol-consumption-per-capita-litres-of-pure-alcohol, kind: map,
+         name: "Lượng rượu bia bình quân mỗi người từ 15 tuổi", unit: "lít cồn nguyên chất",
+         origin: "Tổ chức Y tế Thế giới (WHO)"}
+      - {slug: per-capita-energy-use, kind: race, group: major,
+         name: "Năng lượng tiêu thụ bình quân mỗi người", unit: "kWh", origin: "Energy Institute"}
+      - {slug: pm25-air-pollution, kind: map, name: "Nồng độ bụi mịn PM2.5 trung bình ngoài trời",
+         unit: "microgam/m³", origin: "Đại học Washington ở St. Louis"}
+      - {slug: rice-production, kind: race, group: top, scale: 1000000,
+         name: "Sản lượng lúa gạo", unit: "triệu tấn", origin: "FAO"}
+      - {slug: share-of-adults-who-smoke, kind: map, name: "Tỷ lệ người trưởng thành hút thuốc",
+         unit: "%", origin: "Tổ chức Y tế Thế giới (WHO)"}
+      - {slug: daily-per-capita-caloric-supply, kind: map, name: "Lượng calo bình quân mỗi người một ngày",
+         unit: "kcal", origin: "FAO"}
+      - {slug: share-electricity-coal, kind: map, name: "Tỷ lệ điện từ than", unit: "%",
+         origin: "Ember, Energy Institute"}
+
   # Reddit chặn đường JSON công khai (403) với nhiều IP, nhất là IP đám mây của VM;
   # src/sources/reddit.py tự chuyển sang đường RSS (vẫn vào được, không cần key).
   reddit:
@@ -149,8 +203,10 @@ dedup:
 angle_rules: >
   Mỗi ý tưởng PHẢI có ít nhất một "góc": (a) phát hiện/số liệu mới 1-2 năm gần đây,
   (b) điều ngược suy nghĩ thông thường và có nguồn, hoặc (c) kết nối hai lĩnh vực
-  tưởng như không liên quan. Thiếu góc thì loại. Cộng điểm nếu lồng được
-  so sánh Việt Nam - Hàn Quốc.
+  tưởng như không liên quan. Thiếu góc thì loại. Cộng điểm nếu có điểm neo gần
+  với người xem Việt (Việt Nam đứng ở đâu), nhưng KHÔNG bắt buộc so Việt–Hàn:
+  chủ đề thế giới (khí hậu, năng lượng, thực phẩm, công nghệ, đời sống) có số
+  liệu tốt được ưu tiên ngang — kênh không chỉ nói chuyện Việt Nam và Hàn Quốc.
 
 # ---------- Lớp 4: số lượng mỗi ngày ----------
 daily:

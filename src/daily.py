@@ -101,19 +101,41 @@ def opening_problems(body: str) -> list:
         return []
 
 
+def recent_families(con, n: int = 5) -> list:
+    """Mảng chủ đề (datatable.topic_family) của n Shorts gửi duyệt gần nhất, mới trước cũ sau."""
+    from .sources.datatable import topic_family
+    rows = con.execute(
+        "SELECT i.source_name FROM videos v JOIN scripts s ON s.id = v.script_id"
+        " JOIN ideas i ON i.id = s.idea_id WHERE v.tg_message_id IS NOT NULL"
+        " ORDER BY v.created_at DESC, v.id DESC LIMIT ?", (n,)).fetchall()
+    return [topic_family(r["source_name"]) for r in rows]
+
+
+def streak(family: str, recent: list) -> int:
+    """Mảng này đã chiếm bao nhiêu video LIÊN TIẾP gần nhất (0 = video gần nhất là mảng khác)."""
+    k = 0
+    while k < len(recent) and recent[k] == family:
+        k += 1
+    return k
+
+
 def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
-    """Kịch bản đủ điều kiện dựng, theo thứ tự ưu tiên. Trả về [{"id", "score", "has_final"}].
+    """Kịch bản đủ điều kiện dựng, theo thứ tự ưu tiên. Trả về [{"id", "score", "has_final", "family"}].
 
     Điều kiện: đã qua Kiểm chứng, chưa gửi duyệt lần nào, còn mới, chưa hỏng quá số lần,
     lời đọc đủ dài.
-    Ưu tiên: cái đã dựng xong video (khỏi tốn công) -> điểm Biên tập cao -> mới hơn.
+    Ưu tiên: mảng chủ đề KHÁC với chuỗi video gần nhất (không làm cùng mảng hai ngày liền nếu có
+    lựa chọn khác — ca thật 13-18/11: 6/6 video là Việt–Hàn) -> cái đã dựng xong video (khỏi tốn
+    công) -> điểm Biên tập cao -> mới hơn.
     """
+    from .sources.datatable import topic_family
     max_age = cfg["daily"].get("max_script_age_days", 3)
     min_words = cfg["daily"].get("min_script_words", 150)
     min_numbers = cfg["daily"].get("min_script_numbers", 4)
     since = ((now or datetime.now(timezone.utc)) - timedelta(days=max_age)).isoformat(timespec="seconds")
+    recent = recent_families(con)
     rows = con.execute(
-        "SELECT s.id, s.body, i.scores FROM scripts s JOIN ideas i ON i.id = s.idea_id"
+        "SELECT s.id, s.body, i.scores, i.source_name FROM scripts s JOIN ideas i ON i.id = s.idea_id"
         " WHERE s.status = 'verified' AND s.created_at >= ?"
         # video gửi Telegram hụt (chưa có tg_message_id) vẫn được thử gửi lại.
         # PHẢI loại script_id rỗng (video dài hằng tuần): trong SQL, `x NOT IN (…, NULL)`
@@ -148,8 +170,10 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
             score = float(json.loads(r["scores"] or "{}").get("total", 0))
         except (ValueError, TypeError):
             score = 0.0
-        out.append({"id": r["id"], "score": score, "has_final": final_path(r["id"]).exists()})
-    return sorted(out, key=lambda c: (not c["has_final"], -c["score"], -c["id"]))
+        family = topic_family(r["source_name"])
+        out.append({"id": r["id"], "score": score, "has_final": final_path(r["id"]).exists(),
+                    "family": family, "streak": streak(family, recent)})
+    return sorted(out, key=lambda c: (c["streak"], not c["has_final"], -c["score"], -c["id"]))
 
 
 def _spec_usable(path: Path) -> bool:
@@ -254,7 +278,7 @@ def _run_daily(cfg, con, skip_ideas, dry_run, runner) -> int:
     if dry_run:
         print(f"Cần {want - already} video. Ứng viên theo thứ tự ưu tiên:")
         for c in candidates:
-            print(f"  kịch bản #{c['id']} (điểm {c['score']}, "
+            print(f"  kịch bản #{c['id']} (mảng {c['family']}, điểm {c['score']}, "
                   f"{'đã có video' if c['has_final'] else 'chưa dựng'}):"
                   f" {' -> '.join(s[0] for s in plan_steps(c['id']))}")
         if not candidates:

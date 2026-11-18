@@ -109,9 +109,16 @@ def review_line(result: dict) -> str:
 def check(idea: dict, scale: float = 1.0, fetch=fetch_table) -> dict:
     """Đối chiếu ý tưởng số liệu với OWID. -> {"status", "summary", "source", "url", "checks"}.
     status: "ok" (mọi điểm khớp), "warn" (có điểm lệch), "none" (không đối chiếu được)."""
-    from .sources.datatable import is_data_source
+    from .sources.datatable import OWID_SOURCE, is_data_source
     if not is_data_source(idea.get("source_name")):
         return {"status": "none", "summary": "bài báo — chưa có nguồn thứ hai tự động (cần tìm kiếm web)"}
+    if idea.get("source_name") == OWID_SOURCE:
+        # Số lấy thẳng từ OWID, mà OWID chỉ tổng hợp lại từ cơ quan gốc ghi trong tóm tắt
+        # (FAO, IEA, Global Carbon Budget...) -> chưa có nguồn thứ hai độc lập để đối chiếu tự động
+        m = re.search(r"số liệu gốc: (.+?)\)\.", idea.get("summary") or "")   # owid.source_line
+        origin = f" (gốc: {m.group(1)})" if m else ""
+        return {"status": "none", "summary": f"số lấy thẳng từ Our World in Data{origin} — chưa có nguồn"
+                                             " thứ hai độc lập"}
     code = indicator_code(idea.get("summary"))
     if code not in OWID:
         return {"status": "none", "summary": f"chỉ số {code or '?'} chưa có nguồn thứ hai độc lập trên OWID"}

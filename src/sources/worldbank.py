@@ -201,14 +201,19 @@ def pick_world_year(by_year: dict, must_have: str = "VNM", min_share: float = 0.
     if not by_year:
         return None
     best = max(len(v) for v in by_year.values())
-    ok = [y for y, v in by_year.items() if len(v) >= min_share * best and must_have in v]
+    ok = [y for y, v in by_year.items() if len(v) >= min_share * best
+          and (must_have is None or must_have in v)]
     return max(ok) if ok else None
 
 
-def build_world_item(ind: dict, year: int, table: dict, names: dict, focus: list, history: dict):
+def build_world_item(ind: dict, year: int, table: dict, names: dict, focus: list, history: dict,
+                     *, source_line: str = None, url: str = None, source: str = SOURCE_NAME,
+                     extra_series: dict = None):
     """Một chỉ số + số liệu mọi nước trong một năm -> ý tưởng "Việt Nam đứng thứ mấy thế giới".
     table: {ISO3: giá trị} (đã chia scale); names: {ISO3: tên tiếng Việt}; focus: [VNM, KOR];
     history: {ISO3: [(năm, giá trị)]} của các nước focus (để vẽ thêm biểu đồ đường).
+    Nguồn khác World Bank (src/sources/owid.py) truyền source_line/url/source của mình, và
+    extra_series {nhãn: [(năm, giá trị)]} (vd "Thế giới") để vẽ thêm vào biểu đồ đường.
     None nếu quá ít nước có số hoặc thiếu Việt Nam."""
     import statistics
     from .datatable import ranks_desc, world_table_line
@@ -221,8 +226,8 @@ def build_world_item(ind: dict, year: int, table: dict, names: dict, focus: list
     rank = ranks_desc(table)
     order = sorted(table, key=lambda c: -table[c])
     where = f"{n} nước và vùng lãnh thổ"
-    lines = [f"Chỉ số: {ind['name']} ({unit}). Nguồn: World Bank Open Data, mã {ind['code']}."
-             f" Năm {year}: có số của {where}."]
+    source_line = source_line or f"Nguồn: World Bank Open Data, mã {ind['code']}."
+    lines = [f"Chỉ số: {ind['name']} ({unit}). {source_line} Năm {year}: có số của {where}."]
     for c in focus:
         if c in table:
             below = sum(1 for v in table.values() if v < table[c])
@@ -258,18 +263,19 @@ def build_world_item(ind: dict, year: int, table: dict, names: dict, focus: list
     if match and match[0] < year:
         lines.append(f"{names[a]} năm {year} ({val(table[a])}) tương đương {names[b]} năm {match[0]}"
                      f" ({val(match[1])}) — cách nhau {year - match[0]} năm.")
-    for c in focus:                                   # chuỗi theo năm -> biểu đồ đường hai nước
-        s = history.get(c) or []
+    # chuỗi theo năm -> biểu đồ đường (các nước focus, rồi chuỗi thêm như "Thế giới")
+    series = [(names[c], history.get(c) or []) for c in focus] + list((extra_series or {}).items())
+    for label, s in series:
         picks = [p for i, p in enumerate(s) if p[0] % 5 == 0 or i in (0, len(s) - 1)]
         if len(picks) >= 2:
-            lines.append(f"{names[c]} theo năm: " + "; ".join(f"{y}: {vn_number(v)}" for y, v in picks) + ".")
+            lines.append(f"{label} theo năm: " + "; ".join(f"{y}: {vn_number(v)}" for y, v in picks) + ".")
     lines.append(world_table_line(year, {names[c]: v for c, v in table.items()}))
     title = f"Bản đồ thế giới: {lower_first(ind['name'])} năm {year}"
     if focus and focus[0] in table:
         title += f" — {names[focus[0]]} thứ {rank[focus[0]]}/{n}"
     return {"title": title, "summary": "\n".join(lines),
-            "url": WORLD_PAGE.format(code=ind["code"], year=year),
-            "source": SOURCE_NAME, "lang": "vi"}
+            "url": url or WORLD_PAGE.format(code=ind["code"], year=year),
+            "source": source, "lang": "vi"}
 
 
 def fetch_world_maps(cfg: dict, indicators: list, today: date = None) -> list:

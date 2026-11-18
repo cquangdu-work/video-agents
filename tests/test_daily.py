@@ -91,6 +91,24 @@ class PickTest(DailyCase):
         self.longform_video()
         self.assertEqual([c["id"] for c in daily.pick_candidates(self.con, CFG)], [1])
 
+    def test_does_not_make_the_same_topic_family_two_days_in_a_row(self):
+        # Ca thật 13-18/11: 6/6 video là Việt–Hàn vì ý tưởng World Bank luôn được chấm điểm cao nhất
+        from src.sources import datatable as dt
+        self.script(1, 26.5); self.script(2, 22.0); self.script(3, 20.0)
+        for sid, src in ((1, dt.WB_SOURCE), (2, dt.OWID_SOURCE), (3, dt.WB_SOURCE)):
+            self.con.execute("UPDATE ideas SET source_name=? WHERE id=?", (src, sid))
+        self.script(9, 30.0)
+        self.con.execute("UPDATE ideas SET source_name=? WHERE id=9", (dt.KOSIS_SOURCE,))
+        vid = db.upsert_video(self.con, 9, "f", "T", "D", [], [])
+        db.update_video(self.con, vid, tg_message_id=5)            # hôm qua: video Việt–Hàn
+        self.con.commit()
+        picked = daily.pick_candidates(self.con, CFG)
+        self.assertEqual([(c["id"], c["family"]) for c in picked],
+                         [(2, "the-gioi"), (1, "viet-han"), (3, "viet-han")])
+        self.assertEqual(daily.recent_families(self.con), ["viet-han"])
+        self.assertEqual(daily.streak("viet-han", ["viet-han", "viet-han", "the-gioi"]), 2)
+        self.assertEqual(daily.streak("the-gioi", ["viet-han", "the-gioi"]), 0)
+
     def test_too_short_legacy_script_is_skipped_before_spending_tts(self):
         # Ca thật trên VM: kịch bản đời cũ 3 cảnh ~115 từ có điểm CAO NHẤT nên bị chọn trước
         self.script(1, 26.5, words=110)

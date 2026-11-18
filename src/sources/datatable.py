@@ -1,4 +1,4 @@
-"""Hàm dùng chung cho các nguồn ý tưởng dạng BẢNG SỐ LIỆU (World Bank, KOSIS...).
+"""Hàm dùng chung cho các nguồn ý tưởng dạng BẢNG SỐ LIỆU (World Bank, KOSIS, Our World in Data).
 
 Ý tưởng từ bảng số có tóm tắt viết theo một khuôn cố định, để:
 - Biên kịch chép số đúng dạng Việt ("36.227", "98,9") -> cổng chống bịa số khớp được;
@@ -9,12 +9,27 @@ import re
 
 WB_SOURCE = "World Bank Open Data"
 KOSIS_SOURCE = "KOSIS — Thống kê Hàn Quốc"
-DATA_SOURCES = {WB_SOURCE, KOSIS_SOURCE}
+OWID_SOURCE = "Our World in Data"
+DATA_SOURCES = {WB_SOURCE, KOSIS_SOURCE, OWID_SOURCE}
 
 
 def is_data_source(name) -> bool:
     """Ý tưởng này đến từ kho dữ liệu (tóm tắt CHÍNH LÀ bảng số) chứ không phải bài báo."""
     return name in DATA_SOURCES
+
+
+def topic_family(source_name) -> str:
+    """Mảng chủ đề của một ý tưởng, để giữ cân bằng (main chọn ý tưởng đem viết, daily chọn
+    kịch bản đem dựng). Ca thật 13-18/11: 6/6 Shorts là "Việt Nam và Hàn Quốc qua một chỉ số
+    kinh tế" -> Du chê đơn điệu, và YouTube không cho kiếm tiền nội dung lặp khuôn.
+      viet-han: World Bank (hai nước, cuộc đua châu Á, bản đồ có Việt–Hàn), KOSIS
+      the-gioi: Our World in Data (khí hậu, năng lượng, thực phẩm, công nghệ, đời sống...)
+      bai-bao:  bài báo khoa học, câu hỏi thật"""
+    if source_name in (WB_SOURCE, KOSIS_SOURCE):
+        return "viet-han"
+    if source_name == OWID_SOURCE:
+        return "the-gioi"
+    return "bai-bao"
 
 
 def vn_number(x: float) -> str:

@@ -44,7 +44,8 @@ class WorldFileTest(unittest.TestCase):
         c = w["countries"]
         self.assertGreater(len(c), 200)
         for code, name in (("VNM", "Việt Nam"), ("KOR", "Hàn Quốc"), ("USA", "Mỹ"), ("NOR", "Na Uy"),
-                           ("SGP", "Singapore"), ("TWN", "Đài Loan (Trung Quốc)")):
+                           ("SGP", "Singapore"), ("TWN", "Đài Loan (Trung Quốc)"),
+                           ("AUS", "Úc")):      # ca thật 18/11: từng mang tên "Quần đảo Ashmore và Cartier"
             self.assertEqual(c[code]["name"], name)
         self.assertNotIn("ATA", c)                                           # bỏ châu Nam Cực
 
@@ -123,6 +124,18 @@ class WorldToolTest(unittest.TestCase):
         self.assertEqual(c["USA"]["name"], "Mỹ")                             # tên quen thuộc thay "Hoa Kỳ"
         self.assertIn("Hoa Kỳ", c["USA"]["aliases"])
         self.assertTrue(c["SGP"]["rings"])                                   # nước nhỏ không biến mất
+
+    def test_dependency_sharing_the_iso_code_does_not_take_the_countrys_name(self):
+        # Natural Earth: quần đảo Ashmore và Cartier có ADM0_A3 riêng (ATC) nhưng mã ISO là AUS.
+        # Nó đứng SAU Úc trong file gốc -> từng ghi đè tên Úc. Đảo thứ tự cũng phải ra "Úc".
+        tool = load_world_tool()
+        isles = self.feature("ATC", iso="AUS", ring=[[123, -12.5], [123.5, -12.5], [123.5, -12], [123, -12],
+                                                     [123, -12.5]], name_vi="Quần đảo Ashmore và Cartier")
+        aus = self.feature("AUS", ring=[[113, -39], [153, -39], [153, -11], [113, -11], [113, -39]], name_vi="Úc")
+        for feats in ([aus, isles], [isles, aus]):
+            c = tool.build({"features": feats})["countries"]
+            self.assertEqual(list(c), ["AUS"])
+            self.assertEqual(c["AUS"]["name"], "Úc")
 
 
 class WorldTableFormatTest(unittest.TestCase):

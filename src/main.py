@@ -110,7 +110,7 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
         else:
             db.set_status(con, idea["id"], "rejected", reason=f"Điểm thấp ({s['total']})", scores=s)
     want = cfg["daily"]["shortlist"]
-    selected = sorted(selected, key=lambda i: -i["score"])
+    selected = balance_families(sorted(selected, key=lambda i: -i["score"]))
     # Kịch bản hụt chuẩn (thiếu số, quá ngắn) không được tính -> thử thêm ý tưởng kế
     # tiếp theo điểm, nhưng có trần để không đốt quota LLM vô hạn.
     selected = selected[: want + int(cfg["daily"].get("extra_script_tries", 2))]
@@ -148,6 +148,26 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
             print("\n" + "=" * 60 + "\n" + msg)
     log.info("Kịch bản đạt chuẩn trong lượt này: %d/%d", good, want)
     return sent
+
+
+def balance_families(ideas: list) -> list:
+    """Xếp xen kẽ các mảng chủ đề (datatable.topic_family: viet-han / the-gioi / bai-bao), trong
+    mỗi mảng giữ thứ tự điểm; mảng có ý tưởng điểm cao nhất đi trước.
+    [VH 26, VH 25, TG 24, BB 23] -> [VH 26, TG 24, BB 23, VH 25].
+
+    Biên tập (model) hay chấm ý tưởng Việt–Hàn cao nhất vì bảng số dày đặc -> 3 suất viết kịch bản
+    mỗi ngày đều về một mảng (ca thật 13-18/11). Xen kẽ thì mảng nào có ý tưởng đạt điểm sàn
+    cũng được viết ít nhất một kịch bản."""
+    from .sources.datatable import topic_family
+    queues = {}
+    for idea in ideas:
+        queues.setdefault(topic_family(idea.get("source_name")), []).append(idea)
+    out = []
+    while any(queues.values()):
+        for q in queues.values():
+            if q:
+                out.append(q.pop(0))
+    return out
 
 
 def source_text_for(idea: dict, fetch) -> str:

@@ -6,6 +6,7 @@ from .arxiv import fetch_arxiv
 from .reddit import fetch_reddit
 from .worldbank import fetch_worldbank
 from .kosis import fetch_kosis
+from .owid import fetch_owid
 
 
 def fetch_all(cfg: dict) -> list:
@@ -18,4 +19,5 @@ def fetch_all(cfg: dict) -> list:
     # trong nhóm mới nhất kẻo bị 150 bài tin tức đẩy ra ngoài.
     items += fetch_worldbank(cfg["sources"].get("worldbank", {}))
     items += fetch_kosis(cfg["sources"].get("kosis", {}))     # cần KOSIS_API_KEY, không có thì bỏ qua
+    items += fetch_owid(cfg["sources"].get("owid", {}))       # chủ đề thế giới, ngoài Việt–Hàn
     return items
