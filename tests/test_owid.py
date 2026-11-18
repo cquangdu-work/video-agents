@@ -90,6 +90,10 @@ class RaceIdeaTest(unittest.TestCase):
         self.assertEqual(len(labels), 10)
         self.assertIn("Việt Nam", labels)
         self.assertIn("Việt Nam: hạng 10 năm 1990, hạng 10 năm 2023", item["summary"])
+        # hạng trong cuộc đua KHÔNG phải hạng thế giới: tóm tắt nói rõ và đưa hạng thật (ca thật #44)
+        self.assertIn("không phải hạng thế giới", item["summary"].splitlines()[0])
+        self.assertIn("Hạng thế giới thật năm 2023: Việt Nam thứ 36 trong 36 nước", item["summary"])
+        self.assertIn("KHÔNG được gọi là hạng thế giới", item["summary"])
         self.assertIn("&country=", item["url"])
         self.assertTrue(item["url"].endswith("~VNM"))
 
@@ -108,6 +112,9 @@ class RaceIdeaTest(unittest.TestCase):
         groups = {"major": ["C001", "C002", "C003", "VNM", "XXX"]}      # XXX không có trên bản đồ
         item = owid.build_race(chart, fake_table(names), names, groups, ["VNM"], YEAR)
         self.assertTrue(item["title"].startswith("Cuộc đua số giờ làm việc mỗi năm: Việt Nam và 3 nền kinh tế lớn"))
+        # Việt Nam dẫn cả thế giới thật -> hạng trong nhóm = hạng thế giới, không cần cảnh báo
+        self.assertIn("Việt Nam thứ 1 trong 36 nước", item["summary"])
+        self.assertNotIn("KHÔNG được gọi", item["summary"])
 
     def test_too_few_years_gives_no_race(self):
         names = fake_names(30)

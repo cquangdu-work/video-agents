@@ -117,7 +117,11 @@ def build_race(chart: dict, table: dict, names: dict, groups: dict, focus: list,
                else f"{len(series)} nền kinh tế lớn")
     unit = chart.get("unit", "")
     lines = [f"Chỉ số: {chart['name']} ({unit}). {source_line(chart)}"
-             f" Cuộc đua giữa {who}, từ {y0} đến {y1}."]
+             f" Cuộc đua giữa {who}, từ {y0} đến {y1}. Mọi thứ hạng trong cuộc đua là hạng GIỮA"
+             f" {len(series)} nước này, không phải hạng thế giới."]
+    world_line = world_rank_line(table, names, series, focus, y1)
+    if world_line:
+        lines.append(world_line)
     lines += race_lines({names[c]: s for c, s in series.items()}, years, in_focus)
     return {
         "title": f"Cuộc đua {lower_first(chart['name'])}: {who} từ {y0} đến {y1}",
@@ -127,6 +131,27 @@ def build_race(chart: dict, table: dict, names: dict, groups: dict, focus: list,
         "source": OWID_SOURCE,
         "lang": "vi",
     }
+
+
+def world_rank_line(table: dict, names: dict, series: dict, focus: list, year: int):
+    """Hạng THẾ GIỚI thật của nước focus trong năm cuối cuộc đua, hoặc None nếu năm đó quá ít nước
+    có số để gọi là "thế giới". Ca thật 18/11 (kịch bản #44): cuộc đua xe điện giữa 10 nền kinh tế
+    lớn, Việt Nam hạng 2 TRONG NHÓM -> Biên kịch viết "hạng 2 toàn cầu" (Na Uy cao hơn nhiều), và
+    agent Kiểm chứng để lọt. Có sẵn hạng thật thì Biên kịch có con số đúng mà dùng."""
+    from .datatable import ranks_desc
+    anchor = next((c for c in focus if c in series), None)
+    world = {c: v for (c, y), v in table.items() if y == year and c in names}
+    if anchor is None or anchor not in world or len(world) < 2 * len(series):
+        return None
+    at = {c: dict(s).get(year) for c, s in series.items()}
+    race_rank = ranks_desc({c: v for c, v in at.items() if v is not None})[anchor]
+    world_rank = ranks_desc(world)[anchor]
+    line = (f"Hạng thế giới thật năm {year}: {names[anchor]} thứ {world_rank} trong {len(world)}"
+            f" nước và vùng lãnh thổ có số liệu.")
+    if world_rank != race_rank:
+        line += (f" Hạng {race_rank} của {names[anchor]} trong cuộc đua chỉ là hạng trong nhóm, KHÔNG"
+                 f" được gọi là hạng thế giới hay toàn cầu.")
+    return line
 
 
 def fetch_owid(cfg: dict, today: date = None, fetch=None) -> list:
