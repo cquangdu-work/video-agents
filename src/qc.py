@@ -229,7 +229,8 @@ def check_visuals_match(video: Path, spec: list, duration: float) -> dict:
                          ts, verdict.get("note", ""))
         except Exception as exc:
             unchecked += 1       # không soát được thì phải NÓI RA, không tính là đã soát
-            log.warning("Vision check %.0fs lỗi: %s", ts, type(exc).__name__)
+            # ghi cả nội dung lỗi (mã HTTP): 19/11 chỉ ghi "HTTPError" nên không biết là thiếu khoá API
+            log.warning("Vision check %.0fs lỗi: %s: %s", ts, type(exc).__name__, str(exc)[:120])
     checked = len(samples) - unchecked
     value = "; ".join(issues) or f"đã soát {checked}/{len(samples)} cảnh"
     if unchecked and not issues:
