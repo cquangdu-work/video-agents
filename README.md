@@ -13,9 +13,9 @@ Dây chuyền tự động chạy mỗi sáng trên VM: tìm ý tưởng → ch�
 ## Chạy
 
 ```bash
-python -m venv venv
+python -m venv venv            # Python 3.13
 venv\Scripts\activate          # Windows (trên VM: source venv/bin/activate)
-pip install -r requirements.txt
+pip install -r requirements.lock   # đúng bộ phiên bản đã thử trên laptop + VM (requirements.txt chỉ ghi ý định)
 copy .env.example .env         # rồi điền API key
 python -m src.main --dry-run   # thử lấy ý tưởng, KHÔNG cần key nào
 python -m src.main --no-telegram  # chạy đủ 4 agent, in kịch bản ra màn hình (cần GEMINI_API_KEY)
@@ -28,7 +28,7 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 |---|---|
 | `config/channel.yaml` | Toàn bộ "não" cấu hình: chủ đề, nguồn, luật góc, trọng số chấm điểm. Sửa kênh = sửa file này, không đụng code. |
 | `src/main.py` | Nhạc trưởng: gọi lần lượt các bước, có cờ `--dry-run`. |
-| `src/sources/` | Lấy ý tưởng thô: RSS (OWID, ScienceDaily, Hankyoreh, Donga...), arXiv API, Reddit (JSON, bị chặn thì tự sang RSS) — đều **không cần API key**. Nguồn chết thì bỏ qua, không sập pipeline. |
+| `src/sources/` | Lấy ý tưởng thô: RSS (OWID, ScienceDaily, Hankyoreh, Donga...), arXiv API, Reddit (code còn, nhưng TẮT từ 19/11/2026: Reddit chặn cả RSS) — đều **không cần API key**. Nguồn chết thì bỏ qua, không sập pipeline. |
 | `src/sources/worldbank.py` | Kho dữ liệu mở World Bank, không cần key. Ba dạng ý tưởng: "Việt Nam – Hàn Quốc qua một con số" (25 chỉ số, kèm góc "Việt Nam hôm nay bằng Hàn Quốc năm nào"), "cuộc đua" 10 nền kinh tế châu Á (7 chỉ số, kèm xếp hạng và "ai vượt ai" tính sẵn), và **"bản đồ thế giới"** (12 chỉ số: Việt Nam đứng thứ mấy trong ~210 nước và vùng lãnh thổ, nơi cao nhất/thấp nhất, thứ hạng trong Đông Nam Á). Tóm tắt chính là bảng số liệu thật. |
 | `src/sources/kosis.py` | KOSIS — thống kê quốc gia Hàn Quốc (cần `KOSIS_API_KEY`). Hai dạng ý tưởng: cuộc đua các cộng đồng người nước ngoài ở Hàn theo quốc tịch, và người Việt ở Hàn theo loại visa. Tự đọc cấu trúc bảng (không mã hoá cứng mã phân loại); ghi chú sẵn những chỗ dễ kể sai (KOSIS tách "Trung Quốc" và "Trung Quốc gốc Hàn"). |
 | `src/sources/datatable.py` | Hàm dùng chung cho nguồn dạng bảng: viết số kiểu Việt, xếp hạng "ai vượt ai", khuôn dòng "<Tên> theo năm: ..." mà biểu đồ đọc ngược lại được. |
@@ -36,6 +36,7 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `src/db.py` | Kho SQLite (`data/pipeline.db`). Vòng đời ý tưởng: `raw → candidate → selected → scripted → rejected`. Chống lặp bằng URL + độ giống tiêu đề. |
 | `src/crew.py` | 4 agent CrewAI: Săn ý tưởng (ép phải có "góc"), Biên tập (chấm 5 tiêu chí × trọng số), Biên kịch (3 hook + kịch bản theo cảnh), Kiểm chứng (đối chiếu claim với bài nguồn). |
 | `src/story.py` | **Luật kể chuyện** (code, không nhờ LLM): cấm câu mở đầu theo khuôn/câu view ("Đừng…", "Sai lầm…", "Bạn có biết…", từ giật gân), chấm điểm và **chọn câu mở đầu mạnh nhất** trong 3 phương án (phương án bịa số không được chọn), cấm mở giống video gần đây, gọt câu đệm kiểu báo cáo, bắt số viết bằng chữ và chữ Hàn sót, đo chuỗi câu có số đứng liền. |
+| `src/claims.py` | **Cổng soát câu so sánh** (code, không nhờ LLM): câu "A năm X (hoặc hôm nay) mới bằng B năm Y", "năm Y, A cao hơn B", "A gấp N lần B" phải khớp bảng số của ý tưởng. Sinh ra từ ca thật #46/#37 (19/11/2026): hook so mốc năm sai mà agent Kiểm chứng LLM vẫn cho qua. Chạy ở bước chọn hook, Biên kịch, Kiểm chứng và daily. |
 | `src/second_source.py` | **Nguồn thứ hai** cho ý tưởng số liệu World Bank: đối chiếu các điểm chính (Việt Nam, Hàn Quốc, nơi cao nhất/thấp nhất) với Our World in Data — chỉ những chuỗi có gốc khác World Bank (Liên Hợp Quốc, UN IGME, FAO). Kết quả hiện ở dòng "Nguồn 2" trong tin nhắn duyệt; không chặn video. Bài báo chưa có nguồn thứ hai tự động: tìm kiếm web qua Gemini cần project trả phí. |
 | `src/page_text.py` | Tải toàn văn bài nguồn: Biên kịch lấy số liệu từ đó, Kiểm chứng đối chiếu lại. |
 | `src/produce.py` | **Agent Sản xuất**: kịch bản → spec cảnh (`data/specs/script_<id>.yaml`). Cửa kiểm spec: bỏ cảnh hỏng, không làm tròn mất số lẻ, xoay vòng kiểu cảnh chữ. |
@@ -214,7 +215,7 @@ scp data/pipeline.db <user>@<ip-vm>:~/
 # trên VM
 git clone ~/video-agents.git ~/video-agents && cd ~/video-agents
 mv ~/.env . && mv ~/pipeline.db data/
-bash deploy/setup_vm.sh              # kiểm RAM, cài gói, tạo venv, cài systemd; hỏi trước mỗi lệnh sudo
+bash deploy/setup_vm.sh              # kiểm RAM, cài gói, venv Python 3.13 (uv) + Node 24 riêng cho Remotion, cài systemd; hỏi trước mỗi lệnh sudo
 ```
 
 Script không tự bật lịch chạy; nó in ra 3 lệnh để thử tay rồi mới bật. Cập nhật code về sau:

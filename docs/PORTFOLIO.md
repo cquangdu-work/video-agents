@@ -5,8 +5,8 @@ data-driven short video every day (Vietnamese, YouTube Shorts + TikTok), plus a 
 long-form compilation. A human approves every video from Telegram (~5 min/day); everything else
 is automated. It runs on an Oracle Cloud free-tier ARM64 VM using only free-tier APIs.
 
-**Numbers:** ~10.8k lines of Python/TypeScript · 274 unit tests · 89 commits · one 60–90 s video
-in ~15 min end-to-end on a 4-core ARM VM · $0/month model cost.
+**Numbers:** ~11.6k lines of Python/TypeScript (+4.5k lines of tests) · 320 unit tests ·
+~105 commits · one 60–90 s video in ~15 min end-to-end on a 4-core ARM VM · $0/month model cost.
 
 ## Pipeline
 
@@ -37,6 +37,14 @@ every model output passes a deterministic gate:
   data table (`crew.unsourced_numbers`); the LLM fact-checker alone had let three invented
   statistics through. Chart series are never copied by the model — code fills them from the
   source table (`crew.fill_series_from_data`).
+- *Comparison gate* — the number gate cannot see a false sentence whose numbers are all real:
+  "Korea in 2025 only reached the share Vietnam already had in 1990" (56.8% vs 74.7%) passed
+  both the number gate and the LLM fact-checker — even when the checker read every sentence and
+  was told to verify "A in year X equals B in year Y" claims. `src/claims.py` parses catch-up,
+  higher/lower and "N times" sentences, resolves "today" to the table's latest year, and checks
+  them against the source table; it found 4 such errors in 29 real data scripts with no false
+  alarms. Root cause was a hook example in the prompt; the prompt now allows that hook only when
+  the table carries a precomputed equivalence line.
 - *Title gate* — a title that drops the unit of a ratio ("FDI 5× higher" when the data is
   FDI as % of GDP) is sent back for a rewrite (`metadata.title_drops_unit`, from a real mistake).
 - *LLM-as-judge is constrained* — the vision QC model may only report three error classes as
@@ -72,14 +80,14 @@ a long-running Telegram bot for approvals and OAuth renewal from a phone, idempo
 transitions to prevent double uploads, and tools to replace a scheduled upload safely.
 
 ## Stack
-Python 3.10–3.13 · CrewAI · Gemini (text, TTS, vision; free tier) · faster-whisper · Remotion
+Python 3.13 (uv, universal lock file) · CrewAI · Gemini (text, TTS, vision; free tier) · faster-whisper · Remotion
 (React/TypeScript) · Manim · FFmpeg · SQLite · YouTube Data & Analytics APIs · TikTok Content
 Posting API · Telegram Bot API · systemd · Oracle Cloud ARM64.
 
 ## Where to look
 | Area | Files |
 |---|---|
-| Agents and gates | `src/crew.py`, `src/story.py`, `src/second_source.py` |
+| Agents and gates | `src/crew.py`, `src/story.py`, `src/claims.py`, `src/second_source.py` |
 | Audio | `src/audio/tts.py`, `src/audio/batch.py`, `src/audio/subtitles.py`, `src/audio/music.py` |
 | Rendering | `src/render/web.py`, `src/render/web_map.py`, `render-web/src/` |
 | QC and publishing | `src/qc.py`, `src/review.py`, `src/publish/` |

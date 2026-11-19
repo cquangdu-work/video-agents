@@ -23,7 +23,9 @@ tự lùi về Manim. Chạy thử không đè video thật: `python -m src.asse
 
 ## Cài
 ```bash
-cd render-web && npm ci          # máy mới (laptop Node 24, VM Node 20 đều chạy)
+cd render-web && npm ci          # máy mới. Laptop: Node 24. VM: Node 24 RIÊNG ở ~/.local/node24 (khai
+                                 # REMOTION_NODE_DIR trong .env; Node 20 hệ thống hết hạn hỗ trợ, để nguyên
+                                 # vì dịch vụ khác dùng chung) — deploy/setup_vm.sh tự cài
 npx remotion browser ensure      # tải Chrome Headless Shell (VM ARM64 có bản riêng)
 ```
 
