@@ -265,5 +265,43 @@ class AssembleQuotaExitTest(unittest.TestCase):
         self.assertEqual(asked, [A + "\n\n" + B])      # cả bài trong MỘT lần gọi
 
 
+class TrialRunTest(unittest.TestCase):
+    def test_trial_run_never_touches_the_release_spec_or_style(self):
+        # Ca thật 19/11: `assemble 59 --out ...` (dựng thử phong cách đọc nhanh) ghi đè spec final của bản
+        # phát hành -> Kiểm định và agent Phân tích đọc sai mốc thời gian của video thật
+        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        (root / "data" / "specs").mkdir(parents=True)
+        (root / "data" / "specs" / "script_9.yaml").write_text(
+            f"- {{template: statement, seconds: 4, voice: '{A}', params: {{text: x}}}}\n"
+            f"- {{template: statement, seconds: 4, voice: '{B}', params: {{text: z}}}}\n", encoding="utf-8")
+        isolate(self, root)
+
+        class Stop(Exception):
+            pass
+        engine = types.SimpleNamespace(concat=None, render_scene=None)
+        from src.audio import music
+        patches = [mock.patch.object(assemble, "ROOT", root),
+                   mock.patch.object(assemble, "RENDER", root / "data" / "render"),
+                   mock.patch.dict(sys.modules, {"src.render.engine": engine}),
+                   mock.patch.dict("os.environ", {"TTS_BATCH_WORDS": "0"}),
+                   mock.patch.object(tts, "synth", lambda text, wav, timeout=120: wav.write_bytes(b"x")),
+                   mock.patch.object(tts, "wav_duration", lambda p: 8.0),
+                   mock.patch.object(assemble.time, "sleep"),
+                   mock.patch.object(music, "select", side_effect=Stop),     # dừng ngay sau khi ghi spec final
+                   mock.patch("src.assets_db.init_assets", mock.Mock()),
+                   mock.patch.object(sys, "argv", ["assemble", "9", "--out", str(root / "tmp" / "x.mp4")])]
+        for p in patches:
+            p.start(); self.addCleanup(p.stop)
+        (root / "tmp").mkdir()
+        with self.assertRaises(Stop):
+            assemble.main()
+        self.assertTrue((root / "tmp" / "x.final.yaml").exists())
+        self.assertFalse((root / "data" / "specs" / "script_9_final.yaml").exists())
+        from src import db, style
+        con = db.connect(); self.addCleanup(con.close)
+        self.assertIsNone(style.get(con, 9))                 # chạy thử không gán phong cách mới
+
+
 if __name__ == "__main__":
     unittest.main()

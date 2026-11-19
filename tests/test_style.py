@@ -99,6 +99,33 @@ class AssignTest(StyleCase):
         self.assertIs(style.with_pacing(cfg, {"pace": None}), cfg)
 
 
+class ProduceTest(StyleCase):
+    def test_new_spec_uses_and_records_the_assigned_pace(self):
+        import sys
+        import yaml
+        from src import crew, produce
+        voice = "Năm 2024 Việt Nam có 12 triệu thuê bao."
+        self.con.execute("INSERT INTO ideas (id,title,title_norm,source_url,summary,source_name)"
+                         " VALUES (1,'t','t','u','tóm tắt','S')")
+        self.con.execute("INSERT INTO scripts (id,idea_id,body,status) VALUES (5,1,?,'verified')",
+                         (yaml.safe_dump([{"voice": voice}], allow_unicode=True),))
+        self.con.commit()
+        seen = {}
+
+        def fake_design(idea, scenes, cfg, log_problems=None, lessons=""):
+            seen["pace"] = cfg["pacing"]["scene_seconds_max"]
+            return [{"template": "statement", "seconds": 3, "voice": voice, "params": {"text": "12 triệu"}}]
+        (self.root / "specs").mkdir()
+        with mock.patch.object(crew, "design_scenes", fake_design), \
+                mock.patch.object(produce, "SPEC_DIR", self.root / "specs"), \
+                mock.patch.object(sys, "argv", ["produce", "5", "--spec-only"]), mock.patch("builtins.print"):
+            produce.main()
+        st = style.get(self.con, 5)
+        self.assertIn(st["assigned"]["pace"], style.arms("pace"))
+        self.assertEqual(seen["pace"], st["assigned"]["pace"])          # agent Sản xuất nhận đúng nhịp
+        self.assertEqual(st["applied"]["pace"], st["assigned"]["pace"])  # và được ghi lại để so
+
+
 class TempoTest(unittest.TestCase):
     def test_style_tempo_applies_only_when_the_video_stays_long_enough(self):
         total = lambda t: 54.0 / t                                      # 54 giây ở tốc độ gốc

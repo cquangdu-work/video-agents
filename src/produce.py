@@ -274,6 +274,7 @@ def main():
     spec = validate_spec(design_scenes(idea, scenes, cfg, log_problems=remember,
                                        lessons=learning.producer_lessons(con)), cfg)
     style.record_applied(con, s["id"], pace=st.get("pace"))
+    con.close()                      # xong việc với DB — không giữ khoá SQLite lúc render
 
     SPEC_DIR.mkdir(parents=True, exist_ok=True)
     spec_path = SPEC_DIR / f"script_{s['id']}.yaml"

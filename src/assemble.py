@@ -367,7 +367,11 @@ def main():
                         n, total, len(r))
 
     # Lưu spec với thời lượng THẬT theo giọng — agent Kiểm định đối chiếu mốc này
-    final_spec_path = spec_path.parent / f"script_{args.script_id}_final.yaml"
+    # CHẠY THỬ ghi ra cạnh file thử: bản thử (vd một phong cách dựng khác) không được làm lệch mốc thời
+    # gian mà Kiểm định và agent Phân tích dùng cho video THẬT (ca thật 19/11: dựng thử #59 đọc nhanh
+    # 1,10 lần đã ghi đè spec final của bản phát hành 60 giây)
+    final_spec_path = (args.out.with_suffix(".final.yaml") if args.out
+                       else spec_path.parent / f"script_{args.script_id}_final.yaml")
     final_spec_path.write_text(yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
     from .audio import music
