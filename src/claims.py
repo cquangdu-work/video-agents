@@ -232,9 +232,11 @@ def script_cause_claims(script: dict, summary: str) -> list:
 # "Liên tục tăng" mà dãy số có năm giảm. Ca thật 19/11: "Hàn Quốc liên tục tăng từ 1990 đến 2025" —
 # bảng ghi 2005: 50,7 -> 2010: 49,8; kịch bản #46 gốc cũng có "quỹ đạo tăng trưởng liên tục". Agent
 # Kiểm chứng (LLM) cho qua cả hai.
-TREND = re.compile(r"\b(?:(?:liên\s+tục|đều\s+đặn|không\s+ngừng)\s+(?P<a>tăng|giảm)"
-                   r"|(?P<b>tăng|giảm)(?:\s+\w+){0,2}?\s+(?:liên\s+tục|đều\s+đặn|không\s+ngừng)"
-                   r"|chưa\s+(?:bao\s+giờ|từng)\s+(?P<c>giảm|tăng))\b", re.I)
+_UPDOWN = r"tăng|giảm|đi\s+lên|đi\s+xuống|leo\s+lên|leo|tụt|đi\s+lùi"
+TREND = re.compile(rf"\b(?:(?:liên\s+tục|đều\s+đặn|không\s+ngừng)\s+(?P<a>{_UPDOWN})"
+                   rf"|(?P<b>{_UPDOWN})(?:\s+\w+){{0,2}}?\s+(?:liên\s+tục|đều\s+đặn|không\s+ngừng)"
+                   rf"|chưa\s+(?:bao\s+giờ|từng)\s+(?P<c>{_UPDOWN}))\b", re.I)
+_UP_WORDS = ("tăng", "đi lên", "leo lên", "leo")
 
 
 def trend_problems(texts, summary: str) -> list:
@@ -249,8 +251,8 @@ def trend_problems(texts, summary: str) -> list:
         m = TREND.search(text)
         if not m:
             continue
-        word = (m.group("a") or m.group("b") or m.group("c")).lower()
-        up = (word == "tăng") != bool(m.group("c"))          # "chưa bao giờ giảm" = luôn tăng
+        word = " ".join((m.group("a") or m.group("b") or m.group("c")).lower().split())
+        up = (word in _UP_WORDS) != bool(m.group("c"))       # "chưa bao giờ giảm" = luôn tăng
         before = [x for x in _mentions(text, table) if x[0] < m.start()]
         mentions = before or _mentions(text, table)
         if not mentions:

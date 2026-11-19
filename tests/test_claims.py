@@ -106,7 +106,8 @@ class TrendAndWhyTest(unittest.TestCase):
         # Ca thật 19/11: Hàn Quốc 2005: 50,7 -> 2010: 49,8 mà kịch bản nói "liên tục tăng"
         for text in ("Trái lại, Hàn Quốc liên tục tăng trưởng từ 1990 đến năm 2025.",
                      "Ngược lại, Hàn Quốc đi theo một quỹ đạo tăng trưởng liên tục.",
-                     "Hàn Quốc chưa bao giờ giảm suốt 35 năm."):
+                     "Hàn Quốc chưa bao giờ giảm suốt 35 năm.",
+                     "Trong khi đó, Hàn Quốc liên tục đi lên và đạt 56,8 phần trăm vào năm 2025."):
             got = claims.trend_problems([text], WOMEN)
             self.assertEqual(len(got), 1, text)
             self.assertIn("2005: 50,7 → 2010: 49,8", got[0])
