@@ -54,6 +54,9 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `src/daily.py` | **Chuỗi hằng ngày**: một lệnh chạy cả dây chuyền, bước nào hỏng thì thử kịch bản kế và báo Telegram. |
 | `src/analysis/weekly.py` | **Agent Phân tích**: mỗi tuần đo số liệu video, tìm cảnh người xem rời đi, nhích trọng số, rút bài học. |
 | `src/analysis/learned.py` | Đọc/ghi `data/learned.yaml` — thứ kênh tự học được; Biên tập và Biên kịch đọc file này. |
+| `src/community.py` | **Agent Cộng đồng** (mỗi sáng, bước cuối của daily): đọc bình luận mới (API key), phân loại, báo Du khi người xem nói sai số liệu, nháp trả lời bằng số liệu của video (Du tự đăng), đề xuất chủ đề → link video đã có hoặc xếp hàng ưu tiên. |
+| `src/growth.py` | **Agent Tăng trưởng** (Chủ nhật): người đăng ký, Shorts / video dài, tiến độ YPP; video nào kéo người đăng ký (vào điểm sở thích người xem); video đột biến → ưu tiên mảng + dạng 10 ngày và làm tiếp chỉ số đó. |
+| `src/topics.py` | Hàng đợi chủ đề được yêu cầu (người xem, Du `/chude`, video đột biến): nguồn World Bank / OWID lấy trước xoay vòng; chưa có nguồn → danh sách mong muốn. |
 | `src/style.py` | **Học cách dựng**: mỗi video thử một tổ hợp "núm vặn" trong khung an toàn (tốc độ đọc, nhạc nền, nhịp đổi cảnh, cỡ phụ đề), Chủ nhật so % thời lượng được xem (Thompson sampling), khung tự dời về mức thắng rõ; học loại cảnh nào giữ chân / đuổi người xem cho agent Sản xuất; Du chỉnh bằng /nhac, /giong, /nhip, /chu. |
 | `src/learning.py` | **Bộ nhớ tự học** (bảng `learning_events` + `data/learned.yaml`): lỗi các cổng code bắt được (phân loại, Biên kịch và Sản xuất đọc "lỗi hay mắc 14 ngày" của chính mình), luật Du dạy qua Telegram, sở thích người xem (kiểu mở đầu / mảng / dạng video giữ chân tốt), kịch bản Du đã duyệt làm mẫu nhịp kể. Xem mục "Tự học" bên dưới. |
 | `deploy/` | Script cài VM + file systemd (lịch mỗi sáng, báo cáo Chủ nhật, bot chờ duyệt). |
@@ -136,6 +139,23 @@ Mỗi video mới được gán một tổ hợp "núm vặn", mỗi núm 3 mứ
 ```bash
 python -m src.style              # khung đang thử, mức nào đang dẫn, điều người xem cho thấy theo loại cảnh
 ```
+
+### Agent Cộng đồng và agent Tăng trưởng (từ 19/11/2026)
+
+Hai agent nhìn **cả kênh** thay vì từng video. Không đăng gì công khai: bình luận do Du tự trả lời (token
+không có quyền `youtube.force-ssl`; thêm quyền đó phải hỏi Du).
+
+- **Cộng đồng** (`python -m src.community`, daily gọi mỗi sáng nếu `community.enabled`; `--dry-run` để
+  xem thử): bình luận mới → phân loại (câu hỏi / đề xuất chủ đề / báo sai số liệu / góp ý / khen / khác) →
+  bản tin Telegram. Báo sai số liệu lên đầu. Câu hỏi kèm nháp trả lời chỉ dùng số trong bảng của video
+  (code soát từng con số). Đề xuất chủ đề → link video đã có, hoặc xếp hàng ưu tiên, hoặc danh sách
+  mong muốn nếu kênh chưa có nguồn số liệu. Đọc bằng `YOUTUBE_API_KEY`.
+- **Tăng trưởng** (`python -m src.growth` xem lần đo gần nhất; chạy trong lượt Phân tích Chủ nhật):
+  người đăng ký, lượt xem / giờ xem tách Shorts và video dài, tiến độ YPP (`growth.ypp`), mục tiêu mỗi tuần.
+  Học video nào kéo người đăng ký (gộp vào điểm sở thích người xem). Video đột biến (lượt xem mỗi ngày
+  ≥ 2,5× trung vị, ≥ 300 lượt) → ưu tiên mảng + dạng của nó 10 ngày, xếp hàng làm tiếp chỉ số đó.
+- **Telegram:** `/chude <từ khoá>` (Du yêu cầu làm sớm một chủ đề — khớp với chỉ số kênh đang có),
+  `/kenh` (tình trạng kênh lần đo gần nhất).
 
 Hai chế độ đăng, đổi ở `config/channel.yaml` → `publish.youtube.mode`:
 

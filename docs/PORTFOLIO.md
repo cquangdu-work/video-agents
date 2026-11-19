@@ -5,7 +5,7 @@ data-driven short video every day (Vietnamese, YouTube Shorts + TikTok), plus a 
 long-form compilation. A human approves every video from Telegram (~5 min/day); everything else
 is automated. It runs on an Oracle Cloud free-tier ARM64 VM using only free-tier APIs.
 
-**Numbers:** ~13.5k lines of Python/TypeScript (+5.6k lines of tests) · 395 unit tests ·
+**Numbers:** ~14k lines of Python/TypeScript (+6k lines of tests) · 413 unit tests ·
 ~120 commits · one 45–60 s video in ~15 min end-to-end on a 4-core ARM VM · $0/month model cost.
 
 ## Pipeline
@@ -85,6 +85,18 @@ type and per opening-scene type feeds the scene director's prompt; QC failures a
 "the model can fix this" (clipped titles, picture contradicts narration → prompt lessons) and
 "code bug" (black frames, render fallback → weekly report only).
 
+**Channel-level agents** (`src/community.py`, `src/growth.py`, `src/topics.py`). A community agent reads
+new comments each morning, classifies them with a small model whose output is clamped by code (fixed
+label set, topic keys must exist in the source catalog), puts "your number is wrong" comments at the top
+of the owner's Telegram digest, drafts replies that may only contain numbers present in that video's
+data table, and turns topic requests into either a link to an existing video or a priority slot in the
+next idea run. A growth agent measures the whole channel (subscribers, Shorts vs long-form via the
+Analytics `creatorContentType` dimension, YPP progress), blends subscribers-per-1,000-views into the
+viewer-preference score, and detects breakout videos (views/day ≥ 2.5× the channel median) to boost that
+topic family and format for ten days and queue the same indicator in another format. Neither posts
+anything publicly: reading comments uses an API key because the stored OAuth token deliberately lacks
+the `force-ssl` scope that would also allow posting.
+
 **Designed around free-tier limits, measured in production.** Gemini TTS allows ~15 calls/day,
 so the whole script is voiced in one call and split per sentence with forced alignment
 (`audio/batch.py`); Whisper only supplies timestamps while subtitles use the script's own words
@@ -123,6 +135,7 @@ Posting API · Telegram Bot API · systemd · Oracle Cloud ARM64.
 |---|---|
 | Agents and gates | `src/crew.py`, `src/story.py`, `src/claims.py`, `src/second_source.py` |
 | Self-learning | `src/learning.py`, `src/style.py`, `tests/test_learning.py`, `tests/test_style.py` |
+| Channel growth | `src/community.py`, `src/growth.py`, `src/topics.py`, `tests/test_channel_agents.py` |
 | Audio | `src/audio/tts.py`, `src/audio/batch.py`, `src/audio/subtitles.py`, `src/audio/music.py` |
 | Rendering | `src/render/web.py`, `src/render/web_map.py`, `render-web/src/` |
 | QC and publishing | `src/qc.py`, `src/review.py`, `src/publish/` |
