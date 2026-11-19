@@ -99,7 +99,7 @@ def hook_score(text: str, recent_openers=()) -> float:
     return score
 
 
-def pick_hook(script: dict, recent_openers=(), is_sourced=lambda text: True) -> str:
+def pick_hook(script: dict, recent_openers=(), is_sourced=lambda text: True, bonus=None) -> str:
     """Chọn câu mở đầu mạnh nhất trong các phương án "hooks" và cảnh 1 hiện có; phương án nào
     mạnh hơn hẳn cảnh 1 thì thay vào lời đọc của cảnh 1 (giữ hình của cảnh 1).
     is_sourced(text): câu đúng với nguồn (mọi con số có trong nguồn, câu so sánh khớp bảng số) —
@@ -109,14 +109,16 @@ def pick_hook(script: dict, recent_openers=(), is_sourced=lambda text: True) -> 
     scenes = script.get("scenes") or []
     if not scenes:
         return ""
+    # bonus(text): điểm cộng tự học từ người xem (src/learning.hook_bonus) — chỉ để phân thắng thua giữa
+    # các phương án ĐÚNG; phương án phạm khuôn cấm vẫn -10 điểm
+    score = lambda text: hook_score(text, recent_openers) + (bonus(text) if bonus and not hook_problems(text) else 0)
     current = str(scenes[0].get("voice") or "")
-    best, best_score = current, (hook_score(current, recent_openers) if is_sourced(current)
-                                 else float("-inf"))
+    best, best_score = current, (score(current) if is_sourced(current) else float("-inf"))
     for h in script.get("hooks") or []:
         h = " ".join(str(h or "").split())
         if not h or h == current or not is_sourced(h):
             continue
-        s = hook_score(h, recent_openers)
+        s = score(h)
         if s > best_score:
             best, best_score = h, s
     if best != current:

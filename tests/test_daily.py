@@ -25,9 +25,12 @@ class DailyCase(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         root = Path(self.tmp.name)
         (root / "output").mkdir(); (root / "specs").mkdir()
+        from src.analysis import learned
+        # learned.yaml giả: sở thích người xem đã học trên VM không được làm đổi thứ tự trong test
         for target, attr, val in [(db, "DB_PATH", root / "t.db"), (daily, "OUTPUT", root / "output"),
                                   (daily, "LOCK", root / "daily.lock"),
                                   (daily, "SPEC_DIR", root / "specs"), (daily, "LOG_DIR", root / "logs"),
+                                  (learned, "LEARNED_PATH", root / "learned.yaml"),
                                   (daily, "load_config", lambda: CFG)]:
             p = mock.patch.object(target, attr, val); p.start(); self.addCleanup(p.stop)
         self.msgs = []

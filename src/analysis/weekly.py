@@ -10,6 +10,8 @@ Việc nó làm:
   2. Tìm điểm người xem rời đi nhiều nhất, quy ra đúng CẢNH nào trong video.
   3. Chỉnh trọng số chấm điểm của agent Biên tập — rất dè dặt (xem propose_weights).
   4. Nhờ LLM rút vài bài học từ bảng số liệu, đưa cho agent Biên kịch đọc.
+  5. Cập nhật "sở thích người xem" (src/learning.py): kiểu mở đầu / mảng / dạng video nào giữ chân
+     tốt -> daily ưu tiên, máy chọn hook cộng điểm; báo cáo thêm mục "Tự học".
 
 Thành thật về thống kê: vài video đầu KHÔNG đủ để kết luận gì. Vì vậy có ngưỡng tối
 thiểu, mỗi tuần chỉ nhích trọng số 0.1, và báo cáo luôn ghi dựa trên bao nhiêu video.
@@ -390,7 +392,20 @@ def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
         except Exception as exc:
             log.warning("LLM rút bài học lỗi: %s", exc)
 
+    from .. import learning
+    if not dry_run:
+        try:
+            # TỰ HỌC từ người xem: kiểu mở đầu / mảng / dạng video nào giữ chân tốt -> learned.yaml,
+            # daily và máy chọn hook đọc lại. Gọi TRƯỚC load_learned bên dưới để không ghi đè mất.
+            learning.update_preferences(con, rows, now)
+        except Exception as exc:
+            log.warning("Cập nhật sở thích người xem lỗi: %s", exc)
+
     report = format_report(rows, len(videos), source, weight_notes, insights)
+    try:
+        report = "\n".join([report] + learning.weekly_lines(con, now))
+    except Exception as exc:
+        log.warning("Tóm tắt tự học lỗi: %s", exc)
     if dry_run:
         print(report)
         return report

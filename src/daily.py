@@ -40,6 +40,7 @@ LOG_DIR = ROOT / "logs"
 LOCK = ROOT / "data" / "daily.lock"
 
 MAX_FAILS_PER_SCRIPT = 2          # kịch bản dựng hỏng 2 lần thì thôi không thử nữa
+PREF_WEIGHT = 2.0                 # 1 độ lệch chuẩn "người xem thích" = 2 điểm Biên tập (thang ~15-30)
 EXIT_RETRY_LATER = 75             # bước con thoát mã này = "lỗi tạm thời của dịch vụ ngoài"
                                   # (assemble: hết quota TTS) — khớp src/assemble.py
 STEP_TIMEOUT = {"ideas": 3600, "produce": 1800, "assemble": 5400, "review": 1200}  # giây
@@ -148,9 +149,11 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     lời đọc đủ dài.
     Ưu tiên: mảng chủ đề KHÁC với chuỗi video gần nhất (không làm cùng mảng hai ngày liền nếu có
     lựa chọn khác — ca thật 13-18/11: 6/6 video là Việt–Hàn) -> cái đã dựng xong video (khỏi tốn
-    công) -> điểm Biên tập cao -> mới hơn.
+    công) -> điểm Biên tập + điểm "người xem thích" đã học (src/learning.py) -> mới hơn.
     """
+    from . import learning
     from .sources.datatable import topic_family
+    prefs = learning.preferences()
     max_age = cfg["daily"].get("max_script_age_days", 3)
     min_words = cfg["daily"].get("min_script_words", 150)
     max_words = max_script_words(cfg)
@@ -158,7 +161,7 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     since = ((now or datetime.now(timezone.utc)) - timedelta(days=max_age)).isoformat(timespec="seconds")
     recent = recent_families(con)
     rows = con.execute(
-        "SELECT s.id, s.body, i.scores, i.source_name, i.summary FROM scripts s"
+        "SELECT s.id, s.body, i.scores, i.source_name, i.summary, i.title FROM scripts s"
         " JOIN ideas i ON i.id = s.idea_id"
         " WHERE s.status = 'verified' AND s.created_at >= ?"
         # video gửi Telegram hụt (chưa có tg_message_id) vẫn được thử gửi lại.
@@ -200,12 +203,17 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
         except (ValueError, TypeError):
             score = 0.0
         family = topic_family(r["source_name"])
+        # TỰ HỌC từ người xem (src/learning.py): kiểu mở đầu / mảng / dạng video nào giữ chân tốt,
+        # có thưởng thăm dò cho cái ít được thử. Đơn vị độ lệch chuẩn, nhân PREF_WEIGHT điểm Biên tập.
+        bonus = learning.preference_bonus(
+            learning.features(learning._hook_of(r["body"]), r["title"], r["source_name"]), prefs)
         out.append({"id": r["id"], "score": score, "has_final": final_path(r["id"]).exists(),
                     "family": family, "streak": streak(family, recent),
-                    "long": words > max_words})
+                    "long": words > max_words, "learned": bonus})
     # Kịch bản DÀI hơn độ dài mới (viết trước 19/11 cho video 60-90 giây) xếp sau cùng: chỉ dựng khi
     # không còn kịch bản nào đúng khổ 45-60 giây (assemble đọc nhanh tối đa 1,12 lần vẫn ra ~80 giây)
-    return sorted(out, key=lambda c: (c["long"], c["streak"], not c["has_final"], -c["score"], -c["id"]))
+    return sorted(out, key=lambda c: (c["long"], c["streak"], not c["has_final"],
+                                      -(c["score"] + PREF_WEIGHT * c["learned"]), -c["id"]))
 
 
 def _spec_usable(path: Path) -> bool:

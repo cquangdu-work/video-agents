@@ -100,6 +100,9 @@ class DbCase(unittest.TestCase):
         self.root = Path(self.tmp.name)
         p = mock.patch.object(db, "DB_PATH", self.root / "t.db")
         p.start(); self.addCleanup(p.stop)
+        from src.analysis import learned          # luật Du dạy (/hoc) ghi vào learned.yaml giả
+        p = mock.patch.object(learned, "LEARNED_PATH", self.root / "learned.yaml")
+        p.start(); self.addCleanup(p.stop)
         self.addCleanup(self.tmp.cleanup)
         env = mock.patch.dict(os.environ, {"TELEGRAM_CHAT_ID": OWNER, "TELEGRAM_BOT_TOKEN": "T0KEN"})
         env.start(); self.addCleanup(env.stop)
@@ -203,6 +206,38 @@ class ReviewFlowTest(DbCase):
         self.assertEqual(self.status(), "rejected")
         review.handle_update(self.con, text("giọng đọc hơi nhanh", reply_to=50), CFG)
         self.assertEqual(db.get_video(self.con, self.vid)["review_note"], "giọng đọc hơi nhanh")
+        # TỰ HỌC: quyết định + nhận xét của Du vào bộ nhớ (một lần loại, bấm lại không ghi thêm)
+        events = [tuple(r) for r in self.con.execute(
+            "SELECT source, kind, detail, script_id FROM learning_events ORDER BY id")]
+        self.assertEqual(events, [("du", "reject", "Tiêu đề", 6), ("du", "note", "giọng đọc hơi nhanh", 6)])
+        from src import learning
+        self.assertIn("giọng đọc hơi nhanh", learning.du_block(self.con))      # Biên kịch đọc được
+
+    def test_du_teaches_rules_over_telegram(self):
+        from src import learning
+        review.handle_update(self.con, text("/hoc không dùng từ “chúng ta” trong lời đọc"), CFG)
+        review.handle_update(self.con, text("/học  Kết video bằng một câu hỏi mở"), CFG)
+        review.handle_update(self.con, text("/hoc không dùng từ “chúng ta” trong lời đọc"), CFG)   # trùng
+        self.assertEqual([r["text"] for r in learning.rules()],
+                         ["không dùng từ “chúng ta” trong lời đọc", "Kết video bằng một câu hỏi mở"])
+        self.assertIn("Kết video bằng một câu hỏi mở", learning.du_block(self.con))
+        review.handle_update(self.con, text("/luat"), CFG)
+        self.assertIn("2. Kết video bằng một câu hỏi mở", self.calls("send_message")[-1][1][0])
+        review.handle_update(self.con, text("/quen 1"), CFG)
+        self.assertEqual([r["text"] for r in learning.rules()], ["Kết video bằng một câu hỏi mở"])
+        review.handle_update(self.con, text("/quen 9"), CFG)
+        self.assertIn("Không có luật số đó", self.calls("send_message")[-1][1][0])
+        review.handle_update(self.con, text("/quen"), CFG)
+        self.assertIn("Gửi kèm số thứ tự", self.calls("send_message")[-1][1][0])
+        review.handle_update(self.con, text("/hoc"), CFG)                      # thiếu nội dung -> hướng dẫn
+        self.assertIn("Gửi kèm nội dung luật", self.calls("send_message")[-1][1][0])
+        # chữ "học" trong một nhận xét thường (không có "/") không bị hiểu nhầm thành lệnh
+        review.handle_update(self.con, text("học cách mở đầu khác đi", reply_to=50), CFG)
+        self.assertEqual(len(learning.rules()), 1)
+        self.assertEqual(db.get_video(self.con, self.vid)["review_note"], "học cách mở đầu khác đi")
+        # người lạ không dạy được
+        review.handle_update(self.con, text("/hoc luôn mở bằng 'Đừng'", user="999"), CFG)
+        self.assertEqual(len(learning.rules()), 1)
 
     def test_done_button_and_link(self):
         review.handle_update(self.con, cb(f"done:{self.vid}"), CFG)   # chưa duyệt -> không được

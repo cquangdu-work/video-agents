@@ -281,6 +281,11 @@ def _handle_callback(con, cq: dict, cfg: dict) -> None:
     # ghi gì nên không tra được video nào được duyệt lúc nào, upload ra sao
     log.info("Nút %s cho video #%d (đang ở trạng thái %s)", action, video_id, video["status"])
 
+    if action in ("ok", "no") and video["status"] == "pending_review":
+        from . import learning           # quyết định của Du là tín hiệu tự học (src/learning.py)
+        learning.record(con, "du", "approve" if action == "ok" else "reject", video.get("title") or "",
+                        "review", script_id=video.get("script_id"))
+
     if action == "ok":
         if not db.transition_video(con, video_id, "pending_review", "approved"):
             tg.answer_callback(cq["id"], f"Video này đã xử lý rồi ({video['status']})")
@@ -297,8 +302,8 @@ def _handle_callback(con, cq: dict, cfg: dict) -> None:
         tg.answer_callback(cq["id"], "Đã loại ❌")
         if mid:
             tg.clear_buttons(mid)
-        tg.send_message(f"Đã loại video #{video_id}. Trả lời tin video để ghi lý do — "
-                        "agent Phân tích sẽ đọc để rút kinh nghiệm.")
+        tg.send_message(f"Đã loại video #{video_id}. Trả lời tin video để ghi lý do — Biên kịch đọc"
+                        " lý do khi viết lần sau. Muốn thành luật lâu dài: /hoc <luật>")
 
     elif action == "done":          # mode manual: Du báo đã tự đăng
         if not db.transition_video(con, video_id, "approved", "published"):
@@ -395,11 +400,56 @@ def _finish_tiktok(con, text: str) -> None:
                     " đẩy vào hộp thư TikTok của tài khoản này.")
 
 
+# bắt buộc dấu "/": ghi chú thường trả lời video ("học cách mở đầu khác đi…") không bị bắt nhầm thành lệnh
+TEACH = re.compile(r"^/(hoc|học|day|dạy)\b\s*(.*)$", re.I | re.S)
+FORGET = re.compile(r"^/(quen|quên)\b\s*(\d*)\s*$", re.I)
+
+
+def _handle_teaching(text: str) -> bool:
+    """Du dạy hệ thống qua Telegram (src/learning.py): /hoc <luật>, /luat, /quen <số>. True nếu đã xử lý."""
+    from . import learning
+    if text.lower() in ("/luat", "/luật"):
+        rs = learning.rules()
+        tg.send_message("📚 Luật Du đã dạy (Biên kịch đọc trước mỗi lần viết):\n"
+                        + ("\n".join(f"{k}. {r['text']}" for k, r in enumerate(rs, 1)) or "(chưa có)")
+                        + "\n\nDạy thêm: /hoc <luật> · Bỏ: /quen <số>")
+        return True
+    m = FORGET.match(text)
+    if m and not m.group(2):
+        tg.send_message("Gửi kèm số thứ tự luật muốn bỏ, ví dụ: /quen 2 (xem số bằng /luat)")
+        return True
+    if m:
+        try:
+            gone = learning.remove_rule(int(m.group(2)))
+        except Exception as exc:
+            tg.send_message(f"⚠️ Chưa bỏ được luật ({exc}). Kiểm tra data/learned.yaml trên VM.")
+            return True
+        tg.send_message(f"🗑 Đã bỏ luật: {gone['text']}" if gone else "Không có luật số đó — gửi /luat để xem.")
+        return True
+    m = TEACH.match(text)
+    if m:
+        rule = m.group(2).strip()
+        if not rule:
+            tg.send_message("Gửi kèm nội dung luật, ví dụ: /hoc không dùng từ “chúng ta” trong lời đọc")
+            return True
+        try:
+            learning.add_rule(rule)
+        except Exception as exc:          # file learned.yaml hỏng: báo chứ không ghi đè mất cái đã học
+            tg.send_message(f"⚠️ Chưa ghi được luật ({exc}). Kiểm tra data/learned.yaml trên VM.")
+            return True
+        log.info("Du dạy luật mới: %s", rule)
+        tg.send_message(f"✅ Đã ghi nhớ: “{rule}”. Áp dụng từ lượt viết kịch bản kế tiếp. (/luat để xem hết)")
+        return True
+    return False
+
+
 def _handle_message(con, msg: dict) -> None:
     if not _from_owner(msg.get("chat"), msg.get("from")):
         return
     text = (msg.get("text") or "").strip()
     if not text:
+        return
+    if _handle_teaching(text):
         return
     if text.lower() in ("/tiktok", "tiktok"):
         _start_tiktok(con)
@@ -433,7 +483,11 @@ def _handle_message(con, msg: dict) -> None:
         tg.send_message(f"Đã lưu link cho video #{row['id']} ✅")
     elif replied:
         db.update_video(con, replied["id"], review_note=text[:1000])
-        tg.send_message(f"Đã ghi chú cho video #{replied['id']} 📝")
+        from . import learning           # Biên kịch đọc các nhận xét gần nhất của Du (tự học)
+        sid = con.execute("SELECT script_id FROM videos WHERE id=?", (replied["id"],)).fetchone()["script_id"]
+        learning.record(con, "du", "note", text[:400], "review", script_id=sid)
+        tg.send_message(f"Đã ghi chú cho video #{replied['id']} 📝 — Biên kịch sẽ đọc nhận xét này khi viết"
+                        " (muốn thành luật lâu dài: /hoc <luật>)")
 
 
 def handle_update(con, upd: dict, cfg: dict) -> None:

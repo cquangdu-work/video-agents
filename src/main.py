@@ -117,6 +117,7 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
     log.info("Biên tập chọn %d ý tưởng (cần %d kịch bản đạt)", len(selected), want)
 
     # --- Biên kịch + Kiểm chứng từng ý tưởng (sai số liệu thì trả về viết lại 1 lần)
+    from . import learning
     sent = good = 0
     recent = db.recent_hooks(con)          # câu mở đầu gần đây: kịch bản mới phải mở khác đi
     for idea in selected:
@@ -124,8 +125,11 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
             break
         # Biên kịch nhận toàn văn bài nguồn (đã tải ở bước lọc trên) để có số liệu mà viết
         source_text = idea["source_text"]
+        # TỰ HỌC (src/learning.py): lỗi hay mắc, luật Du dạy, sở thích người xem, kịch bản mẫu
+        lessons = learning.writer_lessons(con, idea, cfg)
+        remember = lambda problems, stage, iid=idea["id"]: learning.record_problems(con, problems, stage, iid)
         try:
-            script, fc, status = _script_one(crew, idea, source_text, cfg, recent)
+            script, fc, status = _script_one(crew, idea, source_text, cfg, recent, lessons, remember)
         except Exception as exc:
             # Một ý tưởng hỏng (LLM trả sai khuôn, mọi model quá tải...) không được kéo
             # sập cả khâu: ghi lại rồi sang ý tưởng kế tiếp.
@@ -136,10 +140,11 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
         good += status == "verified"
         if script.get("scenes"):
             recent.insert(0, str(script["scenes"][0].get("voice") or ""))
-        db.save_script(con, idea["id"], script["hooks"],
-                       yaml.safe_dump(script["scenes"], allow_unicode=True),
-                       factcheck=fc, status=status)
+        sid = db.save_script(con, idea["id"], script["hooks"],
+                             yaml.safe_dump(script["scenes"], allow_unicode=True),
+                             factcheck=fc, status=status)
         db.set_status(con, idea["id"], "scripted")
+        learning.record(con, "outcome", status, idea["title"], "final", idea["id"], sid)
 
         msg = format_script_message(idea, script, fc)
         if use_telegram and send_message(msg):
@@ -183,10 +188,14 @@ def source_text_for(idea: dict, fetch) -> str:
     return fetch(idea["source_url"])
 
 
-def _script_one(crew, idea: dict, source_text: str, cfg: dict, recent_hooks: list = None) -> tuple:
+def _script_one(crew, idea: dict, source_text: str, cfg: dict, recent_hooks: list = None,
+                lessons: str = "", remember=None) -> tuple:
     """Biên kịch -> Kiểm chứng (sai số liệu thì viết lại 1 lần) -> cổng chuẩn.
+    lessons: bài học tự học (src/learning.writer_lessons); remember(problems, stage): ghi lỗi vào bộ nhớ.
     Trả về (kịch bản, hồ sơ kiểm chứng, 'verified' | 'draft')."""
-    script = crew.write_script(idea, cfg, source_text=source_text, recent_hooks=recent_hooks)
+    from . import learning
+    learned = dict(lessons=lessons, log_problems=remember, hook_bonus=learning.hook_bonus)
+    script = crew.write_script(idea, cfg, source_text=source_text, recent_hooks=recent_hooks, **learned)
     fc = crew.fact_check(script, idea, source_text, cfg)
     # Hai cổng CODE đứng sau agent Kiểm chứng (LLM): từng con số trong lời đọc phải có trong nguồn
     # (bắt kiểu hook "99% người..." tự chế), từng câu so sánh phải khớp bảng số (bắt kiểu "Hàn Quốc
@@ -203,8 +212,10 @@ def _script_one(crew, idea: dict, source_text: str, cfg: dict, recent_hooks: lis
                f" thay bằng con số có thật trong nguồn" for n in unsourced]
             + [f"- SAI/KHÔNG CÓ CĂN CỨ: {p}" for p in wrong_cmp])
         log.warning("Kiểm chứng trượt — trả về Biên kịch viết lại:\n%s", feedback)
+        if remember:                     # lỗi Kiểm chứng / chống bịa số cũng là bài học
+            remember([line[2:] for line in feedback.splitlines() if line.startswith("- ")], "final")
         script = crew.write_script(idea, cfg, feedback=feedback, source_text=source_text,
-                                   recent_hooks=recent_hooks)
+                                   recent_hooks=recent_hooks, **learned)
         fc = crew.fact_check(script, idea, source_text, cfg)
         unsourced = crew.unsourced_numbers(script, idea, source_text)
         wrong_cmp = crew.content_problems(script, idea.get("summary"))

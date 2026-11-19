@@ -210,6 +210,9 @@ class StandardGateTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         p = mock.patch.object(db, "DB_PATH", Path(self.tmp.name) / "t.db")
         p.start(); self.addCleanup(p.stop)
+        from src.analysis import learned
+        p = mock.patch.object(learned, "LEARNED_PATH", Path(self.tmp.name) / "learned.yaml")
+        p.start(); self.addCleanup(p.stop)
         self.con = db.connect(); self.addCleanup(self.con.close)
         db.insert_raw_ideas(self.con, [
             {"title": f"chủ đề riêng số {w}", "url": f"https://s/{i}", "source": "S", "lang": "vi"}
@@ -220,11 +223,12 @@ class StandardGateTest(unittest.TestCase):
 
     def run_agents(self, bad_ideas, crash=(), no_source=(), invents=(), keeps_inventing=()):
         from src import main, page_text
-        written, self.feedback = [], []
+        written, self.feedback, self.lessons = [], [], []
 
-        def write(idea, cfg, feedback=None, source_text="", recent_hooks=None):
+        def write(idea, cfg, feedback=None, source_text="", recent_hooks=None, **learned):
             written.append(idea["id"])
             self.feedback.append(feedback)
+            self.lessons.append(learned.get("lessons", ""))
             assert source_text == self.SOURCE                    # bài nguồn được tải TRƯỚC khi viết
             if idea["id"] in crash:
                 raise RuntimeError("Mọi model đều quá tải")
@@ -276,6 +280,13 @@ class StandardGateTest(unittest.TestCase):
         self.assertEqual(statuses, [(a, "verified"), (b, "draft"), (c, "verified")])
         self.assertIn("con số không có trong bài nguồn: 99%",
                       json.loads(rows[1]["factcheck"])["standard_problems"])
+        # TỰ HỌC: lỗi bịa số của ý tưởng a được ghi lại, Biên kịch viết ý tưởng b đã được dặn trước
+        self.assertNotIn("con số không có trong nguồn", self.lessons[0])
+        self.assertIn("con số không có trong nguồn", self.lessons[2])
+        self.assertIn("BỊA SỐ: con số 99%", self.lessons[2])                 # kèm ví dụ thật
+        events = self.con.execute("SELECT source, kind, stage FROM learning_events ORDER BY id").fetchall()
+        self.assertIn(("gate", "bia_so", "final"), [tuple(e) for e in events])
+        self.assertEqual([e["kind"] for e in events if e["source"] == "outcome"], ["verified", "draft", "verified"])
 
     def test_no_extra_llm_calls_when_first_scripts_are_good(self):
         written, statuses, _ = self.run_agents(bad_ideas=set())

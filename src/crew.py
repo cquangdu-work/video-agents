@@ -427,7 +427,8 @@ def recent_hooks_block(recent: list) -> str:
 
 
 def write_script(idea: dict, cfg: dict, feedback: str = None, source_text: str = "",
-                 recent_hooks: list = None) -> dict:
+                 recent_hooks: list = None, lessons: str = "", log_problems=None,
+                 hook_bonus=None) -> dict:
     """Viết kịch bản 60-90 giây + 3 phương án câu mở đầu; máy chọn câu mạnh nhất (src/story.py).
 
     Tự kiểm số cảnh/số từ/số con số; hụt chuẩn thì trả lại cho LLM viết lại, cuối cùng
@@ -436,6 +437,9 @@ def write_script(idea: dict, cfg: dict, feedback: str = None, source_text: str =
     source_text: toàn văn bài nguồn. Trước đây Biên kịch chỉ thấy đoạn tóm tắt RSS
     vài dòng nên không có số mà dùng — kịch bản ra 1-2 con số, toàn câu chữ.
     recent_hooks: câu mở đầu của các video gần đây — hook mới phải khác (chống "theo mẫu").
+    lessons: bài học hệ thống TỰ HỌC được (src/learning.py: lỗi hay mắc, luật Du dạy, sở thích người
+    xem, kịch bản mẫu). log_problems(problems, stage): ghi lại lỗi mỗi lượt viết để lần sau học.
+    hook_bonus(text): điểm cộng cho một câu mở đầu theo những gì người xem đã cho thấy.
     """
     from . import claims, story
     ch = cfg["channel"]
@@ -500,7 +504,7 @@ Yêu cầu CỨNG về cấu trúc (video đổi cảnh mỗi 2-4 giây):
 - KHÔNG TỰ TÍNH số mới (hiệu số "tăng thêm 168", tỷ số "gấp 86 lần", số năm "sau 35 năm"): tóm tắt
   đã tính sẵn nhiều dòng "gấp N lần", "Sau N năm" — chỉ dùng đúng những con số đã có.
 - Mọi con số trong lời đọc phải ghi rõ lấy từ nguồn nào.
-{HOOK_GUIDE}{recent_block}""" + data_story
+{HOOK_GUIDE}{recent_block}""" + data_story + (lessons or "")
     if feedback:
         base_description += f"""
 
@@ -529,9 +533,15 @@ AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — 
         story.pick_hook(script, recent_openers, is_sourced=lambda text: not unsourced_numbers(
             {"scenes": [{"voice": text}]}, idea, source_text)
             and not claims.comparison_problems([text], summary)
-            and not (claims.data_table(str(summary or "")) and claims.WHY_HOOK.search(text)))
+            and not (claims.data_table(str(summary or "")) and claims.WHY_HOOK.search(text)),
+            bonus=hook_bonus)
         problems = script_problems(script, cfg, recent_openers)
         problems += content_problems(script, summary)
+        if problems and log_problems:
+            try:
+                log_problems(problems, "writer")
+            except Exception as exc:          # ghi bộ nhớ học lỗi không được làm hỏng việc viết
+                log.warning("Không ghi được lỗi vào bộ nhớ học: %s", exc)
         if best is None or len(problems) <= len(best_problems):
             best, best_problems = script, problems
         if not problems:
@@ -727,11 +737,13 @@ def fill_series_from_data(spec: list, data_series: list, world: dict = None) -> 
     return filled
 
 
-def design_scenes(idea: dict, scenes: list, cfg: dict) -> list:
+def design_scenes(idea: dict, scenes: list, cfg: dict, log_problems=None, lessons: str = "") -> list:
     """Agent Sản xuất: dịch từng cảnh kịch bản thành scene spec cho engine Manim.
 
     Luật sắt: mọi con số phải lấy từ kịch bản, không bịa. Tự kiểm độ đa dạng
     template (video toàn big_number = nội dung theo mẫu lặp lại -> cấm).
+    log_problems(problems, stage): ghi lỗi spec để lần sau học; lessons: lỗi spec hay mắc
+    (src/learning.producer_lessons).
     """
     import collections
 
@@ -821,7 +833,7 @@ Yêu cầu:
   đồ họa LIỀN NHAU, mỗi cảnh minh họa một ý của câu theo đúng thứ tự ý đó được đọc.
   Các cảnh ấy ghi CÙNG một "voice" nguyên văn cả câu: máy chỉ đọc câu đó MỘT lần
   rồi chia thời lượng cho các cảnh. Không chép "voice" của câu này sang cảnh của câu khác.
-- KHÔNG thêm template "intro" (video không còn thẻ intro: cảnh 1 là câu hook)."""
+- KHÔNG thêm template "intro" (video không còn thẻ intro: cảnh 1 là câu hook).""" + (lessons or "")
     expected = """JSON array, mỗi phần tử:
 {"template": "<tên template>", "seconds": <số>, "voice": "<lời đọc nguyên văn>", "params": {...}}"""
 
@@ -926,6 +938,11 @@ Yêu cầu:
         if not problems:
             return spec
         log.warning("Spec bị trả lại (lần %d): %s", attempt + 1, "; ".join(problems))
+        if log_problems:
+            try:
+                log_problems(problems, "spec")
+            except Exception as exc:
+                log.warning("Không ghi được lỗi spec vào bộ nhớ học: %s", exc)
         description = base_description + "\n\nBẢN TRƯỚC BỊ TRẢ LẠI vì: " + "; ".join(problems)
     spec = best
     # Hết lượt mà vẫn bịa số -> cảnh đó thành cảnh chữ, GIỮ NGUYÊN lời đọc. (Trước đây

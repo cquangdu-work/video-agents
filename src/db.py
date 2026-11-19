@@ -75,6 +75,16 @@ CREATE TABLE IF NOT EXISTS video_stats (   -- mỗi lần agent Phân tích đo 
     retention    TEXT,            -- JSON: [[vị trí 0..1, tỷ lệ còn xem], ...]
     engaged_views INTEGER         -- lượt xem QUA ĐƯỢC vài giây đầu (Shorts: phần còn lại là lướt đi)
 );
+CREATE TABLE IF NOT EXISTS learning_events (  -- bộ nhớ tự học (src/learning.py)
+    id        INTEGER PRIMARY KEY,
+    at        TEXT,
+    source    TEXT,       -- gate (cổng code bắt lỗi) | du (Du duyệt/loại/ghi chú) | outcome (kết quả kịch bản)
+    kind      TEXT,       -- loại: lỗi đọc bảng, hook "Vì sao", ... / approve, reject, note / verified, draft
+    stage     TEXT,       -- writer | final | spec | review
+    detail    TEXT,       -- câu ví dụ / ghi chú
+    idea_id   INTEGER,
+    script_id INTEGER
+);
 CREATE TABLE IF NOT EXISTS state (   -- ô nhớ nhỏ: vị trí đọc Telegram, v.v.
     key   TEXT PRIMARY KEY,
     value TEXT

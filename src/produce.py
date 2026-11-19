@@ -264,7 +264,12 @@ def main():
     # xuất được lấy số ở đó để vẽ biểu đồ
     idea = {"title": s["title"], "angle": s["angle"], "source_url": s["source_url"],
             "summary": s["summary"], "source_name": s["source_name"]}
-    spec = validate_spec(design_scenes(idea, scenes, cfg), cfg)
+    # TỰ HỌC (src/learning.py): lỗi spec (bịa số, cảnh đứng yên...) được ghi lại, và lần sau agent
+    # Sản xuất đọc "lỗi hay mắc" của chính nó trước khi dựng
+    from . import learning
+    remember = lambda problems, stage: learning.record_problems(con, problems, stage, s["idea_id"], s["id"])
+    spec = validate_spec(design_scenes(idea, scenes, cfg, log_problems=remember,
+                                       lessons=learning.producer_lessons(con)), cfg)
 
     SPEC_DIR.mkdir(parents=True, exist_ok=True)
     spec_path = SPEC_DIR / f"script_{s['id']}.yaml"
