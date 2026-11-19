@@ -225,6 +225,22 @@ class TestBuildStory(unittest.TestCase):
         st = web.build_story(spec, _timed(spec), "t4")["scenes"]
         self.assertEqual([s["style"] for s in st[1:]], [0, 1, 0])
 
+    def test_first_voiced_scene_is_the_hook_and_text_scenes_keep_the_chart(self):
+        # 19/11/2026: không còn thẻ intro -> cảnh có lời đầu tiên là cảnh mở đầu; cảnh chữ SAU khi biểu
+        # đồ chính đã vẽ thì giữ biểu đồ ở nửa dưới thay vì nền trống
+        chart = _spec()[3]
+        say = lambda v: {"template": "statement", "seconds": 3.0, "voice": v, "params": {"text": v}}
+        spec = [say("Câu mở đầu có 128 thuê bao."), say("Câu chữ trước biểu đồ."), dict(chart),
+                say("Câu chữ sau biểu đồ.")]
+        st = web.build_story(spec, _timed(spec), "t5")["scenes"]
+        self.assertEqual([bool(s.get("hook")) for s in st], [True, False, False, False])
+        self.assertNotIn("chart", st[1])                       # chưa vẽ gì: không có nền biểu đồ
+        self.assertEqual(st[3]["chart"]["mode"], "panel")
+        self.assertTrue(st[3]["compact"])
+        old = _spec()[:3]                                       # spec đời cũ còn intro: hook là cảnh sau intro
+        st = web.build_story(old, _timed(old), "t6")["scenes"]
+        self.assertEqual([bool(s.get("hook")) for s in st], [False, True, False])
+
     def test_unsupported_without_clip_renderer_raises(self):
         spec = _spec()
         with self.assertRaises(ValueError):

@@ -164,16 +164,24 @@ def fallback_statement(sc: dict):
             "params": {"text": text, "source": p.get("source", "")}}
 
 
+def intro_enabled(cfg: dict) -> bool:
+    """Có thẻ logo mở đầu không (config render.intro). Du chốt 19/11/2026: KHÔNG — giây đầu tiên
+    phải là câu mở đầu; logo thành dấu nhỏ ở góc (render-web/src/Story.tsx)."""
+    return bool((cfg.get("render") or {}).get("intro", False))
+
+
 def validate_spec(raw: list, cfg: dict) -> list:
-    """Kiểm từng cảnh, kẹp thời lượng về nhịp 2-4s, tự thêm intro đầu video.
+    """Kiểm từng cảnh, kẹp thời lượng về nhịp 2-4s, thêm intro đầu video nếu config bật.
     Tự sửa những thứ LLM hay quên: số lẻ thiếu 'decimals' (38.4 hiện thành 38),
     'percent' ngoài 0-100, và xoay vòng kiểu bố cục của các cảnh chữ. Cảnh hỏng không cứu
     được: có lời đọc thì thành cảnh chữ giữ lời, không có lời thì bỏ."""
     pacing = cfg.get("pacing", {"scene_seconds_min": 2, "scene_seconds_max": 4})
     lo, hi = pacing["scene_seconds_min"], pacing["scene_seconds_max"]
-    ok = [{"template": "intro", "seconds": 1.2, "params": {}}]
+    ok = [{"template": "intro", "seconds": 1.2, "params": {}}] if intro_enabled(cfg) else []
     statements = 0
     for i, sc in enumerate(raw):
+        if sc.get("template") == "intro":                # intro do code quyết, không do model
+            continue
         good = _check_scene(i, sc)
         if good is None:
             good = fallback_statement(sc)

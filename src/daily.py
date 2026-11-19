@@ -72,6 +72,16 @@ def videos_made_today(con, cfg: dict, now: datetime = None) -> int:
                        (since,)).fetchone()[0]
 
 
+def max_script_words(cfg: dict) -> float:
+    """Trần số từ của khổ video hiện tại (channel.video_seconds_max x tốc độ đọc, dư 5% như cổng
+    chuẩn của Biên kịch). Cấu hình thiếu (test cũ) -> không giới hạn."""
+    ch = cfg.get("channel") or {}
+    if "video_seconds_max" not in ch:
+        return float("inf")
+    wps = float((cfg.get("pacing") or {}).get("words_per_second", 3.4))
+    return 1.05 * float(ch["video_seconds_max"]) * wps
+
+
 def script_words(body: str) -> int:
     """Tổng số từ lời đọc của một kịch bản (cột scripts.body là YAML danh sách cảnh)."""
     try:
@@ -141,6 +151,7 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     from .sources.datatable import topic_family
     max_age = cfg["daily"].get("max_script_age_days", 3)
     min_words = cfg["daily"].get("min_script_words", 150)
+    max_words = max_script_words(cfg)
     min_numbers = cfg["daily"].get("min_script_numbers", 4)
     since = ((now or datetime.now(timezone.utc)) - timedelta(days=max_age)).isoformat(timespec="seconds")
     recent = recent_families(con)
@@ -188,8 +199,11 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
             score = 0.0
         family = topic_family(r["source_name"])
         out.append({"id": r["id"], "score": score, "has_final": final_path(r["id"]).exists(),
-                    "family": family, "streak": streak(family, recent)})
-    return sorted(out, key=lambda c: (c["streak"], not c["has_final"], -c["score"], -c["id"]))
+                    "family": family, "streak": streak(family, recent),
+                    "long": words > max_words})
+    # Kịch bản DÀI hơn độ dài mới (viết trước 19/11 cho video 60-90 giây) xếp sau cùng: chỉ dựng khi
+    # không còn kịch bản nào đúng khổ 45-60 giây (assemble đọc nhanh tối đa 1,12 lần vẫn ra ~80 giây)
+    return sorted(out, key=lambda c: (c["long"], c["streak"], not c["has_final"], -c["score"], -c["id"]))
 
 
 def _spec_usable(path: Path) -> bool:

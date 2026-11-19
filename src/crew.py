@@ -145,8 +145,8 @@ def _formula_block() -> str:
 CÔNG THỨC rút từ video ăn khách của các kênh cùng mảng (tham khảo ý, KHÔNG chép khuôn chữ;
 LUẬT HOOK bên dưới ưu tiên hơn):
 - Luật viết hook: {'; '.join(rules) or '(không có)'}
-- Độ dài hay thắng: {f.get('length_seconds', {})}
 """
+        # (Bỏ dòng "độ dài hay thắng" của đối thủ từ 19/11: độ dài kênh do Du chốt, 45-60 giây.)
     insights = load_learned().get("insights") or []
     if insights:
         block += ("\nBÀI HỌC TỪ SỐ LIỆU THẬT CỦA CHÍNH KÊNH NÀY (ưu tiên hơn công thức đối thủ):\n"
@@ -155,8 +155,8 @@ LUẬT HOOK bên dưới ưu tiên hơn):
 
 
 # ------------------------------------------------------------------ Biên kịch
-# Khoảng chấp nhận: video đổi cảnh 2-4s -> 60-90s cần cỡ 15-24 cảnh.
-SCRIPT_MIN_SCENES, SCRIPT_MAX_SCENES = 12, 28
+# Khoảng chấp nhận: video đổi cảnh 2-4s -> 45-60s (Du chốt 19/11/2026) cần cỡ 12-19 cảnh.
+SCRIPT_MIN_SCENES, SCRIPT_MAX_SCENES = 10, 22
 WORDS_PER_SECOND = 3.4   # ĐO THẬT 11/2026 trên 3 video (giọng Gemini, tiếng Việt, tính cả
                          # nghỉ giữa câu): 3,2-3,5 từ/giây. Số cũ 2,7 làm video hụt ~20%.
 
@@ -169,6 +169,12 @@ def word_budget(cfg: dict) -> tuple:
     """(ít nhất, nhiều nhất) số từ lời đọc để video dài đúng video_seconds_min..max."""
     ch, wps = cfg["channel"], words_per_second(cfg)
     return int(ch["video_seconds_min"] * wps), int(ch["video_seconds_max"] * wps)
+
+
+def scene_budget(cfg: dict) -> tuple:
+    """(ít nhất, nhiều nhất) số cảnh để Biên kịch nhắm tới: mỗi cảnh một câu ~11-12 từ."""
+    lo_words, hi_words = word_budget(cfg)
+    return max(SCRIPT_MIN_SCENES, int(lo_words / 12)), min(SCRIPT_MAX_SCENES, int(hi_words / 11) + 1)
 
 
 SCRIPT_MIN_NUMBERS = 4   # kênh "Thế giới qua con số" — lời đọc ít số là hỏng từ gốc
@@ -248,21 +254,24 @@ def as_script(obj) -> dict:
     return obj
 
 
-MAX_SPOKEN_YEARS = 5     # lời đọc nhắc quá nhiều mốc năm = đang đọc bảng số, không kể chuyện
+MAX_SPOKEN_YEARS = 4     # lời đọc nhắc quá nhiều mốc năm = đang đọc bảng số, không kể chuyện
+                         # (video 45-60 giây từ 19/11: tối đa 4 mốc; trước là 5 cho 60-90 giây)
 
-DATA_STORY = """
+DATA_STORY = f"""
 ĐÂY LÀ Ý TƯỞNG TỪ BẢNG SỐ LIỆU (không phải bài báo) — phần này ƯU TIÊN hơn dàn bài chung:
-- Video sẽ có biểu đồ (đường, hoặc cuộc đua xếp hạng nhiều nước) vẽ TOÀN BỘ chuỗi năm. Vì vậy
-  lời đọc KHÔNG đọc lần lượt từng mốc năm ("năm 1995 là..., năm 2000 là...") — người xem sẽ
-  lướt đi ngay.
-- Kể thành CÂU CHUYỆN: hook là điều bất ngờ nhất trong bảng (ví dụ "Việt Nam hôm nay mới bằng
-  Hàn Quốc năm X" — chỉ khi bảng có dòng "tương đương" ghi đúng năm X —, "tăng gấp N lần", "từ bét
-  bảng lên hạng 7"); rồi điểm xuất phát, hiện tại,
-  khoảng cách. Bảng có XẾP HẠNG nhiều nước thì kể ai vượt ai, Việt Nam và Hàn Quốc đứng thứ
-  mấy lúc đầu và bây giờ (các dòng "hạng ... vượt ..." đã tính sẵn trong bảng).
-- Chỉ dùng 5-8 con số đắt nhất, tối đa 4 mốc năm khác nhau trong toàn bài.
-- Giữa các con số là phần giải thích Ý NGHĨA (chênh lệch đó nói gì về đời sống, kinh tế) —
-  phần giải thích KHÔNG được thêm con số nào ngoài bảng, không khuyên người xem làm gì.
+- Video sẽ có biểu đồ (đường, cuộc đua xếp hạng, bản đồ) vẽ TOÀN BỘ chuỗi năm. Vì vậy lời đọc
+  KHÔNG đọc lần lượt từng mốc năm ("năm 1995 là..., năm 2000 là...") — người xem sẽ lướt đi ngay.
+- Kể thành CÂU CHUYỆN dựng từ mục "Điểm nhấn" trong tóm tắt (máy đã tính sẵn từ bảng: năm hai
+  nước vượt nhau, khoảng cách đầu–cuối, đỉnh, giai đoạn thay đổi nhanh nhất, mốc lớn, leo hạng):
+  hook là điều bất ngờ nhất (ví dụ "Việt Nam hôm nay mới bằng Hàn Quốc năm X" — chỉ khi bảng có dòng
+  "tương đương" ghi đúng năm X —, "tăng gấp N lần", "từ bét bảng lên hạng 7"), chứng minh ngay, rồi
+  2-3 điểm nhấn. Bảng có XẾP HẠNG nhiều nước thì kể ai vượt ai (các dòng "hạng ... vượt ..." đã tính
+  sẵn).
+- Chỉ dùng 4-7 con số đắt nhất, tối đa {MAX_SPOKEN_YEARS} mốc năm khác nhau trong toàn bài.
+- Câu nói Ý NGHĨA của con số: dùng mục "Cách nói dễ hình dung" nếu có ("cứ 5 người thì 2 người
+  sống ở thành phố"). KHÔNG thêm con số ngoài bảng, KHÔNG nêu nguyên nhân hay bối cảnh lịch sử
+  (chính sách, cải cách, mở cửa, sự kiện...) — bảng số không nói nguyên nhân, máy sẽ chặn. Không
+  khuyên người xem làm gì.
 - Đây là số liệu thống kê đã ghi nhận, KHÔNG gọi là "dự báo"."""
 
 
@@ -276,9 +285,11 @@ MAX_NUMBER_RUN = 5      # câu có số đứng liền nhau tối đa (#16 đọ
                         # 5 vẫn được: kể theo dòng thời gian như Voyager 1977-1990-2012 đọc tự nhiên)
 
 
-def script_problems(script: dict, cfg: dict, recent_openers=()) -> list:
+def script_problems(script: dict, cfg: dict, recent_openers=(), include_soft: bool = True) -> list:
     """Kịch bản hụt chuẩn ở đâu -> danh sách lý do (rỗng = đạt). Dùng chung cho vòng
-    viết lại của Biên kịch và cho main (kịch bản còn lỗi thì KHÔNG được đem đi dựng)."""
+    viết lại của Biên kịch và cho main (kịch bản còn lỗi thì KHÔNG được đem đi dựng).
+    include_soft=False (cổng cuối của main): bỏ các lỗi chỉ để NHẮC khi viết lại (câu đệm, lùi về
+    quá khứ, câu kết chưa quay lại hook) — chúng làm video kém đi nhưng không đáng bỏ cả kịch bản."""
     from . import story
     lo_words, hi_words = word_budget(cfg)
     n, words, numbers = _script_stats(script)
@@ -315,6 +326,13 @@ def script_problems(script: dict, cfg: dict, recent_openers=()) -> list:
         if story.opener(hook) in set(recent_openers):
             problems.append(f"câu mở đầu lặp cách mở của video gần đây (“{story.opener(hook)}…”)"
                             " — video theo mẫu")
+    hard, soft = story.opening_problems(script)
+    problems += hard
+    if include_soft:
+        problems += soft
+        ending = story.ending_problem(script)
+        if ending:
+            problems.append(ending)
     return problems
 
 
@@ -358,6 +376,7 @@ def write_script(idea: dict, cfg: dict, feedback: str = None, source_text: str =
     from . import claims, story
     ch = cfg["channel"]
     lo_words, hi_words = word_budget(cfg)
+    lo_scenes, hi_scenes = scene_budget(cfg)
     recent = [h for h in (recent_hooks or []) if h]
     recent_block = recent_hooks_block(recent)
     recent_openers = [story.opener(h) for h in recent]
@@ -379,23 +398,29 @@ Luật chính sách (bắt buộc tuân thủ): {cfg['policy_rules']}
 {_formula_block()}
 
 Yêu cầu CỨNG về cấu trúc (video đổi cảnh mỗi 2-4 giây):
-- Chia thành 16-22 CẢNH. Mỗi cảnh đúng 1 câu lời đọc NGẮN (8-14 từ). Đếm từ trước khi trả lời:
-  vượt ngân sách từ là bị trả lại (bản thử 12/11 hay viết lố 330-360 từ).
-- Đây là KỂ CHUYỆN, không phải đọc bảng số. Dàn bài:
+- Chia thành {lo_scenes}-{hi_scenes} CẢNH. Mỗi cảnh đúng 1 câu lời đọc NGẮN (8-14 từ). Đếm từ trước
+  khi trả lời: vượt ngân sách từ là bị trả lại.
+- Đây là KỂ CHUYỆN NGẮN, không phải đọc bảng số. Số liệu thật của kênh: người xem bỏ đi nhiều nhất
+  trong 15 GIÂY ĐẦU, đúng ở câu định nghĩa ("Chỉ số này đo lường…"), câu đệm chung chung ("Chiếc
+  điện thoại trong tay bạn là…") và câu lùi về năm đầu bảng ("Nhìn lại năm 1960…"). Dàn bài:
   1. HOOK (cảnh 1) — xem luật hook bên dưới.
-  2. ĐẶT VẤN ĐỀ (2-3 cảnh): vì sao người xem Việt Nam nên quan tâm, gắn với đời sống của họ.
-  3. 3-4 NHỊP, mỗi nhịp 3-5 cảnh: MỘT con số đắt -> câu nói con số đó NGHĨA LÀ GÌ (so với thứ
-     quen thuộc, hoặc hệ quả với đời sống) -> câu dẫn sang nhịp sau. Không để quá 3 câu có số
-     đứng liền nhau — người xem sẽ lướt đi.
-  4. NGÃ RẼ (2-3 cảnh): điều ngược với điều người ta vẫn nghĩ (phải có trong nguồn).
-  5. KẾT (1-2 cảnh): quay lại ý của hook với góc nhìn mới, hoặc một câu hỏi mở để người xem tự
-     nghĩ. Không kêu gọi like/đăng ký/bình luận.
+  2. CHỨNG MINH NGAY (cảnh 2-4): con số chứng minh hook, nói thẳng. CẤM ở đây: câu định nghĩa chỉ
+     số, câu đệm chung chung, câu lùi về quá khứ chỉ để kể "điểm xuất phát". Không để hai câu liền
+     nhau không có con số (máy kiểm).
+  3. 2-3 NHỊP, mỗi nhịp 2-3 cảnh: MỘT con số đắt (ưu tiên mục "Điểm nhấn" nếu tóm tắt có) -> câu
+     nói con số đó NGHĨA LÀ GÌ (ưu tiên mục "Cách nói dễ hình dung", hoặc so với thứ quen thuộc có
+     trong nguồn). Không để quá 3 câu có số đứng liền nhau.
+  4. NGÃ RẼ (1-2 cảnh): điều ngược với điều người ta vẫn nghĩ (phải có trong nguồn).
+  5. KẾT (1 cảnh): quay lại ĐÚNG con số hoặc đối tượng của hook với góc nhìn mới, để người xem muốn
+     xem lại từ đầu (máy kiểm). Không kêu gọi like/đăng ký/bình luận.
+- KHÔNG nêu nguyên nhân hay bối cảnh lịch sử (chính sách, cải cách, mở cửa, sự kiện…) mà nguồn
+  không nói rõ — đó là bịa, máy sẽ chặn.
 - VĂN NÓI: câu ngắn, tự nhiên như kể cho bạn nghe — NHƯNG mọi con số vẫn viết bằng CHỮ SỐ
   ("73%", "năm 2018", "8,9 tuổi"), không viết "bảy mươi ba phần trăm": giọng đọc tự đọc thành
   lời, còn máy cần chữ số để đối chiếu nguồn. Không để sót chữ Hàn/Anh chưa dịch. CẤM câu đệm kiểu báo cáo: "Số liệu cho thấy",
   "Tính toán cho thấy", "Điều này có nghĩa là", "Cụ thể,", "Theo số liệu", "Nhìn rộng ra".
 - Mỗi cảnh kèm mô tả hình (biểu đồ gì, dữ liệu gì) + nguồn dữ liệu của cảnh đó.
-- GIÀU SỐ LIỆU nhưng CHỌN LỌC: 6-9 con số đắt nhất lấy từ nguồn (kênh tên là "{ch['name']}" —
+- GIÀU SỐ LIỆU nhưng CHỌN LỌC: 5-7 con số đắt nhất lấy từ nguồn (kênh tên là "{ch['name']}" —
   thiếu số là hỏng, nhưng đọc tràn lan cũng hỏng). LUÔN viết số bằng CHỮ SỐ ("8.030", "38%",
   "15 tỷ"), không viết bằng chữ ("tám nghìn").
 - CẨN THẬN ĐƠN VỊ khi nguồn là tiếng Hàn/Anh: 만 = 10.000 (54만 = 540.000),
@@ -435,6 +460,8 @@ AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — 
         # Câu so sánh sai với bảng số ("A năm X mới bằng B năm Y" mà hai mức không ngang nhau)
         problems += [f"so sánh sai — {p}" for p in
                      claims.script_comparison_problems(script, idea.get("summary"))]
+        # Câu nêu nguyên nhân/bối cảnh mà bảng số không nói ("Sự mở cửa đã thu hút…", ca thật #23)
+        problems += claims.script_cause_claims(script, idea.get("summary"))
         if best is None or len(problems) <= len(best_problems):
             best, best_problems = script, problems
         if not problems:
@@ -444,9 +471,10 @@ AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — 
         description = base_description + f"""
 
 BẢN NHÁP TRƯỚC BỊ TRẢ LẠI vì: {'; '.join(problems)}.
-Phải đạt 16-22 cảnh, {lo_words}-{hi_words} từ, ÍT NHẤT 6 con số cụ thể viết bằng CHỮ SỐ
-(lấy từ TRÍCH BÀI NGUỒN), nhắc tối đa {MAX_SPOKEN_YEARS - 1} mốc năm khác nhau, không quá
-{MAX_NUMBER_RUN} câu có số đứng liền nhau, và hook đúng LUẬT HOOK.
+Phải đạt {lo_scenes}-{hi_scenes} cảnh, {lo_words}-{hi_words} từ, ÍT NHẤT 5 con số cụ thể viết bằng
+CHỮ SỐ (lấy từ TRÍCH BÀI NGUỒN), nhắc tối đa {MAX_SPOKEN_YEARS} mốc năm khác nhau, không quá
+{MAX_NUMBER_RUN} câu có số đứng liền nhau, hook đúng LUẬT HOOK, 15 giây đầu không có câu định nghĩa
+hay hai câu liền nhau không có số, câu kết quay lại con số của hook.
 Tách mỗi ý thành một cảnh riêng, đừng gộp."""
     log.warning("Vẫn hụt chuẩn sau %d lần viết — giữ bản ít lỗi nhất (%s)", tries,
                 "; ".join(best_problems))
@@ -714,13 +742,16 @@ Yêu cầu:
   Từ 3 đối tượng cùng đơn vị trở lên -> "bar_chart".
 - "seconds" mỗi cảnh thường {pacing['scene_seconds_min']}-{pacing['scene_seconds_max']} giây; cảnh gộp hai câu thì dài hơn.
 - "title" ngắn <= 9 từ, tiếng Việt; "source" ghi nguồn của cảnh đó.
+- CẢNH ĐẦU TIÊN (câu hook): "title" (hoặc "text" nếu là statement) là chính câu hook RÚT GỌN <= 9 từ,
+  giữ nguyên con số/so sánh của hook — chữ này hiện đủ ngay khung hình đầu tiên, trước cả giọng đọc
+  (người xem quyết định ở lại hay lướt đi trong 1-2 giây đầu).
 - Mỗi cảnh có trường "voice": lời đọc NGUYÊN VĂN của (các) cảnh kịch bản tương ứng,
   không sửa chữ; cảnh gộp thì nối các câu lại.
 - Câu lời DÀI (đọc lâu hơn {pacing['scene_seconds_max']} giây) thì chia thành nhiều cảnh
   đồ họa LIỀN NHAU, mỗi cảnh minh họa một ý của câu theo đúng thứ tự ý đó được đọc.
   Các cảnh ấy ghi CÙNG một "voice" nguyên văn cả câu: máy chỉ đọc câu đó MỘT lần
   rồi chia thời lượng cho các cảnh. Không chép "voice" của câu này sang cảnh của câu khác.
-- KHÔNG thêm template "intro" (engine tự thêm)."""
+- KHÔNG thêm template "intro" (video không còn thẻ intro: cảnh 1 là câu hook)."""
     expected = """JSON array, mỗi phần tử:
 {"template": "<tên template>", "seconds": <số>, "voice": "<lời đọc nguyên văn>", "params": {...}}"""
 
@@ -848,6 +879,10 @@ SENTENCE_KINDS = {
     "sai_so": "con số, năm hoặc thứ hạng gán SAI (nguồn ghi khác)",
     "sai_so_sanh": "so sánh/xếp hạng (bằng, ngang, hơn, kém, vượt, gấp) TRÁI với số trong nguồn",
     "sai_xu_huong": "mô tả xu hướng (tăng/giảm, liên tục, đều đặn, đỉnh) TRÁI với dãy số trong nguồn",
+    # 19/11: model tự thêm bối cảnh ("Đó là giai đoạn khởi đầu của các tập đoàn công nghiệp lớn",
+    # kịch bản #23) — chỉ loại câu khẳng định nguyên nhân/sự kiện cụ thể, KHÔNG phải câu diễn giải
+    "nguyen_nhan_ngoai_nguon": "câu khẳng định NGUYÊN NHÂN, sự kiện lịch sử hoặc bối cảnh cụ thể mà"
+                               " nguồn KHÔNG nói tới",
 }
 
 
@@ -900,7 +935,8 @@ Nguồn:
 {source_text[:6000]}
 ---
 
-Câu chỉ SAI khi nguồn có số liệu/thông tin TRÁI với câu (số khác, so sánh ngược, xu hướng ngược).
+Câu chỉ SAI khi nguồn có số liệu/thông tin TRÁI với câu (số khác, so sánh ngược, xu hướng ngược),
+hoặc câu khẳng định một NGUYÊN NHÂN / sự kiện lịch sử cụ thể mà nguồn hoàn toàn không nhắc tới.
 Câu nói gọn, làm tròn hợp lý, hoặc diễn giải ý nghĩa mà không trái nguồn thì KHÔNG sai.""",
             expected_output='JSON object: {"results": [{"scene": <số cảnh>, "wrong": true/false, "why": "..."}]}')
         res = extract_json(out)
@@ -951,7 +987,7 @@ KHÔNG báo: câu dẫn chuyện, câu hỏi gợi tò mò, câu giải thích �
 nhưng nói gọn/làm tròn. Không có câu sai thì "sentence_issues" là mảng rỗng.""",
         expected_output="""JSON object:
 {"verdicts": [{"claim": "...", "ok": true/false, "note": "<giải thích ngắn>"}],
- "sentence_issues": [{"scene": <số cảnh>, "kind": "sai_so|sai_so_sanh|sai_xu_huong",
+ "sentence_issues": [{"scene": <số cảnh>, "kind": "sai_so|sai_so_sanh|sai_xu_huong|nguyen_nhan_ngoai_nguon",
                       "evidence": "<đoạn nguồn chứng minh câu sai>", "note": "<sai chỗ nào>"}]}""",
     )
     try:

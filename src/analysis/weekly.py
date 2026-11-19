@@ -126,6 +126,42 @@ def scene_timeline(script_id: int) -> list:
     return out
 
 
+def _watch_at(pts: list, t: float) -> float:
+    """Tỷ lệ còn xem ở giây t (nội suy tuyến tính trên đường giữ chân [(giây, tỷ lệ)])."""
+    if t <= pts[0][0]:
+        return pts[0][1]
+    for (t0, w0), (t1, w1) in zip(pts, pts[1:]):
+        if t0 <= t <= t1:
+            return w0 + (w1 - w0) * ((t - t0) / (t1 - t0) if t1 > t0 else 0)
+    return pts[-1][1]
+
+
+def scene_losses(retention: list, timeline: list) -> list:
+    """[(template, số giây, tỷ lệ người xem mất đi)] cho từng cảnh, bỏ 3 giây đầu (chuyện của hook).
+    Để trả lời bằng số: cảnh CHỮ có đuổi người xem nhiều hơn cảnh biểu đồ không (19/11/2026)."""
+    if len(retention) < 5 or not timeline:
+        return []
+    total = timeline[-1][1]
+    pts = sorted((r * total, w) for r, w in retention)
+    out = []
+    for a, b, tpl, _ in timeline:
+        a = max(a, HOOK_SECONDS)
+        if b - a >= 0.5:
+            out.append((tpl, b - a, _watch_at(pts, a) - _watch_at(pts, b)))
+    return out
+
+
+def loss_by_template(rows: list) -> dict:
+    """{template: điểm % người xem mất trung bình mỗi 10 giây cảnh đó chiếu}, gộp mọi video có đường
+    giữ chân; loại cảnh tổng cộng dưới 10 giây thì bỏ (quá ít để nói gì)."""
+    agg = {}
+    for r in rows:
+        for tpl, secs, drop in r.get("losses") or []:
+            s, d = agg.get(tpl, (0.0, 0.0))
+            agg[tpl] = (s + secs, d + drop)
+    return {tpl: round(100 * d / s * 10, 1) for tpl, (s, d) in agg.items() if s >= 10}
+
+
 def retention_findings(retention: list, timeline: list):
     """Từ đường giữ chân -> (a) % người còn xem sau 3 giây đầu (đo câu hook),
     (b) chỗ rớt mạnh nhất SAU đoạn hook và nó rơi vào cảnh nào."""
@@ -188,7 +224,9 @@ def fetch_and_store(con, videos: list, now: datetime) -> str:
                          "comments": raw.get("comments"), "shares": raw.get("shares"),
                          "subs_gained": raw.get("subscribersGained"),
                          "avg_view_sec": raw.get("averageViewDuration"),
-                         "avg_view_pct": raw.get("averageViewPercentage")}
+                         "avg_view_pct": raw.get("averageViewPercentage"),
+                         # Shorts: lượt xem qua được vài giây đầu — phần còn lại là lướt đi ngay
+                         "engaged_views": raw.get("engagedViews")}
                 try:
                     retention = youtube.analytics_retention(v["youtube_id"], start, today, token)
                 except Exception as exc:
@@ -234,8 +272,13 @@ def build_rows(con, videos: list, now: datetime) -> list:
             continue
         row = dict(v, age_days=age, source=st["source"], views=st["views"], likes=st["likes"],
                    avg_view_pct=st["avg_view_pct"], avg_view_sec=st["avg_view_sec"])
+        engaged = st["engaged_views"] if "engaged_views" in st.keys() else None
+        row["engaged_pct"] = (round(100 * engaged / st["views"]) if engaged is not None and st["views"]
+                              else None)
         retention = json.loads(st["retention"]) if st["retention"] else []
-        row["retention"] = retention_findings(retention, scene_timeline(v["script_id"]))
+        timeline = scene_timeline(v["script_id"])
+        row["retention"] = retention_findings(retention, timeline)
+        row["losses"] = scene_losses(retention, timeline)
         rows.append(row)
     return rows
 
@@ -243,6 +286,8 @@ def build_rows(con, videos: list, now: datetime) -> list:
 # ------------------------------------------------------------------ Bài học
 def _row_line(r: dict) -> str:
     bits = [f"{r['views']:,} xem".replace(",", ".") if r.get("views") is not None else "? xem"]
+    if r.get("engaged_pct") is not None:
+        bits.append(f"qua vài giây đầu {r['engaged_pct']}%")
     if r.get("avg_view_pct") is not None:
         bits.append(f"xem TB {r['avg_view_pct']:.0f}%")
     f = r.get("retention")
@@ -267,6 +312,10 @@ def synthesize_insights(rows: list, rejected_notes: list, cfg: dict) -> list:
             line += f"\n    lời ở chỗ rớt: \"{f['drop_voice'][:120]}\""
         listing.append("- " + line)
     notes = "\n".join(f"- {n}" for n in rejected_notes) or "(không có)"
+    losses = loss_by_template(rows)
+    if losses:
+        listing.append("- Người xem mất đi theo loại cảnh (điểm % mỗi 10 giây): " + ", ".join(
+            f"{tpl} {v}" for tpl, v in sorted(losses.items(), key=lambda kv: -kv[1])))
     out = _run_single_task(
         role="Nhà phân tích số liệu kênh video ngắn",
         goal="Rút bài học dùng được ngay cho người viết kịch bản, không suy diễn quá dữ liệu",
@@ -298,6 +347,11 @@ def format_report(rows: list, total_published: int, source: str, weight_notes: l
         lines.append(_row_line(r))
     if not rows:
         lines.append("Chưa có video nào đủ số liệu để phân tích.")
+    losses = loss_by_template(rows)
+    if losses:
+        lines += ["", "📉 Người xem mất đi theo loại cảnh (điểm % mỗi 10 giây cảnh chiếu, cao = đuổi người xem):",
+                  "  " + " · ".join(f"{tpl} {v:.1f}".replace(".", ",")
+                                    for tpl, v in sorted(losses.items(), key=lambda kv: -kv[1]))]
     lines += ["", "⚖️ Trọng số Biên tập:"] + [f"  {n}" for n in weight_notes]
     if insights:
         lines += ["", "💡 Bài học (đã đưa cho agent Biên kịch):"] + [f"  • {i}" for i in insights]

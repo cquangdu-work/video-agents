@@ -17,8 +17,9 @@ from datetime import date
 
 import requests
 
-from .datatable import (WB_SOURCE, lower_first, parse_series, parse_vn_number,  # noqa: F401
-                        race_lines, race_years, ranking, spoken_scale, vn_number)
+from .datatable import (WB_SOURCE, beats_lines, lower_first, parse_series,  # noqa: F401
+                        parse_vn_number, race_lines, race_years, ranking, relatable_line,
+                        spoken_scale, story_beats, trim_leading, vn_number)
 
 log = logging.getLogger(__name__)
 
@@ -135,7 +136,7 @@ def build_item(ind: dict, countries: list, series: dict):
     Trả về None nếu số liệu quá mỏng để kể thành chuyện."""
     ca, cb = countries[:2]
     (a, name_a), (b, name_b) = (ca["iso3"], ca["name"]), (cb["iso3"], cb["name"])
-    sa, sb = series.get(a, []), series.get(b, [])
+    sa, sb = trim_leading(series.get(a, []), series.get(b, []))
     if len(sa) < 5 or len(sb) < 5:
         return None
     unit = ind.get("unit", "")
@@ -158,6 +159,10 @@ def build_item(ind: dict, countries: list, series: dict):
     if match:
         lines.append(f"{name_a} năm {ya1} ({val(va1)}) tương đương {name_b} năm {match[0]}"
                      f" ({val(match[1])}) — cách nhau {ya1 - match[0]} năm.")
+    relate = relatable_line([(name_a, va1), (name_b, vb1)], unit, ind)
+    if relate:
+        lines.append(relate)
+    lines += beats_lines(story_beats({name_a: sa, name_b: sb}, [name_a, name_b], unit))
     # Bảng theo mốc 5 năm (kèm năm đầu và năm cuối) — đủ điểm để vẽ biểu đồ đường
     for name, s in ((name_a, sa), (name_b, sb)):
         picks = [p for i, p in enumerate(s) if p[0] % 5 == 0 or i in (0, len(s) - 1)]
@@ -186,7 +191,11 @@ def build_race_item(ind: dict, countries: list, series: dict, focus: list, step:
     named = {names[c]: series[c] for c in series}
     lines = [f"Chỉ số: {ind['name']} ({unit}). Nguồn: World Bank Open Data, mã {ind['code']}."
              f" Cuộc đua giữa {len(series)} nền kinh tế châu Á, từ {y0} đến {y1}."]
-    lines += race_lines(named, years, [names[c] for c in focus if c in series])
+    focus_names = [names[c] for c in focus if c in series]
+    relate = relatable_line([(n, dict(named[n]).get(y1)) for n in focus_names], unit, ind)
+    if relate:
+        lines.append(relate)
+    lines += race_lines(named, years, focus_names, unit)
     locs = "-".join(c["iso2"] for c in countries if c["iso3"] in series)
     return {
         "title": f"Cuộc đua {lower_first(ind['name'])}: {len(series)} nền kinh tế châu Á"
@@ -292,6 +301,12 @@ def build_world_item(ind: dict, year: int, table: dict, names: dict, focus: list
     if match and match[0] < year:
         lines.append(f"{names[a]} năm {year} ({val(table[a])}) tương đương {names[b]} năm {match[0]}"
                      f" ({val(match[1])}) — cách nhau {year - match[0]} năm.")
+    relate = relatable_line([(names[c], table[c]) for c in focus if c in table], unit, ind)
+    if relate:
+        lines.append(relate)
+    hist_named = {names[c]: history[c] for c in focus if c in names and len(history.get(c) or []) >= 2}
+    lines += beats_lines(story_beats(hist_named, [names[c] for c in focus if names.get(c) in hist_named],
+                                     unit))
     # chuỗi theo năm -> biểu đồ đường (các nước focus, rồi chuỗi thêm như "Thế giới")
     series = [(names[c], history.get(c) or []) for c in focus] + list((extra_series or {}).items())
     for label, s in series:

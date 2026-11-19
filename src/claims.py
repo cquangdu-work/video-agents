@@ -196,6 +196,39 @@ def comparison_problems(texts, summary: str) -> list:
     return out
 
 
+# Câu nêu NGUYÊN NHÂN / BỐI CẢNH. Bảng số (World Bank, OWID, KOSIS) chỉ có con số, không có nguyên
+# nhân -> câu kiểu này trong kịch bản từ bảng số là model tự thêm. Ca thật kịch bản #23 (video #6):
+# "Sự mở cửa đã thu hút mạnh mẽ các dự án quốc tế lớn" — không có trong nguồn, và là chỗ người xem
+# bỏ đi. Chỉ bắt những cụm gán nguyên nhân RÕ RÀNG (chính sách, cải cách, mở cửa...) cho khỏi chặn oan.
+CAUSE = re.compile(r"\b(?:nhờ\s+(?:vào|có|chính\s+sách)|chính\s+sách|cải\s+cách|đổi\s+mới|mở\s+cửa|"
+                   r"là\s+kết\s+quả\s+của|xuất\s+phát\s+từ|bởi\s+vì|nguyên\s+nhân|"
+                   r"do\s+(?:chính\s+phủ|nhà\s+nước|chính\s+sách|tác\s+động|ảnh\s+hưởng))\b", re.I)
+
+
+def cause_claims(texts, summary: str) -> list:
+    """Câu khẳng định nguyên nhân/bối cảnh trong kịch bản từ BẢNG SỐ mà tóm tắt không nói -> lý do.
+    Câu hỏi ("Vì sao…?") không khẳng định gì nên bỏ qua; ý tưởng bài báo (không có bảng) không soát
+    ở đây — bài báo có thể nói nguyên nhân, agent Kiểm chứng đối chiếu."""
+    summary = str(summary or "")
+    if not data_table(summary):
+        return []
+    out = []
+    for text in texts:
+        text = " ".join(str(text or "").split())
+        if not text or text.endswith("?"):
+            continue
+        m = CAUSE.search(text)
+        if m and m.group(0).lower() not in summary.lower():
+            out.append(f"câu “{_short(text)}” nêu nguyên nhân/bối cảnh (“{m.group(0)}”) mà bảng số"
+                       " không nói — bỏ, thay bằng điểm nhấn hoặc cách nói dễ hình dung có trong tóm tắt")
+    return out
+
+
+def script_cause_claims(script: dict, summary: str) -> list:
+    return cause_claims([s.get("voice", "") for s in script.get("scenes") or [] if isinstance(s, dict)],
+                        summary)
+
+
 def script_comparison_problems(script: dict, summary: str) -> list:
     """comparison_problems trên lời đọc của mọi cảnh trong một kịch bản."""
     return comparison_problems([s.get("voice", "") for s in script.get("scenes") or []

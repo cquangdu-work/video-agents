@@ -244,6 +244,10 @@ def main():
 
     spec_path = ROOT / "data" / "specs" / f"script_{args.script_id}.yaml"
     spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+    from .main import load_config
+    cfg = load_config()
+    # Intro do produce quyết lúc sinh spec (render.intro). KHÔNG bỏ intro của spec cũ ở đây: giọng
+    # trong bộ đệm gắn với SỐ THỨ TỰ cảnh (v_01.wav...) -> bỏ một cảnh là câu sau dùng nhầm giọng câu trước.
 
     from . import assets_db
     from .audio.batch import batch_words, synth_batch, tokens
@@ -313,9 +317,7 @@ def main():
 
     # ---- 1b. Vừa khung thời lượng (channel.video_seconds_max): giọng hôm nay chậm thì đọc nhanh
     # lên chút ít (fit_tempo). File giọng gốc giữ nguyên trong cache; bản đọc nhanh là fit_XX.wav
-    from .main import load_config
-    cfg = load_config()
-    fixed = sum(float(spec[i].get("seconds") or 0) for r in runs if not _voice(spec[r[0]]) for i in r)
+    fixed =sum(float(spec[i].get("seconds") or 0) for r in runs if not _voice(spec[r[0]]) for i in r)
     raw_secs = [wav_duration(wavs[r[0]]) for r in voiced]
     tempo = fit_tempo(raw_secs, [len(r) for r in voiced], fixed,
                       float(cfg["channel"].get("video_seconds_max", 90)))

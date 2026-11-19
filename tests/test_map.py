@@ -11,7 +11,8 @@ from src import crew, produce, qc
 from src.render import geo
 
 ROOT = Path(__file__).resolve().parent.parent
-CFG = {"pacing": {"scene_seconds_min": 2, "scene_seconds_max": 4}}
+# render.intro: các test spec viết khi video còn thẻ intro ở cảnh 0 (từ 19/11 mặc định KHÔNG intro)
+CFG = {"pacing": {"scene_seconds_min": 2, "scene_seconds_max": 4}, "render": {"intro": True}}
 
 
 def load_tool():

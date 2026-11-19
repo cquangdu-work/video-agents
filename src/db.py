@@ -72,7 +72,8 @@ CREATE TABLE IF NOT EXISTS video_stats (   -- mỗi lần agent Phân tích đo 
     subs_gained  INTEGER,
     avg_view_sec REAL,
     avg_view_pct REAL,            -- % video được xem trung bình ("tỷ lệ xem hết")
-    retention    TEXT             -- JSON: [[vị trí 0..1, tỷ lệ còn xem], ...]
+    retention    TEXT,            -- JSON: [[vị trí 0..1, tỷ lệ còn xem], ...]
+    engaged_views INTEGER         -- lượt xem QUA ĐƯỢC vài giây đầu (Shorts: phần còn lại là lướt đi)
 );
 CREATE TABLE IF NOT EXISTS state (   -- ô nhớ nhỏ: vị trí đọc Telegram, v.v.
     key   TEXT PRIMARY KEY,
@@ -81,11 +82,19 @@ CREATE TABLE IF NOT EXISTS state (   -- ô nhớ nhỏ: vị trí đọc Telegra
 """
 
 
+# Cột thêm SAU khi DB đã có dữ liệu: CREATE TABLE IF NOT EXISTS không thêm cột vào bảng cũ
+_ADDED_COLUMNS = [("video_stats", "engaged_views", "INTEGER")]      # 19/11/2026
+
+
 def connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
     con.executescript(_SCHEMA)
+    for table, col, kind in _ADDED_COLUMNS:
+        if col not in {r["name"] for r in con.execute(f"PRAGMA table_info({table})")}:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {kind}")
+            con.commit()
     return con
 
 
@@ -258,8 +267,10 @@ def set_state(con, key: str, value) -> None:
 def save_video_stats(con, video_id: int, source: str, stats: dict, retention: list = None) -> None:
     con.execute(
         "INSERT INTO video_stats (video_id, fetched_at, source, views, likes, comments, shares,"
-        " subs_gained, avg_view_sec, avg_view_pct, retention) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        " subs_gained, avg_view_sec, avg_view_pct, retention, engaged_views)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (video_id, _now(), source, stats.get("views"), stats.get("likes"), stats.get("comments"),
          stats.get("shares"), stats.get("subs_gained"), stats.get("avg_view_sec"),
-         stats.get("avg_view_pct"), json.dumps(retention) if retention else None))
+         stats.get("avg_view_pct"), json.dumps(retention) if retention else None,
+         stats.get("engaged_views")))
     con.commit()

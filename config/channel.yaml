@@ -7,6 +7,16 @@
 render:
   engine: web          # web = Remotion (render-web/), manim = engine cũ. Web lỗi thì tự lùi về manim.
   web_concurrency: 3   # số tab Chrome render song song (VM 4 OCPU: để 3, chừa 1 cho dịch vụ khác)
+  # Du chốt 19/11/2026: BỎ thẻ logo 1,2 giây ở đầu — giây đầu là câu mở đầu (57% lượt xem của video
+  # #6, #7 lướt đi trong vài giây đầu); logo thành dấu nhỏ ở góc. true = có lại intro như cũ.
+  intro: false
+
+# ---------- Kiểm định (src/qc.py) ----------
+qc:
+  # Khung AN TOÀN, không phải độ dài mong muốn (độ dài mong muốn ở channel.video_seconds_*).
+  # Trần 95 giây để kịch bản đời cũ (60-90 giây, viết trước 19/11) còn dựng được trong vài ngày chuyển đổi.
+  min_seconds: 35
+  max_seconds: 95
 
 channel:
   name: "Thế giới qua con số"
@@ -16,8 +26,10 @@ channel:
     cuộc đua số liệu dựng bằng code. Chủ đề trải rộng: khí hậu, năng lượng, thực phẩm,
     công nghệ, đời sống, kinh tế của cả thế giới; Việt Nam (và Hàn Quốc khi hợp) là điểm
     neo để người xem Việt so với mình.
-  video_seconds_min: 60
-  video_seconds_max: 90
+  # Du chốt 19/11/2026: 45-60 giây (trước là 60-90). Số đo thật: video 72-94 giây, người xem trung
+  # bình chỉ ở lại 28-40 giây, quá nửa đã bỏ đi trước giữa video (#6, #7).
+  video_seconds_min: 45
+  video_seconds_max: 60
 
 # ---------- Nguồn ý tưởng (lớp 1: lấy từ nguồn gốc) ----------
 sources:
@@ -58,21 +70,21 @@ sources:
       - {iso3: VNM, iso2: VN, name: "Việt Nam"}
       - {iso3: KOR, iso2: KR, name: "Hàn Quốc"}
     indicators:
-      - {code: NY.GDP.PCAP.CD,       name: "GDP bình quân đầu người",                    unit: "USD"}
+      - {code: NY.GDP.PCAP.CD,       name: "GDP bình quân đầu người",                    unit: "USD", period: tháng}
       - {code: SP.DYN.TFRT.IN,       name: "Tổng tỷ suất sinh",                          unit: "con mỗi phụ nữ"}
       - {code: SP.DYN.LE00.IN,       name: "Tuổi thọ trung bình",                        unit: "tuổi"}
-      - {code: SP.POP.65UP.TO.ZS,    name: "Tỷ lệ dân số từ 65 tuổi trở lên",            unit: "%"}
-      - {code: IT.NET.USER.ZS,       name: "Tỷ lệ người dùng Internet",                  unit: "%"}
-      - {code: SP.URB.TOTL.IN.ZS,    name: "Tỷ lệ dân số sống ở thành thị",              unit: "%"}
+      - {code: SP.POP.65UP.TO.ZS,    name: "Tỷ lệ dân số từ 65 tuổi trở lên",            unit: "%", per: người}
+      - {code: IT.NET.USER.ZS,       name: "Tỷ lệ người dùng Internet",                  unit: "%", per: người}
+      - {code: SP.URB.TOTL.IN.ZS,    name: "Tỷ lệ dân số sống ở thành thị",              unit: "%", per: người}
       - {code: NE.EXP.GNFS.ZS,       name: "Xuất khẩu so với GDP",                       unit: "% GDP"}
-      - {code: SL.UEM.TOTL.ZS,       name: "Tỷ lệ thất nghiệp",                          unit: "%"}
+      - {code: SL.UEM.TOTL.ZS,       name: "Tỷ lệ thất nghiệp",                          unit: "%", per: người lao động}
       - {code: SE.XPD.TOTL.GD.ZS,    name: "Chi tiêu công cho giáo dục so với GDP",      unit: "% GDP"}
       - {code: SH.XPD.CHEX.GD.ZS,    name: "Chi tiêu y tế so với GDP",                   unit: "% GDP"}
       - {code: GB.XPD.RSDV.GD.ZS,    name: "Chi cho nghiên cứu và phát triển so với GDP", unit: "% GDP"}
       - {code: SP.POP.TOTL,          name: "Dân số",                                     unit: "triệu người", scale: 1000000}
       - {code: NY.GDP.MKTP.KD.ZG,    name: "Tăng trưởng GDP hằng năm",                   unit: "%"}
-      - {code: SL.TLF.CACT.FE.ZS,    name: "Tỷ lệ phụ nữ tham gia lực lượng lao động",   unit: "%"}
-      - {code: EG.USE.ELEC.KH.PC,    name: "Điện tiêu thụ bình quân đầu người",          unit: "kWh"}
+      - {code: SL.TLF.CACT.FE.ZS,    name: "Tỷ lệ phụ nữ tham gia lực lượng lao động",   unit: "%", per: phụ nữ}
+      - {code: EG.USE.ELEC.KH.PC,    name: "Điện tiêu thụ bình quân đầu người",          unit: "kWh", period: ngày}
       - {code: SP.DYN.IMRT.IN,       name: "Tỷ suất tử vong trẻ dưới 1 tuổi",            unit: "trên 1.000 trẻ sinh ra"}
       - {code: FP.CPI.TOTL.ZG,       name: "Lạm phát giá tiêu dùng",                     unit: "%"}
       - {code: BX.KLT.DINV.WD.GD.ZS, name: "Vốn FDI vào so với GDP",                     unit: "% GDP"}
@@ -82,7 +94,7 @@ sources:
       - {code: IT.CEL.SETS.P2,       name: "Thuê bao di động trên 100 dân",              unit: "thuê bao"}
       - {code: SE.TER.ENRR,          name: "Tỷ lệ nhập học đại học",                     unit: "%"}
       - {code: NV.IND.MANF.ZS,       name: "Công nghiệp chế biến chế tạo so với GDP",    unit: "% GDP"}
-      - {code: SL.AGR.EMPL.ZS,       name: "Tỷ lệ lao động làm nông nghiệp",             unit: "%"}
+      - {code: SL.AGR.EMPL.ZS,       name: "Tỷ lệ lao động làm nông nghiệp",             unit: "%", per: người lao động}
     # "Cuộc đua số liệu": nhiều nền kinh tế châu Á xếp hạng qua các năm (thanh ngang đổi chỗ).
     # Tối đa 10 nước để vừa khung dọc.
     races:
@@ -150,13 +162,13 @@ sources:
       - {slug: co-emissions-per-capita, kind: map, name: "Lượng CO2 thải ra bình quân mỗi người",
          unit: "tấn", origin: "Global Carbon Budget"}
       - {slug: electric-car-sales-share, kind: race, group: major, start_year: 2015, year_step: 2,
-         name: "Tỷ lệ ô tô điện trong số xe mới bán", unit: "%", origin: "Cơ quan Năng lượng Quốc tế (IEA)"}
+         name: "Tỷ lệ ô tô điện trong số xe mới bán", unit: "%", origin: "Cơ quan Năng lượng Quốc tế (IEA)", per: xe mới bán}
       - {slug: meat-supply-per-person, kind: map, name: "Lượng thịt bình quân mỗi người một năm",
-         unit: "kg", origin: "FAO"}
+         unit: "kg", origin: "FAO", period: tuần}
       - {slug: annual-working-hours-per-worker, kind: race, group: major,
-         name: "Số giờ làm việc mỗi năm của một người lao động", unit: "giờ", origin: "Penn World Table"}
+         name: "Số giờ làm việc mỗi năm của một người lao động", unit: "giờ", origin: "Penn World Table", period: tuần}
       - {slug: share-electricity-renewables, kind: map, name: "Tỷ lệ điện từ năng lượng tái tạo",
-         unit: "%", origin: "Ember, Energy Institute"}
+         unit: "%", origin: "Ember, Energy Institute", per: số điện}
       - {slug: coffee-bean-production, kind: race, group: top, scale: 1000,
          name: "Sản lượng cà phê", unit: "nghìn tấn", origin: "FAO"}
       - {slug: median-age, kind: map, name: "Tuổi trung vị của dân số", unit: "tuổi",
@@ -164,24 +176,24 @@ sources:
       - {slug: installed-solar-pv-capacity, kind: race, group: top, start_year: 2010,
          name: "Công suất điện mặt trời đã lắp đặt", unit: "GW", origin: "IRENA"}
       - {slug: fish-and-seafood-consumption-per-capita, kind: map,
-         name: "Lượng cá và hải sản bình quân mỗi người một năm", unit: "kg", origin: "FAO"}
+         name: "Lượng cá và hải sản bình quân mỗi người một năm", unit: "kg", origin: "FAO", period: tuần}
       - {slug: annual-co2-emissions-per-country, kind: race, group: top, scale: 1000000,
          name: "Lượng CO2 thải ra mỗi năm", unit: "triệu tấn", origin: "Global Carbon Budget"}
       - {slug: total-alcohol-consumption-per-capita-litres-of-pure-alcohol, kind: map,
          name: "Lượng rượu bia bình quân mỗi người từ 15 tuổi", unit: "lít cồn nguyên chất",
          origin: "Tổ chức Y tế Thế giới (WHO)"}
       - {slug: per-capita-energy-use, kind: race, group: major,
-         name: "Năng lượng tiêu thụ bình quân mỗi người", unit: "kWh", origin: "Energy Institute"}
+         name: "Năng lượng tiêu thụ bình quân mỗi người", unit: "kWh", origin: "Energy Institute", period: ngày}
       - {slug: pm25-air-pollution, kind: map, name: "Nồng độ bụi mịn PM2.5 trung bình ngoài trời",
          unit: "microgam/m³", origin: "Đại học Washington ở St. Louis"}
       - {slug: rice-production, kind: race, group: top, scale: 1000000,
          name: "Sản lượng lúa gạo", unit: "triệu tấn", origin: "FAO"}
       - {slug: share-of-adults-who-smoke, kind: map, name: "Tỷ lệ người trưởng thành hút thuốc",
-         unit: "%", origin: "Tổ chức Y tế Thế giới (WHO)"}
+         unit: "%", origin: "Tổ chức Y tế Thế giới (WHO)", per: người trưởng thành}
       - {slug: daily-per-capita-caloric-supply, kind: map, name: "Lượng calo bình quân mỗi người một ngày",
          unit: "kcal", origin: "FAO"}
       - {slug: share-electricity-coal, kind: map, name: "Tỷ lệ điện từ than", unit: "%",
-         origin: "Ember, Energy Institute"}
+         origin: "Ember, Energy Institute", per: số điện}
 
   # Reddit chặn đường JSON công khai (403) với nhiều IP, nhất là IP đám mây của VM;
   # src/sources/reddit.py tự chuyển sang đường RSS. TẮT từ 19/11/2026: đo cả laptop lẫn VM, RSS
@@ -220,7 +232,7 @@ daily:
   utc_offset_hours: 9   # "mỗi ngày" tính theo giờ nơi Du ở (Hàn Quốc = +9)
   max_attempts: 2       # kịch bản đầu dựng hỏng thì thử kịch bản kế, tối đa bấy nhiêu lần
   max_script_age_days: 3   # kịch bản cũ hơn thế thì bỏ (số liệu "mới" đã nguội)
-  min_script_words: 165    # lời đọc ít hơn thế (~48 giây) thì bỏ: video sẽ rớt Kiểm định độ dài
+  min_script_words: 125    # lời đọc ít hơn thế (~37 giây) thì bỏ: video sẽ rớt Kiểm định độ dài
   min_script_numbers: 4    # lời đọc có ít con số hơn thế thì bỏ: video sẽ toàn cảnh chữ
 
 # ---------- Nhạc nền (src/audio/music.py) ----------

@@ -18,7 +18,9 @@ export type Series = {
 /** Một con số có nhãn: dec = số chữ số lẻ Python đã chọn (label_decimals) -> hiện y hệt bản Manim. */
 export type Valued = { label: string; value: number; dec: number; color: string; flag?: string };
 
-type Span = { start: number; end: number; source?: string }; // source: dòng "Nguồn" riêng của cảnh
+// source: dòng "Nguồn" riêng của cảnh. hook: cảnh MỞ ĐẦU (từ 19/11/2026 không còn thẻ intro) — chữ của
+// nó hiện đủ ngay khung hình đầu tiên, không chờ hiệu ứng, vì người xem quyết định lướt đi trong 1-2 giây.
+type Span = { start: number; end: number; source?: string; hook?: boolean };
 
 /** Trạng thái của BIỂU ĐỒ CHÍNH trong một cảnh (xem components/ChartWorld.tsx). */
 export type ChartState = {
@@ -37,6 +39,9 @@ export type World = {
 export type IntroScene = Span & { kind: "intro" };
 export type StatementScene = Span & {
   kind: "statement"; text: string; style: number; n?: number; icon?: string; highlights: string[];
+  // Có biểu đồ chính đã vẽ: câu chữ hiện ở nửa trên, BIỂU ĐỒ GIỮ LẠI ở nửa dưới (trước 19/11 cảnh
+  // chữ là nền trống — 1/3 thời lượng video, và là chỗ người xem bỏ đi nhiều nhất)
+  chart?: ChartState; compact?: boolean;
 };
 export type BigNumberScene = Span & {
   kind: "big_number"; title: string; value: number; dec: number; suffix: string; color: string; flag?: string;
@@ -117,4 +122,5 @@ export type StoryProps = {
   sfx: Sfx[];
   world?: World | null;
   hideCaptions?: boolean; // video dài (Wide): phụ đề vẽ to ở cột phải thay vì trong khung dọc
+  hideLogo?: boolean; // video dài (Wide) đã có nhận diện riêng ở cột phải
 };

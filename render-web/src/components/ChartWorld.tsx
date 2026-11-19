@@ -16,8 +16,10 @@ const FULL: Rect = { left: 150, right: 990, top: 480, bottom: 1250 };
 const PANEL: Rect = { left: 150, right: 990, top: 900, bottom: 1255 };
 const MOVE = 0.6; // giây chuyển khung nhìn giữa hai cảnh
 
+// Cảnh chữ (statement) cũng giữ biểu đồ ở nửa dưới khi Python gắn trạng thái cho nó (từ 19/11/2026)
 const stateOf = (sc: Scene): ChartState | undefined =>
-  sc.kind === "line_chart" || sc.kind === "versus" || sc.kind === "big_number" ? sc.chart : undefined;
+  sc.kind === "line_chart" || sc.kind === "versus" || sc.kind === "big_number" || sc.kind === "statement"
+    ? sc.chart : undefined;
 
 const lerpView = (a: View, b: View, k: number) => a.map((x, i) => lerp(x, b[i], k)) as View;
 const lerpRect = (a: Rect, b: Rect, k: number): Rect => ({

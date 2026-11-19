@@ -4,7 +4,7 @@ import { loadFont } from "@remotion/google-fonts/BeVietnamPro";
 import { Background } from "./components/Background";
 import { Captions } from "./components/Captions";
 import { ChartWorld } from "./components/ChartWorld";
-import { BarChart, BigNumber, Clip, LineChartTitle, LineSolo, PercentRing, Statement, Versus } from "./scenes/Generic";
+import { BarChart, BigNumber, Clip, HookContext, LineChartTitle, LineSolo, PercentRing, Statement, Versus } from "./scenes/Generic";
 import { BarRace, MapView } from "./scenes/MapRace";
 import { HeroLine } from "./scenes/HeroLine";
 import { Intro } from "./scenes/Intro";
@@ -41,7 +41,18 @@ const SceneView: React.FC<{ scene: Scene; brand: StoryProps["brand"] }> = ({ sce
   }
 };
 
-export const Story: React.FC<StoryProps> = ({ brand, scenes, words, source, sfx, world, hideCaptions }) => {
+// Dấu nhận diện nhỏ ở góc trên trái, suốt video — thay cho thẻ intro 1,2 giây (bỏ từ 19/11/2026: giây
+// đầu tiên là câu mở đầu). Cùng ý bộ nhận diện cũ: số "1" màu nhấn + tên kênh.
+const CornerLogo: React.FC<{ brand: StoryProps["brand"] }> = ({ brand }) => (
+  <div style={{ position: "absolute", top: 70, left: 56, display: "flex", alignItems: "center", gap: 14,
+    opacity: 0.88 }}>
+    <div style={{ width: 52, height: 52, borderRadius: 14, background: brand.accent, color: brand.background,
+      fontSize: 38, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" }}>1</div>
+    <div style={{ fontSize: 25, fontWeight: 800, letterSpacing: "0.08em", color: brand.text }}>{brand.channel}</div>
+  </div>
+);
+
+export const Story: React.FC<StoryProps> = ({ brand, scenes, words, source, sfx, world, hideCaptions, hideLogo }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
@@ -54,9 +65,12 @@ export const Story: React.FC<StoryProps> = ({ brand, scenes, words, source, sfx,
       {world && <ChartWorld world={world} scenes={scenes} t={t} brand={brand} />}
       {scenes.map((sc, i) => (
         <Sequence key={i} from={Math.round(sc.start * fps)} durationInFrames={Math.max(1, Math.round((sc.end - sc.start) * fps))}>
-          <SceneView scene={sc} brand={brand} />
+          <HookContext.Provider value={!!sc.hook}>
+            <SceneView scene={sc} brand={brand} />
+          </HookContext.Provider>
         </Sequence>
       ))}
+      {!hideLogo && !scenes.some((sc) => sc.kind === "intro") && <CornerLogo brand={brand} />}
       {!hideCaptions && <Captions words={words} t={t} brand={brand} />}
       {src && current?.kind !== "clip" && (
         <div style={{ position: "absolute", bottom: 46, left: 40, right: 40, textAlign: "center", fontSize: 24,

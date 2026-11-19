@@ -34,6 +34,8 @@ def script(scenes=17, words_each=14, numbers=6):
         if i % 2 == 0 and i // 2 < numbers:
             body[0] = str(1000 + i // 2)
         out.append({"voice": " ".join(body), "visual": "hình", "data_source": "nguồn"})
+    if numbers and scenes > 1:                     # câu kết nhắc lại con số của hook (story.ending_problem)
+        out[-1]["voice"] = " ".join(["1000"] + ["từ"] * (words_each - 1))
     return {"hooks": ["a", "b", "c"], "scenes": out, "claims": []}
 
 
@@ -47,7 +49,7 @@ class ScriptStandardTest(unittest.TestCase):
     def test_problems_name_what_is_missing(self):
         self.assertEqual(crew.script_problems(script(), CFG), [])
         few = crew.script_problems(script(numbers=2), CFG)       # ca thật trên VM: 1-3 con số
-        self.assertEqual(len(few), 1); self.assertIn("chỉ 2 con số", few[0])
+        self.assertTrue(any("chỉ 2 con số" in x for x in few))
         short = crew.script_problems(script(scenes=12, words_each=10), CFG)
         self.assertTrue(any("120 từ" in p for p in short))
 
@@ -67,7 +69,7 @@ class ScriptStandardTest(unittest.TestCase):
         self.assertEqual(got, drafts[0])                         # giữ bản ít lỗi nhất
         self.assertIn("TRÍCH BÀI NGUỒN", seen[0])
         self.assertIn("8.030 hệ thống", seen[0])
-        self.assertLess(len(seen[0]), 9000)                      # bài dài được cắt bớt
+        self.assertLess(len(seen[0]), 11000)                     # bài dài (16 nghìn ký tự) được cắt bớt
         self.assertIn("BẢN NHÁP TRƯỚC BỊ TRẢ LẠI vì: chỉ 3 con số", seen[1])
 
     def test_malformed_llm_answers_are_normalised_not_fatal(self):
@@ -86,6 +88,7 @@ class ScriptStandardTest(unittest.TestCase):
         self.assertTrue(any("đọc lần lượt 7 mốc năm" in p for p in problems))
         story = script()
         story["scenes"][0]["voice"] = "Việt Nam năm 2024 mới bằng Hàn Quốc năm 1991, cách 33 năm từ"
+        story["scenes"][-1]["voice"] = "Khoảng cách 33 năm ấy là câu chuyện của cả một thế hệ từ"
         self.assertEqual(crew.script_problems(story, CFG), [])
 
     def test_data_ideas_get_storytelling_rules(self):
@@ -98,9 +101,9 @@ class ScriptStandardTest(unittest.TestCase):
         with mock.patch.object(crew, "_run_single_task", fake), \
                 mock.patch.object(crew, "_formula_block", lambda: ""):
             crew.write_script({"title": "T", "angle": "G", "source_url": "u", "source_name": SOURCE_NAME},
-                              CFG, source_text="bảng")
+                              CFG, source_text="bảng 1000, 1001, 1002, 1003, 1004, 1005")
             crew.write_script({"title": "T", "angle": "G", "source_url": "u", "source_name": "Hani"},
-                              CFG, source_text="bài")
+                              CFG, source_text="bài 1000, 1001, 1002, 1003, 1004, 1005")
         self.assertIn("ĐÂY LÀ Ý TƯỞNG TỪ BẢNG SỐ LIỆU", seen[0])
         self.assertNotIn("ĐÂY LÀ Ý TƯỞNG TỪ BẢNG SỐ LIỆU", seen[1])
 

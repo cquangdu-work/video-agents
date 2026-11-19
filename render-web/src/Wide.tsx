@@ -52,7 +52,7 @@ export const Wide: React.FC<WideProps> = ({ story, chapter, chapters, series }) 
         borderRadius: 0, boxShadow: "0 0 80px rgba(0,0,0,0.6)", borderLeft: `2px solid ${b.surface}`,
         borderRight: `2px solid ${b.surface}` }}>
         <div style={{ width: 1080, height: 1920, transform: `scale(${SCALE})`, transformOrigin: "top left" }}>
-          <Story {...story} sfx={[]} hideCaptions />
+          <Story {...story} sfx={[]} hideCaptions hideLogo />
         </div>
       </div>
 

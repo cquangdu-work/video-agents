@@ -8,7 +8,8 @@ from unittest import mock
 
 from src import produce
 
-CFG = {"pacing": {"scene_seconds_min": 2, "scene_seconds_max": 4}}
+# render.intro: các test spec viết khi video còn thẻ intro ở cảnh 0 (từ 19/11 mặc định KHÔNG intro)
+CFG = {"pacing": {"scene_seconds_min": 2, "scene_seconds_max": 4}, "render": {"intro": True}}
 
 
 def st(text):
@@ -18,6 +19,14 @@ def st(text):
 class ValidateSpecTest(unittest.TestCase):
     def setUp(self):
         logging.disable(logging.WARNING); self.addCleanup(logging.disable, logging.NOTSET)
+
+    def test_no_intro_card_by_default(self):
+        # Du chốt 19/11/2026: giây đầu tiên là câu mở đầu, không phải thẻ logo
+        spec = produce.validate_spec([st("a"), {"template": "intro", "params": {}}],
+                                     {"pacing": CFG["pacing"]})
+        self.assertEqual([s["template"] for s in spec], ["statement"])
+        self.assertFalse(produce.intro_enabled({"render": {"intro": False}}))
+        self.assertTrue(produce.intro_enabled(CFG))
 
     def test_intro_is_added_and_broken_scenes_are_dropped(self):
         spec = produce.validate_spec([
@@ -212,7 +221,8 @@ class DesignScenesTest(unittest.TestCase):
         p = got[0]["params"]
         self.assertEqual(p["years"], [1990, 1995, 2025])             # năm 1993 chỉ một nước có
         self.assertEqual(p["items"][2], {"label": "Việt Nam", "values": [98.8, 288.0, 5066.0]})
-        spec2 = produce.validate_spec(got, {"pacing": {"scene_seconds_min": 2, "scene_seconds_max": 4}})
+        spec2 = produce.validate_spec(got, {"pacing": {"scene_seconds_min": 2, "scene_seconds_max": 4},
+                                            "render": {"intro": True}})
         self.assertEqual(spec2[1]["template"], "bar_race")
         self.assertEqual(spec2[1]["params"]["decimals"], 1)          # 98,8 không bị làm tròn
 

@@ -145,6 +145,71 @@ def longest_number_run(script: dict) -> int:
     return best
 
 
+# ------------------------------------------- 15 giây đầu + câu kết (19/11/2026, từ số liệu thật)
+# YouTube Analytics của video #6 (FDI) và #7 (thuê bao): người xem bỏ đi nhiều nhất trong 15 giây
+# đầu, đúng ở câu định nghĩa ("Chỉ số này đo lường tỷ lệ vốn đầu tư…"), câu đệm ("Chiếc điện thoại
+# trong tay bạn là một phần của hạ tầng viễn thông khổng lồ") và câu lùi về năm đầu bảng ("Nhìn lại
+# năm 1960, cả hai nước đều có 0 thuê bao"). Còn ở giây ~18: 60% (#6), 38% (#7).
+OPENING_SCENES = 5            # cảnh 1-5 ≈ 15 giây đầu
+DEFINITION = re.compile(r"\b(chỉ số (này |đó )?(đo|là|phản ánh|cho biết|thể hiện)|được tính (bằng|theo)|"
+                        r"được định nghĩa|là thước đo)\b", re.I)
+BACKTRACK = re.compile(r"^\W*(hãy\s+)?(cùng\s+)?(nhìn lại|quay (ngược|lại|về)|trở lại|lùi về|ngược dòng)\b",
+                       re.I)
+GENERIC = re.compile(r"\b(trong tay bạn|cuộc sống (hằng|hàng) ngày|thay đổi hoàn toàn cách|"
+                     r"mỗi ngày chúng ta|ai trong chúng ta cũng)\b", re.I)
+_YEARS = re.compile(r"\b(?:19|20)\d{2}\b")
+
+
+def opening_problems(script: dict) -> tuple:
+    """Lỗi nhịp ở 15 giây đầu (cảnh 2-5; cảnh 1 là hook, có luật riêng) -> (lỗi chặn, lỗi nhắc).
+
+    Chặn: câu định nghĩa chỉ số; hai câu liền nhau không có con số. Nhắc (đưa vào lời trả về viết
+    lại nhưng không giữ kịch bản ở nháp): câu đệm chung chung, câu lùi về quá khứ mà năm đó không
+    có trong hook (lùi về đúng năm hook nhắc là đang chứng minh hook — được)."""
+    scenes = [s for s in script.get("scenes") or [] if isinstance(s, dict)]
+    voices = [" ".join(str(s.get("voice") or "").split()) for s in scenes[:OPENING_SCENES]]
+    if len(voices) < 3:
+        return [], []
+    hook_years = set(_YEARS.findall(voices[0]))
+    hard, soft = [], []
+    for k, v in enumerate(voices[1:], 2):
+        if DEFINITION.search(v):
+            hard.append(f"cảnh {k} định nghĩa chỉ số (“{v[:60]}”) — định nghĩa để trên chữ của biểu"
+                        " đồ, lời đọc 15 giây đầu phải chứng minh hook bằng con số")
+        elif BACKTRACK.search(v) and not (set(_YEARS.findall(v)) & hook_years):
+            soft.append(f"cảnh {k} lùi về quá khứ ngay đầu video (“{v[:60]}”) — chứng minh hook trước")
+        elif GENERIC.search(v):
+            soft.append(f"cảnh {k} là câu đệm chung chung (“{v[:60]}”)")
+    empty = [not re.search(r"\d", v) for v in voices[1:]]
+    if any(a and b for a, b in zip(empty, empty[1:])):
+        hard.append("15 giây đầu (cảnh 2-5) có hai câu liền nhau không có con số — người xem bỏ đi"
+                    " đúng ở chỗ như vậy (video #7)")
+    return hard, soft
+
+
+def _syllable_pairs(text: str) -> set:
+    w = [x.strip(".,!?:;\"'“”()").lower() for x in str(text or "").split()]
+    w = [x for x in w if x]
+    return {f"{a} {b}" for a, b in zip(w, w[1:])}
+
+
+def ending_problem(script: dict) -> str:
+    """Câu kết phải quay lại câu mở đầu (nhắc lại con số của hook, hoặc ít nhất hai cụm từ của nó)
+    để video lặp vòng tự nhiên — Shorts tính cả lượt xem lặp. Trả "" nếu đạt."""
+    from .utils import digit_set
+    scenes = [s for s in script.get("scenes") or [] if isinstance(s, dict)]
+    if len(scenes) < 4:
+        return ""
+    hook, last = str(scenes[0].get("voice") or ""), str(scenes[-1].get("voice") or "")
+    hd = digit_set(hook)
+    if hd and hd & digit_set(last):
+        return ""
+    if not hd and len(_syllable_pairs(hook) & _syllable_pairs(last)) >= 2:
+        return ""
+    return ("câu kết không quay lại câu mở đầu — nhắc lại con số (hoặc đối tượng) của hook với góc nhìn"
+            " mới để người xem muốn xem lại từ đầu")
+
+
 def safe_patterns(items) -> list:
     """Bỏ khỏi "công thức đối thủ" những khuôn/luật câu view mà kênh không được dùng."""
     bad = re.compile(r"đừng|sai lầm|phủ định mạnh|cấm đoán|sốc|giật mình|chết lặng|khiến bạn", re.I)

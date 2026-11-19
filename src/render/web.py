@@ -389,6 +389,10 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None) -> d
             text = str(p.get("text") or voice)
             out.update(text=text, style=int(p.get("style") or 0), n=p.get("n"),
                        icon=pick_icon(text, voice), highlights=highlights(text))
+            if world and drawn > world["minX"]:
+                # Biểu đồ chính đã vẽ: GIỮ nó ở nửa dưới, chữ gọn ở nửa trên (19/11/2026 — cảnh chữ nền
+                # trống chiếm 1/3 thời lượng và là chỗ người xem bỏ đi, số đo video #6, #7)
+                out.update(chart={"mode": "panel", "drawTo": drawn}, compact=True, icon=None)
             if out["icon"]:
                 add_sfx("pop", start + 0.05, 0.28)
         elif kind == "big_number":
@@ -463,6 +467,8 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None) -> d
         if prev_family and family != prev_family:
             add_sfx("whoosh", start - 0.15, 0.25)
         prev_family = family
+        if voice.strip() and not any(s.get("hook") for s in scenes):
+            out["hook"] = True          # cảnh mở đầu: chữ hiện đủ ngay khung đầu (render-web HookContext)
         scenes.append(out)
         sc["shown"] = world_numbers + extra_shown
 

@@ -138,9 +138,172 @@ def lower_first(name: str) -> str:
     return name[:1].lower() + name[1:]
 
 
-def race_lines(series: dict, years: list, focus: list) -> list:
+# ------------------------------------------------- điểm nhấn + cách nói dễ hình dung (19/11/2026)
+# Vì sao: số liệu giữ chân người xem của kênh (video #6, #7) cho thấy người xem bỏ đi đúng ở các câu
+# không có thông tin mới — model chỉ có vài con số nên tự chế câu giải thích ("Đó là giai đoạn khởi
+# đầu của các tập đoàn công nghiệp lớn", không có trong nguồn) hoặc kể từ năm đầu bảng ("Nhìn lại năm
+# 1960, cả hai nước đều có 0 thuê bao"). Code tính sẵn những điều ĐÁNG KỂ có thật trong bảng.
+BEATS_HEADER = "Điểm nhấn (máy tính sẵn từ bảng số — dựng câu chuyện từ đây):"
+RELATE_HEADER = "Cách nói dễ hình dung (máy tính sẵn):"
+PERIODS = {"ngày": 365, "tuần": 52, "tháng": 12}
+
+
+def shown_value(v: float) -> float:
+    """Giá trị đúng như được ĐỌC lên (đã làm tròn bằng vn_number)."""
+    return parse_vn_number(vn_number(v))
+
+
+def fraction_phrase(p: float, per: str) -> str:
+    """Tỷ lệ % -> cách nói bằng phân số: 68,6 -> "cứ 3 phụ nữ thì 2", 38,8 -> "cứ 5 người thì 2",
+    56,8 -> "cứ 10 người thì gần 6", 2,1 -> "cứ 100 người thì 2". Ngoài khoảng (0, 100) -> ""."""
+    import math
+    if not 0 < p < 100:
+        return ""
+    if 10 <= p < 90:
+        for n in (2, 3, 4, 5):                       # phân số nhỏ, lệch không quá 2 điểm phần trăm
+            k = round(p / 100 * n)
+            if 1 <= k < n and math.gcd(k, n) == 1 and abs(100 * k / n - p) <= 2.0:
+                return f"cứ {n} {per} thì {k}"
+        n, k = 10, round(p / 10)
+    else:                                            # tỷ lệ rất nhỏ / rất lớn: trên 100
+        n, k = 100, round(p)
+    if k < 1:
+        return f"chưa tới 1 trong 100 {per}"
+    step = 100 / n
+    qual = "gần " if k * step > p + step / 10 else ("hơn " if k * step < p - step / 10 else "")
+    return f"cứ {n} {per} thì {qual}{k}"
+
+
+def relatable_line(pairs: list, unit: str, ind: dict) -> str:
+    """Một dòng "cách nói dễ hình dung" cho các cặp (tên, giá trị). Theo cấu hình của chỉ số:
+    `per` (tỷ lệ % -> phân số "cứ 5 người thì 2") hoặc `period` (số mỗi năm -> mỗi ngày/tuần/tháng:
+    5.066 USD/năm -> khoảng 422 USD mỗi tháng). Không cấu hình -> ""."""
+    per, period = (ind or {}).get("per"), (ind or {}).get("period")
+    bits = []
+    for name, v in pairs:
+        if v is None:
+            continue
+        if per and unit.startswith("%"):
+            f = fraction_phrase(v, per)
+            if f:
+                bits.append(f"{name} {vn_number(v)}% ≈ {f}")
+        elif period in PERIODS and v > 0:
+            bits.append(f"{name} {vn_number(v)} {unit} mỗi năm ≈ khoảng {vn_number(v / PERIODS[period])}"
+                        f" {unit} mỗi {period}")
+    return f"{RELATE_HEADER} " + "; ".join(bits) + "." if bits else ""
+
+
+def _milestones(lo: float, hi: float, pct: bool) -> list:
+    if pct:
+        return [m for m in (25, 50, 75, 90) if lo < m < hi]
+    out, k = [], -3
+    while 10 ** k <= max(abs(hi), 1e-9) * 10 and k < 16:
+        out += [m * 10 ** k for m in (1, 2, 5) if lo < m * 10 ** k < hi]
+        k += 1
+    return sorted(set(out))
+
+
+def _fmt(v: float, unit: str) -> str:
+    return (f"{vn_number(v)}%" if unit.startswith("%") else f"{vn_number(v)} {unit}".strip())
+
+
+def story_beats(named: dict, focus: list, unit: str, step: int = 5) -> list:
+    """Những điều ĐÁNG KỂ có thật trong bảng, tính bằng code -> các dòng điểm nhấn.
+
+    named: {tên: [(năm, giá trị)] tăng dần theo năm} (chuỗi theo NĂM đầy đủ); focus: tên cần kể kỹ,
+    tên đầu là "ta" (Việt Nam). Gồm: năm hai nước vượt nhau, khoảng cách đầu–cuối, đỉnh/đáy nằm
+    GIỮA chuỗi, giai đoạn `step` năm thay đổi nhanh nhất, và mốc tròn lớn nhất vừa vượt qua."""
+    pct = unit.startswith("%")
+    names = [n for n in focus if len(named.get(n) or []) >= 2]
+    if not names:
+        return []
+    out = []
+    a = names[0]
+    da = dict(named[a])
+    if len(names) > 1:
+        b = names[1]
+        db = dict(named[b])
+        common = sorted(set(da) & set(db))
+        crosses = []
+        for y0, y1 in zip(common, common[1:]):
+            s0, s1 = da[y0] - db[y0], da[y1] - db[y1]
+            if s0 and s1 and (s0 > 0) != (s1 > 0):
+                lead, other = (a, b) if s1 > 0 else (b, a)
+                crosses.append(f"Năm {y1}: {lead} vượt {other} ({lead} {_fmt(dict(named[lead])[y1], unit)},"
+                               f" {other} {_fmt(dict(named[other])[y1], unit)})")
+        out += crosses[:1] + crosses[-1:] if len(crosses) > 1 else crosses
+        if len(common) >= 2:
+            y0, y1 = common[0], common[-1]
+            if pct:
+                g0 = round(shown_value(da[y0]) - shown_value(db[y0]), 6)
+                g1 = round(shown_value(da[y1]) - shown_value(db[y1]), 6)
+                if abs(abs(g1) - abs(g0)) >= 3:
+                    side = lambda g: f"{a} {'hơn' if g > 0 else 'kém'} {b} {vn_number(abs(g))} điểm phần trăm"
+                    out.append(f"Khoảng cách: năm {y0} {side(g0)}; năm {y1} {side(g1)}")
+            elif min(da[y0], db[y0], da[y1], db[y1]) > 0:
+                r = lambda y: (max(da[y], db[y]) / min(da[y], db[y]), a if da[y] >= db[y] else b,
+                               b if da[y] >= db[y] else a)
+                (r0, h0, l0), (r1, h1, l1) = r(y0), r(y1)
+                if r0 >= 1.2 or r1 >= 1.2:
+                    if h0 != h1 or abs(r1 - r0) / max(r0, r1) >= 0.2:
+                        out.append(f"Khoảng cách: năm {y0} {h0} gấp {vn_number(r0)} lần {l0};"
+                                   f" năm {y1} {h1} gấp {vn_number(r1)} lần {l1}")
+    for n in names[:2]:
+        s = named[n]
+        ys = [v for _, v in s]
+        top = max(range(len(s)), key=lambda i: ys[i])
+        low = min(range(len(s)), key=lambda i: ys[i])
+        if 0 < top < len(s) - 1 and ys[top] > 0 and ys[-1] < 0.95 * ys[top]:
+            out.append(f"Đỉnh của {n}: năm {s[top][0]} ({_fmt(ys[top], unit)}); năm {s[-1][0]} còn"
+                       f" {_fmt(ys[-1], unit)}")
+        if 0 < low < len(s) - 1 and ys[low] >= 0 and ys[-1] > 1.05 * ys[low] and ys[0] > 1.05 * ys[low]:
+            out.append(f"Đáy của {n}: năm {s[low][0]} ({_fmt(ys[low], unit)}), rồi hồi lên"
+                       f" {_fmt(ys[-1], unit)} năm {s[-1][0]}")
+    s = named[a]
+    best = None
+    for y, v in s:
+        if y + step in da:
+            d = da[y + step] - v
+            if best is None or abs(d) > abs(best[2]):
+                best = (y, v, d)
+    if best and len(s) >= 3 and best[2] != 0 and s[-1][0] - s[0][0] >= 2 * step:
+        y, v, d = best
+        out.append(f"Giai đoạn {a} thay đổi nhanh nhất: {y}–{y + step}, từ {_fmt(v, unit)}"
+                   f" {'lên' if d > 0 else 'xuống'} {_fmt(v + d, unit)}")
+    first, last = s[0][1], s[-1][1]
+    up = last > first
+    crossed = []
+    for m in _milestones(min(first, last), max(first, last), pct):
+        for (y0, v0), (y1, v1) in zip(s, s[1:]):
+            if (up and v0 < m <= v1) or (not up and v0 > m >= v1):
+                crossed.append((m, y1))
+                break
+    if crossed:
+        m, y = crossed[-1] if up else crossed[0]
+        out.append(f"{a} {'vượt' if up else 'xuống dưới'} mốc {_fmt(m, unit)} vào năm {y}")
+    return out
+
+
+def trim_leading(*series, share: float = 0.001) -> tuple:
+    """Bỏ các năm đầu mà MỌI chuỗi còn gần bằng 0 (dưới 0,1% giá trị lớn nhất): thuê bao di động
+    1960-1985 toàn số 0, câu chuyện phải bắt đầu từ năm có số thật. Ca thật #30 (video #7): câu
+    "Nhìn lại năm 1960, cả Việt Nam và Hàn Quốc đều ghi nhận 0 thuê bao" là chỗ người xem bỏ đi.
+    Ngưỡng thấp có chủ ý: GDP đầu người Hàn Quốc 1960 (159 USD, 0,4% mức 2025) là chuyện đáng kể."""
+    peak = max((abs(v) for s in series for _, v in s), default=0)
+    start = min((y for s in series for y, v in s if abs(v) >= share * peak), default=None) if peak else None
+    if start is None:
+        return series
+    return tuple([p for p in s if p[0] >= start] for s in series)
+
+
+def beats_lines(beats: list) -> list:
+    return [BEATS_HEADER] + [f"• {b}." for b in beats] if beats else []
+
+
+def race_lines(series: dict, years: list, focus: list, unit: str = None) -> list:
     """Phần thân tóm tắt của một "cuộc đua": xếp hạng năm đầu/năm cuối, dòng "ai vượt ai"
-    cho các đối tượng trọng tâm, rồi bảng theo năm.
+    cho các đối tượng trọng tâm, điểm nhấn (giai đoạn leo hạng mạnh nhất; có `unit` thì thêm điểm
+    nhấn về số liệu — story_beats), rồi bảng theo năm.
     series: {tên: [(năm, giá trị), ...]}; years: mốc năm (mọi tên đều có số); focus: tên cần kể kỹ."""
     at = {n: dict(s) for n, s in series.items()}
     y0, y1 = years[0], years[-1]
@@ -163,6 +326,17 @@ def race_lines(series: dict, years: list, focus: list) -> list:
         if lost:
             line += ("; " if passed else " — ") + "bị vượt bởi " + ", ".join(lost)
         lines.append(line + ".")
+    beats = story_beats(series, [n for n in focus if n in series], unit) if unit is not None else []
+    for n in focus:                       # giai đoạn leo (hoặc tụt) hạng mạnh nhất giữa hai mốc liền nhau
+        if n not in series or len(years) < 3:
+            continue
+        ranks = [ranking({m: at[m][y] for m in series}).index(n) + 1 for y in years]
+        k = max(range(len(years) - 1), key=lambda i: abs(ranks[i] - ranks[i + 1]))
+        if ranks[k] != ranks[k + 1]:
+            verb = "leo" if ranks[k + 1] < ranks[k] else "tụt"
+            beats.append(f"Giai đoạn {n} {verb} hạng mạnh nhất: {years[k]}–{years[k + 1]}, từ hạng"
+                         f" {ranks[k]} {'lên' if verb == 'leo' else 'xuống'} hạng {ranks[k + 1]}")
+    lines += beats_lines(beats)
     for n in sorted(series, key=lambda n: -at[n][y1]):
         lines.append(f"{n} theo năm: " + "; ".join(f"{y}: {vn_number(at[n][y])}" for y in years) + ".")
     return lines

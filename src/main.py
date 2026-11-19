@@ -193,7 +193,8 @@ def _script_one(crew, idea: dict, source_text: str, cfg: dict, recent_hooks: lis
     # (bắt kiểu hook "99% người..." tự chế), từng câu so sánh phải khớp bảng số (bắt kiểu "Hàn Quốc
     # 2025 mới đạt mức Việt Nam có từ 1990" — sai mà mọi con số đều có trong nguồn, ca thật #46)
     unsourced = crew.unsourced_numbers(script, idea, source_text)
-    wrong_cmp = claims.script_comparison_problems(script, idea.get("summary"))
+    wrong_cmp = (claims.script_comparison_problems(script, idea.get("summary"))
+                 + claims.script_cause_claims(script, idea.get("summary")))
     if not fc.get("pass") or unsourced or wrong_cmp:
         feedback = "\n".join(
             [f"- SAI: {v.get('claim', '')} -> {v.get('note', '')}"
@@ -202,17 +203,19 @@ def _script_one(crew, idea: dict, source_text: str, cfg: dict, recent_hooks: lis
                for it in fc.get("sentence_issues", [])]
             + [f"- BỊA SỐ: con số {n} trong lời đọc không có trong bài nguồn — bỏ đi hoặc"
                f" thay bằng con số có thật trong nguồn" for n in unsourced]
-            + [f"- SO SÁNH SAI: {p}" for p in wrong_cmp])
+            + [f"- SAI/KHÔNG CÓ CĂN CỨ: {p}" for p in wrong_cmp])
         log.warning("Kiểm chứng trượt — trả về Biên kịch viết lại:\n%s", feedback)
         script = crew.write_script(idea, cfg, feedback=feedback, source_text=source_text,
                                    recent_hooks=recent_hooks)
         fc = crew.fact_check(script, idea, source_text, cfg)
         unsourced = crew.unsourced_numbers(script, idea, source_text)
-        wrong_cmp = claims.script_comparison_problems(script, idea.get("summary"))
-    problems = crew.script_problems(script, cfg)
+        wrong_cmp = (claims.script_comparison_problems(script, idea.get("summary"))
+                     + claims.script_cause_claims(script, idea.get("summary")))
+    # Cổng cuối: chỉ lỗi CHẶN (lỗi "nhắc" như câu kết chưa quay lại hook chỉ dùng khi viết lại)
+    problems = crew.script_problems(script, cfg, include_soft=False)
     if unsourced:
         problems.append("con số không có trong bài nguồn: " + ", ".join(unsourced))
-    problems += [f"so sánh sai — {p}" for p in wrong_cmp]
+    problems += [f"nội dung sai/không có căn cứ — {p}" for p in wrong_cmp]
     if problems:
         # Ghi lý do vào hồ sơ kiểm chứng để về sau tra được vì sao kịch bản bị giữ lại
         fc["standard_problems"] = problems

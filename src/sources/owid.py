@@ -71,7 +71,8 @@ def build_map(chart: dict, table: dict, names: dict, focus: list, this_year: int
     # giới (CO2 cả năm) lớn hơn mọi nước -> vẽ chung trục thì đường các nước dẹp lép dưới đáy.
     if world and world[-1][1] <= max(years[year].values()):
         extra[WORLD_LABEL] = world
-    ind = {"code": chart["slug"], "name": chart["name"], "unit": chart.get("unit", "")}
+    ind = {"code": chart["slug"], "name": chart["name"], "unit": chart.get("unit", ""),
+           "per": chart.get("per"), "period": chart.get("period")}     # cách nói dễ hình dung
     return build_world_item(ind, year, years[year], names, focus, hist,
                             source_line=source_line(chart), source=OWID_SOURCE, extra_series=extra,
                             url=GRAPHER.format(slug=chart["slug"]) + f"?tab=map&time={year}")
@@ -122,7 +123,12 @@ def build_race(chart: dict, table: dict, names: dict, groups: dict, focus: list,
     world_line = world_rank_line(table, names, series, focus, y1)
     if world_line:
         lines.append(world_line)
-    lines += race_lines({names[c]: s for c, s in series.items()}, years, in_focus)
+    from .datatable import relatable_line
+    relate = relatable_line([(names[c], dict(series[c]).get(y1)) for c in focus if c in series], unit,
+                            {"per": chart.get("per"), "period": chart.get("period")})
+    if relate:
+        lines.append(relate)
+    lines += race_lines({names[c]: s for c, s in series.items()}, years, in_focus, unit)
     return {
         "title": f"Cuộc đua {lower_first(chart['name'])}: {who} từ {y0} đến {y1}",
         "summary": "\n".join(lines),

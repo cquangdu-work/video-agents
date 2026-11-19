@@ -20,12 +20,18 @@ const countK = (tl: number, dur: number) => ramp(tl, 0.05 * dur, 0.62 * dur, Eas
 /** Cỡ chữ để một chuỗi số vừa bề ngang `width` (ước lượng ~0,6 em mỗi ký tự với font đậm). */
 const fitSize = (text: string, width: number, max: number) => Math.min(max, width / (0.62 * Math.max(text.length, 1)));
 
+/** true khi đang vẽ cảnh MỞ ĐẦU (Story.tsx bọc cảnh có `hook`): chữ hiện đủ ngay khung đầu tiên. */
+export const HookContext = React.createContext(false);
+
 export const SceneTitle: React.FC<{ text: string; brand: Brand; tl: number }> = ({ text, brand, tl }) => {
-  const k = ramp(tl, 0.0, 0.4, Easing.out(Easing.cubic));
+  const hook = React.useContext(HookContext);
+  const k = hook ? 1 : ramp(tl, 0.0, 0.4, Easing.out(Easing.cubic));
   return (
-    <div style={{ position: "absolute", top: 196, left: 70, right: 70, textAlign: "center", fontSize: 56,
+    <div style={{ position: "absolute", top: 196, left: 70, right: 70, textAlign: "center", fontSize: hook ? 62 : 56,
       fontWeight: 800, lineHeight: 1.2, color: brand.text, opacity: k, transform: `translateY(${(1 - k) * 26}px)` }}>
       {text}
+      {hook && <div style={{ margin: "18px auto 0", height: 8, borderRadius: 4, background: brand.accent,
+        width: 260 }} />}
     </div>
   );
 };
@@ -36,10 +42,10 @@ const Flag: React.FC<{ code?: string; w: number }> = ({ code, w }) =>
 
 // ------------------------------------------------------------------ cảnh chữ
 /** Tô màu nhấn cho số và chữ viết tắt (danh sách do Python tính bằng cùng hàm với Manim). */
-function richWords(text: string, hl: string[], brand: Brand, tl: number) {
+function richWords(text: string, hl: string[], brand: Brand, tl: number, instant = false) {
   const words = text.split(/\s+/).filter(Boolean);
   return words.map((w, i) => {
-    const k = ramp(tl, 0.05 + i * 0.045, 0.3 + i * 0.045, Easing.out(Easing.cubic));
+    const k = instant ? 1 : ramp(tl, 0.05 + i * 0.045, 0.3 + i * 0.045, Easing.out(Easing.cubic));
     const hot = hl.some((h) => w.includes(h));
     return (
       <span key={i} style={{ display: "inline-block", marginRight: "0.28em", opacity: k,
@@ -49,14 +55,27 @@ function richWords(text: string, hl: string[], brand: Brand, tl: number) {
 }
 
 export const Statement: React.FC<P<StatementScene>> = ({ s, brand, tl, dur }) => {
+  const hook = React.useContext(HookContext);
   const Icon = s.icon ? ICONS[s.icon] : undefined;
   const ik = pop(tl, 0.0, 0.45);
   const glow = 0.5 + 0.5 * Math.sin(tl * 3);
   const text = (align: "center" | "left", size = 66) => (
     <div style={{ fontSize: size, fontWeight: 800, lineHeight: 1.22, textAlign: align }}>
-      {richWords(s.text, s.highlights, brand, tl)}
+      {richWords(s.text, s.highlights, brand, tl, hook)}
     </div>
   );
+  if (s.compact) {
+    // Biểu đồ chính vẫn ở nửa dưới (ChartWorld, chế độ panel): chữ gọn ở nửa trên, không biểu tượng
+    return (
+      <AbsoluteFill style={{ opacity: exitOf(tl, dur) }}>
+        <div style={{ position: "absolute", top: 400, left: 90, right: 90, display: "flex",
+          flexDirection: "column", alignItems: "center", gap: 34 }}>
+          {text("center", 60)}
+          <div style={{ height: 8, borderRadius: 4, background: brand.accent, width: 200 * ramp(tl, 0.2, 0.7) }} />
+        </div>
+      </AbsoluteFill>
+    );
+  }
   const iconBubble = (size: number) => Icon && (
     <div style={{ width: size, height: size, borderRadius: size / 2, background: brand.surface,
       display: "flex", alignItems: "center", justifyContent: "center", transform: `scale(${ik})`,

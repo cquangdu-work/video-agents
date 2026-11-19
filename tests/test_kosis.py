@@ -105,7 +105,7 @@ class BrokenSceneTest(unittest.TestCase):
         logging.disable(logging.WARNING); self.addCleanup(logging.disable, logging.NOTSET)
 
     def test_broken_scene_keeps_its_narration_as_a_text_scene(self):
-        cfg = {"pacing": {"scene_seconds_min": 2, "scene_seconds_max": 4}}
+        cfg = {"pacing": {"scene_seconds_min": 2, "scene_seconds_max": 4}, "render": {"intro": True}}
         spec = produce.validate_spec([
             {"template": "map", "voice": "Các loại visa của người Việt.", "params": {
                 "title": "Visa người Việt", "items": [{"label": "Du học (D-2)", "value": 1}]}},

@@ -80,6 +80,19 @@ class StatsTest(unittest.TestCase):
         self.assertIsNone(weekly.retention_findings([], timeline))
         self.assertIsNone(weekly.retention_findings(ret, []))
 
+    def test_losses_per_scene_type(self):
+        # 19/11: đo bằng số cảnh chữ có đuổi người xem hơn cảnh biểu đồ không
+        timeline = [(0, 10, "statement", "a"), (10, 20, "line_chart", "b"), (20, 30, "statement", "c")]
+        ret = [(i / 30, 1.0 - (0.02 * i if i <= 10 else 0.2 + 0.005 * (i - 10) if i <= 20
+                                else 0.25 + 0.02 * (i - 20))) for i in range(0, 31)]
+        losses = weekly.scene_losses(ret, timeline)
+        self.assertEqual([x[0] for x in losses], ["statement", "line_chart", "statement"])
+        self.assertAlmostEqual(losses[0][1], 7.0)                  # bỏ 3 giây đầu (chuyện của hook)
+        by = weekly.loss_by_template([{"losses": losses}])
+        self.assertGreater(by["statement"], by["line_chart"])
+        self.assertEqual(weekly.loss_by_template([{"losses": [("map", 5.0, 0.1)]}]), {})   # dưới 10 giây
+        self.assertEqual(weekly.scene_losses([], timeline), [])
+
 
 class Resp:
     def __init__(self, status=200, body=None):
@@ -184,7 +197,7 @@ class WeeklyRunTest(unittest.TestCase):
         def video_stats(vid, start, end, token):
             n = int(vid[2:])
             return {"views": 100 * n, "likes": n, "averageViewPercentage": 40.0 + n,
-                    "averageViewDuration": 30, "subscribersGained": 1}
+                    "averageViewDuration": 30, "subscribersGained": 1, "engagedViews": 43 * n}
         with mock.patch.dict(os.environ, {"YT_CLIENT_ID": "c", "YT_CLIENT_SECRET": "s"}), \
              mock.patch.object(youtube, "access_token", return_value="AT"), \
              mock.patch.object(youtube, "analytics_video", side_effect=video_stats), \
@@ -194,6 +207,8 @@ class WeeklyRunTest(unittest.TestCase):
             report = weekly.run_weekly(now=NOW)
         self.assertIn("Nguồn: YouTube Analytics", report)
         self.assertIn("rớt mạnh nhất ở giây 14.0 (cảnh 3, bar_chart)", report)
+        self.assertIn("qua vài giây đầu 43%", report)                # engaged views / views
+        self.assertIn("Người xem mất đi theo loại cảnh", report)
         self.assertIn("curiosity: 1.0 → 1.1", report)
         self.assertLess(report.index("#12 "), report.index("#1 Video 1 "))      # xếp theo % xem giảm dần
         saved = learned.load_learned()

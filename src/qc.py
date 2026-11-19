@@ -24,7 +24,17 @@ log = logging.getLogger("qc")
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def check_duration(path: Path, lo=45, hi=95) -> dict:
+def duration_bounds() -> tuple:
+    """Khung độ dài AN TOÀN (config/channel.yaml qc.min_seconds/max_seconds). Từ 19/11/2026 Shorts
+    45-60 giây nên sàn hạ còn 35 giây; trần giữ 95 cho kịch bản đời cũ trong mấy ngày chuyển đổi."""
+    try:
+        q = (yaml.safe_load((ROOT / "config" / "channel.yaml").read_text(encoding="utf-8")) or {}).get("qc") or {}
+    except (OSError, yaml.YAMLError):
+        q = {}
+    return float(q.get("min_seconds", 35)), float(q.get("max_seconds", 95))
+
+
+def check_duration(path: Path, lo=35, hi=95) -> dict:
     out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
                           "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
                          capture_output=True, text=True, check=True)
@@ -238,7 +248,7 @@ def collect_checks(script_id: int) -> list:
     if not p.exists():
         p = spec_dir / f"script_{script_id}.yaml"
     spec = yaml.safe_load(p.read_text(encoding="utf-8"))
-    d = check_duration(video)
+    d = check_duration(video, *duration_bounds())
     checks = [d, check_black_frames(video), check_loudness(video), check_licenses(),
               check_narration(script_id), check_visuals_match(video, spec, d["_duration"])]
     return [{k: v for k, v in c.items() if not k.startswith("_")} for c in checks]
