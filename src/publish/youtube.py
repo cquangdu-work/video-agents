@@ -396,6 +396,59 @@ def analytics_retention(video_id: str, start: str, end: str, token: str) -> list
     return [(float(a), float(b)) for a, b in (data.get("rows") or [])]
 
 
+def comment_threads(video_id: str, token: str = None, api_key: str = None, page_token: str = None) -> dict:
+    """Một trang bình luận gốc của một video, MỚI NHẤT trước (agent Cộng đồng). Chỉ ĐỌC: token hiện có
+    (youtube.readonly) hoặc API key là đủ; đăng trả lời cần quyền youtube.force-ssl — chưa xin."""
+    params = {"part": "snippet", "videoId": video_id, "maxResults": 100, "order": "time",
+              "textFormat": "plainText"}
+    if page_token:
+        params["pageToken"] = page_token
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    else:
+        params["key"] = api_key
+    r = requests.get(f"{API_URL}/commentThreads", params=params, headers=headers, timeout=30)
+    if r.status_code == 403 and "commentsDisabled" in r.text:
+        return {"items": []}                     # video tắt bình luận
+    r.raise_for_status()
+    return r.json()
+
+
+def channel_stats(token: str) -> dict:
+    """Số liệu công khai của kênh (người đăng ký, lượt xem, số video) — agent Tăng trưởng."""
+    r = requests.get(f"{API_URL}/channels", timeout=30, params={"part": "statistics", "mine": "true"},
+                     headers={"Authorization": f"Bearer {token}"})
+    r.raise_for_status()
+    items = r.json().get("items") or []
+    st = items[0].get("statistics", {}) if items else {}
+    return {"subscribers": int(st.get("subscriberCount", 0)), "views": int(st.get("viewCount", 0)),
+            "videos": int(st.get("videoCount", 0))}
+
+
+def channel_report(token: str, start: str, end: str) -> dict:
+    """Số liệu cả kênh trong khoảng ngày, tách Shorts / video dài (chiều creatorContentType):
+    {"shorts": {...}, "long": {...}, "all": {...}} với views, minutes, subs_gained, subs_lost.
+    API không nhận chiều này thì chỉ có "all"."""
+    metrics = "views,estimatedMinutesWatched,subscribersGained,subscribersLost"
+    keys = ("views", "minutes", "subs_gained", "subs_lost")
+    out = {"all": dict.fromkeys(keys, 0)}
+    try:
+        data = _report(token, startDate=start, endDate=end, metrics=metrics, dimensions="creatorContentType")
+        for row in data.get("rows") or []:
+            kind = {"shorts": "shorts", "videoondemand": "long"}.get(str(row[0]).lower().replace("_", ""), "other")
+            vals = dict(zip(keys, (int(float(x or 0)) for x in row[1:5])))
+            out[kind] = {k: out.get(kind, {}).get(k, 0) + v for k, v in vals.items()}
+            out["all"] = {k: out["all"][k] + v for k, v in vals.items()}
+        return out
+    except YouTubeUploadError:
+        data = _report(token, startDate=start, endDate=end, metrics=metrics)
+        rows = data.get("rows") or []
+        if rows:
+            out["all"] = dict(zip(keys, (int(float(x or 0)) for x in rows[0][:4])))
+        return out
+
+
 def public_stats(video_ids: list, api_key: str) -> dict:
     """Số liệu CÔNG KHAI (xem/thích/bình luận) bằng API key thường — dùng khi chưa cấp
     quyền OAuth (vd đang đăng tay). Trả về {video_id: {"views", "likes", "comments"}}."""

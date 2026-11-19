@@ -34,6 +34,12 @@ def load_config() -> dict:
 
 def collect(cfg: dict, con) -> int:
     """Bước 1: gom ý tưởng thô từ mọi nguồn, nạp vào DB (tự bỏ trùng)."""
+    from . import topics
+    # Chủ đề được yêu cầu (người xem, Du /chude, video đột biến) lấy TRƯỚC xoay vòng — src/topics.py
+    try:
+        cfg = topics.with_requests(cfg, con)
+    except Exception as exc:
+        log.warning("Không đọc được hàng đợi chủ đề (bỏ qua): %s", exc)
     items = fetch_all(cfg)
     log.info("Lấy được %d ý tưởng thô từ các nguồn", len(items))
     added = db.insert_raw_ideas(con, items, cfg["dedup"]["title_similarity_threshold"])
@@ -110,7 +116,13 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
         else:
             db.set_status(con, idea["id"], "rejected", reason=f"Điểm thấp ({s['total']})", scores=s)
     want = cfg["daily"]["shortlist"]
-    selected = balance_families(sorted(selected, key=lambda i: -i["score"]))
+    # agent Tăng trưởng (src/growth.py): ý tưởng cùng mảng + dạng với video ĐỘT BIẾN gần đây được cộng điểm
+    from . import growth, learning
+    from .sources.datatable import topic_family
+    grow = growth._data()
+    boost = lambda i: growth.IDEA_BOOST_POINTS * growth.boost_for(
+        topic_family(i.get("source_name")), learning.video_kind(i.get("title"), i.get("source_name")), grow)
+    selected = balance_families(sorted(selected, key=lambda i: -(i["score"] + boost(i))))
     # Kịch bản hụt chuẩn (thiếu số, quá ngắn) không được tính -> thử thêm ý tưởng kế
     # tiếp theo điểm, nhưng có trần để không đốt quota LLM vô hạn.
     selected = selected[: want + int(cfg["daily"].get("extra_script_tries", 2))]

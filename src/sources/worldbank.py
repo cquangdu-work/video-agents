@@ -342,7 +342,7 @@ def fetch_world_maps(cfg: dict, indicators: list, today: date = None) -> list:
     names = {c: w["name"] for c, w in world.items()}
     focus = cfg.get("focus") or ["VNM", "KOR"]
     items = []
-    for ind in todays_indicators(pool, int(cfg.get("per_day", 1)), today):
+    for ind in todays_indicators(pool, int(cfg.get("per_day", 1)), today, cfg.get("priority")):
         try:
             scale = float(ind.get("scale", 1) or 1)
             by_year = fetch_world_table(ind["code"], set(world))
@@ -362,12 +362,17 @@ def fetch_world_maps(cfg: dict, indicators: list, today: date = None) -> list:
     return items
 
 
-def todays_indicators(indicators: list, per_day: int, today: date = None) -> list:
-    """Chọn per_day chỉ số cho hôm nay, xoay vòng hết danh sách rồi mới lặp lại."""
+def todays_indicators(indicators: list, per_day: int, today: date = None, priority=()) -> list:
+    """Chọn per_day chỉ số cho hôm nay, xoay vòng hết danh sách rồi mới lặp lại. priority: mã chỉ số /
+    slug được yêu cầu (người xem, Du, video đột biến — src/topics.py) được lấy TRƯỚC xoay vòng."""
     if not indicators or per_day <= 0:
         return []
+    n = min(per_day, len(indicators))
+    wanted = set(priority or ())
+    first = [i for i in indicators if isinstance(i, dict) and (i.get("code") or i.get("slug")) in wanted][:n]
     start = ((today or date.today()).toordinal() * per_day) % len(indicators)
-    return [indicators[(start + k) % len(indicators)] for k in range(min(per_day, len(indicators)))]
+    rotation = [indicators[(start + k) % len(indicators)] for k in range(len(indicators))]
+    return (first + [i for i in rotation if i not in first])[:n]
 
 
 def fetch_worldbank(cfg: dict, today: date = None) -> list:
@@ -375,7 +380,7 @@ def fetch_worldbank(cfg: dict, today: date = None) -> list:
     if len(countries) < 2:
         return []
     items = []
-    for ind in todays_indicators(cfg.get("indicators", []), int(cfg.get("per_day", 2)), today):
+    for ind in todays_indicators(cfg.get("indicators", []), int(cfg.get("per_day", 2)), today, cfg.get("priority")):
         try:
             series = fetch_indicator(ind, [c["iso3"] for c in countries[:2]],
                                      int(cfg.get("start_year", 1960)))
@@ -400,7 +405,7 @@ def fetch_races(cfg: dict, today: date = None) -> list:
         return []
     focus = cfg.get("focus") or []
     items = []
-    for ind in todays_indicators(cfg.get("indicators", []), int(cfg.get("per_day", 1)), today):
+    for ind in todays_indicators(cfg.get("indicators", []), int(cfg.get("per_day", 1)), today, cfg.get("priority")):
         try:
             series = fetch_indicator(ind, [c["iso3"] for c in countries],
                                      int(cfg.get("start_year", 1990)))

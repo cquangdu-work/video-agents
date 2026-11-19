@@ -305,6 +305,7 @@ def _hook_of(body: str) -> str:
 
 SHRINK = 3.0          # mỗi giá trị như thể có thêm 3 video "trung bình": ít video thì không kết luận mạnh
 EXPLORE = 0.5         # thưởng cho cái ít được thử (đơn vị độ lệch chuẩn)
+SUB_WEIGHT = 0.5      # kéo người đăng ký nặng bằng nửa giữ chân trong điểm tổng hợp (khi có số liệu sub)
 
 
 def update_preferences(con, rows: list, now: datetime = None) -> dict:
@@ -323,9 +324,21 @@ def update_preferences(con, rows: list, now: datetime = None) -> dict:
         row = con.execute("SELECT s.body, i.title, i.source_name FROM scripts s JOIN ideas i ON i.id = s.idea_id"
                           " WHERE s.id=?", (r.get("script_id"),)).fetchone()
         if row:
-            samples.append((features(_hook_of(row["body"]), row["title"], row["source_name"]), float(v)))
+            # agent Tăng trưởng (src/growth.py): người đăng ký mới / 1.000 lượt xem — video kéo sub
+            sub = (1000 * r["subs_gained"] / r["views"] if r.get("subs_gained") is not None
+                   and (r.get("views") or 0) >= 100 else None)
+            samples.append((features(_hook_of(row["body"]), row["title"], row["source_name"]), float(v), sub))
     if len(samples) < 3:
         return {}
+    subs = [s for _, _, s in samples if s is not None]
+    if len(subs) >= 3:
+        # điểm TỔNG HỢP: giữ chân + SUB_WEIGHT × kéo người đăng ký, cùng đơn vị độ lệch chuẩn
+        z = lambda xs: (sum(xs) / len(xs), (sum((x - sum(xs) / len(xs)) ** 2 for x in xs) / len(xs)) ** 0.5 or 1.0)
+        (mv, sv), (ms, ss) = z([v for _, v, _ in samples]), z(subs)
+        samples = [(f, (v - mv) / sv + SUB_WEIGHT * ((s - ms) / ss if s is not None else 0.0)) for f, v, s in samples]
+        metric += "+sub"
+    else:
+        samples = [(f, v) for f, v, _ in samples]
     vals = [v for _, v in samples]
     mean = sum(vals) / len(vals)
     sd = (sum((v - mean) ** 2 for v in vals) / len(vals)) ** 0.5 or 1.0
@@ -385,6 +398,8 @@ def viewer_block(prefs: dict = None) -> str:
         return ""
     unit = {"engaged_pct": "% lượt xem qua vài giây đầu", "avg_view_pct": "% thời lượng được xem"}.get(
         prefs["metric"], "lượt xem (thang log)")
+    if str(prefs["metric"]).endswith("+sub"):
+        unit = "điểm tổng hợp giữ chân + kéo người đăng ký, 0 = trung bình kênh"
     best = max(hooks, key=lambda k: hooks[k]["score"])
     worst = min(hooks, key=lambda k: hooks[k]["score"])
     return (f"\nNGƯỜI XEM KÊNH NÀY ({prefs['based_on']} video, đo bằng {unit}): mở đầu kiểu “{best}”"

@@ -14,6 +14,8 @@ Việc nó làm:
      tốt -> daily ưu tiên, máy chọn hook cộng điểm; báo cáo thêm mục "Tự học".
   6. Học cách dựng (src/style.py): so % xem giữa các mức thử nghiệm (tốc độ đọc, nhạc, nhịp cảnh, cỡ phụ
      đề), tự dời khung khi một mức thắng rõ, học loại cảnh nào giữ chân; báo cáo mục "Học cách dựng".
+  7. Agent Tăng trưởng (src/growth.py): đo cả kênh + tiến độ YPP, video đột biến -> ưu tiên làm tiếp;
+     kèm tóm tắt agent Cộng đồng (bình luận) và các chủ đề được yêu cầu (src/topics.py).
 
 Thành thật về thống kê: vài video đầu KHÔNG đủ để kết luận gì. Vì vậy có ngưỡng tối
 thiểu, mỗi tuần chỉ nhích trọng số 0.1, và báo cáo luôn ghi dựa trên bao nhiêu video.
@@ -275,7 +277,8 @@ def build_rows(con, videos: list, now: datetime) -> list:
         if age < MIN_AGE_DAYS:
             continue
         row = dict(v, age_days=age, source=st["source"], views=st["views"], likes=st["likes"],
-                   avg_view_pct=st["avg_view_pct"], avg_view_sec=st["avg_view_sec"])
+                   avg_view_pct=st["avg_view_pct"], avg_view_sec=st["avg_view_sec"],
+                   subs_gained=st["subs_gained"])          # agent Tăng trưởng: video nào kéo người đăng ký
         engaged = st["engaged_views"] if "engaged_views" in st.keys() else None
         row["engaged_pct"] = (round(100 * engaged / st["views"]) if engaged is not None and st["views"]
                               else None)
@@ -396,9 +399,19 @@ def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
         except Exception as exc:
             log.warning("LLM rút bài học lỗi: %s", exc)
 
-    from .. import learning, style
-    style_notes = []
+    from .. import community, growth, learning, style, topics
+    style_notes, growth_lines = [], []
     if not dry_run:
+        try:
+            # AGENT TĂNG TRƯỞNG: đo cả kênh, tiến độ YPP, video đột biến -> ưu tiên + xếp hàng làm tiếp
+            from ..publish import youtube
+            try:
+                token = youtube.access_token()
+            except Exception:
+                token = None
+            growth_lines = growth.update(con, cfg, rows, now, token)
+        except Exception as exc:
+            log.warning("Agent Tăng trưởng lỗi: %s", exc)
         try:
             # TỰ HỌC từ người xem: kiểu mở đầu / mảng / dạng video nào giữ chân tốt -> learned.yaml,
             # daily và máy chọn hook đọc lại. Gọi TRƯỚC load_learned bên dưới để không ghi đè mất.
@@ -412,8 +425,11 @@ def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
             log.warning("Cập nhật học cách dựng lỗi: %s", exc)
 
     report = format_report(rows, len(videos), source, weight_notes, insights)
-    for part, what in ((lambda: learning.weekly_lines(con, now), "tự học"),
-                       (lambda: style.weekly_lines(con, now, style_notes), "học cách dựng")):
+    for part, what in ((lambda: growth_lines, "tăng trưởng"),
+                       (lambda: learning.weekly_lines(con, now), "tự học"),
+                       (lambda: style.weekly_lines(con, now, style_notes), "học cách dựng"),
+                       (lambda: community.weekly_lines(con, now), "cộng đồng"),
+                       (lambda: topics.weekly_lines(con, now), "chủ đề được yêu cầu")):
         try:
             report = "\n".join([report] + part())
         except Exception as exc:

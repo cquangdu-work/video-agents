@@ -174,7 +174,7 @@ def fetch_owid(cfg: dict, today: date = None, fetch=None) -> list:
     groups = cfg.get("groups") or {}
     this_year = (today or date.today()).year
     items = []
-    for chart in todays_indicators(charts, int(cfg.get("per_day", 2)), today):
+    for chart in todays_indicators(charts, int(cfg.get("per_day", 2)), today, cfg.get("priority")):
         try:
             table = load_table(chart["slug"], fetch)
             if chart.get("kind", "map") == "race":

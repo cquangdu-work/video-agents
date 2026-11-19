@@ -43,7 +43,8 @@ MAX_FAILS_PER_SCRIPT = 2          # kịch bản dựng hỏng 2 lần thì thô
 PREF_WEIGHT = 2.0                 # 1 độ lệch chuẩn "người xem thích" = 2 điểm Biên tập (thang ~15-30)
 EXIT_RETRY_LATER = 75             # bước con thoát mã này = "lỗi tạm thời của dịch vụ ngoài"
                                   # (assemble: hết quota TTS) — khớp src/assemble.py
-STEP_TIMEOUT = {"ideas": 3600, "produce": 1800, "assemble": 5400, "review": 1200}  # giây
+STEP_TIMEOUT = {"ideas": 3600, "produce": 1800, "assemble": 5400, "review": 1200,  # giây
+                "community": 900}
 
 
 def load_config() -> dict:
@@ -151,9 +152,10 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     lựa chọn khác — ca thật 13-18/11: 6/6 video là Việt–Hàn) -> cái đã dựng xong video (khỏi tốn
     công) -> điểm Biên tập + điểm "người xem thích" đã học (src/learning.py) -> mới hơn.
     """
-    from . import learning
+    from . import growth, learning
     from .sources.datatable import topic_family
     prefs = learning.preferences()
+    grow = growth._data()                   # ưu tiên của agent Tăng trưởng (đọc một lần)
     max_age = cfg["daily"].get("max_script_age_days", 3)
     min_words = cfg["daily"].get("min_script_words", 150)
     max_words = max_script_words(cfg)
@@ -205,15 +207,17 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
         family = topic_family(r["source_name"])
         # TỰ HỌC từ người xem (src/learning.py): kiểu mở đầu / mảng / dạng video nào giữ chân tốt,
         # có thưởng thăm dò cho cái ít được thử. Đơn vị độ lệch chuẩn, nhân PREF_WEIGHT điểm Biên tập.
-        bonus = learning.preference_bonus(
-            learning.features(learning._hook_of(r["body"]), r["title"], r["source_name"]), prefs)
+        feats = learning.features(learning._hook_of(r["body"]), r["title"], r["source_name"])
+        bonus = learning.preference_bonus(feats, prefs)
+        # agent Tăng trưởng (src/growth.py): cùng mảng + dạng với video ĐỘT BIẾN gần đây thì làm trước
+        boost = growth.boost_for(feats["family"], feats["kind"], grow)
         out.append({"id": r["id"], "score": score, "has_final": final_path(r["id"]).exists(),
                     "family": family, "streak": streak(family, recent),
-                    "long": words > max_words, "learned": bonus})
+                    "long": words > max_words, "learned": bonus, "boost": boost})
     # Kịch bản DÀI hơn độ dài mới (viết trước 19/11 cho video 60-90 giây) xếp sau cùng: chỉ dựng khi
     # không còn kịch bản nào đúng khổ 45-60 giây (assemble đọc nhanh tối đa 1,12 lần vẫn ra ~80 giây)
     return sorted(out, key=lambda c: (c["long"], c["streak"], not c["has_final"],
-                                      -(c["score"] + PREF_WEIGHT * c["learned"]), -c["id"]))
+                                      -(c["score"] + PREF_WEIGHT * (c["learned"] + c["boost"])), -c["id"]))
 
 
 def _spec_usable(path: Path) -> bool:
@@ -354,6 +358,15 @@ def _run_daily(cfg, con, skip_ideas, dry_run, runner) -> int:
             log.warning(failed)
         else:
             made += 1
+
+    # Agent Cộng đồng (src/community.py): đọc bình luận mới mỗi sáng, MỘT lần mỗi ngày, không ảnh hưởng
+    # việc ra video (lỗi thì chỉ ghi log)
+    today = datetime.now().strftime("%Y-%m-%d")
+    if (cfg.get("community") or {}).get("enabled") and db.get_state(con, "community_day") != today:
+        ok, tail = runner("Cộng đồng (đọc bình luận)", "community", ["-m", "src.community"], log_file)
+        db.set_state(con, "community_day", today)
+        if not ok:
+            log.warning("Agent Cộng đồng lỗi (không ảnh hưởng video): %s", tail.splitlines()[:1])
 
     if made == 0:
         reason = "\n\n".join(problems) if problems else "Không có kịch bản nào qua được Kiểm chứng."

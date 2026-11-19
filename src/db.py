@@ -91,6 +91,30 @@ CREATE TABLE IF NOT EXISTS video_styles (   -- phong cách dựng từng video (
     applied   TEXT,       -- JSON: giá trị THẬT đã dùng (khác mức gán thì video không tính cho núm đó)
     at        TEXT
 );
+CREATE TABLE IF NOT EXISTS topic_requests (   -- chủ đề được yêu cầu làm sớm (src/topics.py)
+    id         INTEGER PRIMARY KEY,
+    key        TEXT,      -- "wb:<mã chỉ số>" | "owid:<slug>"; NULL = kênh chưa có nguồn (danh sách mong muốn)
+    topic      TEXT,      -- chủ đề theo lời người yêu cầu
+    origin     TEXT,      -- viewer (bình luận) | du (/chude) | breakout (video đột biến)
+    detail     TEXT,
+    status     TEXT,      -- pending | queued | wish
+    created_at TEXT,
+    queued_at  TEXT
+);
+CREATE TABLE IF NOT EXISTS comments (   -- bình luận người xem (agent Cộng đồng, src/community.py)
+    id           TEXT PRIMARY KEY,   -- id luồng bình luận YouTube
+    youtube_id   TEXT,
+    video_id     INTEGER,            -- videos.id của mình
+    author       TEXT,
+    text         TEXT,
+    published_at TEXT,
+    likes        INTEGER,
+    kind         TEXT,               -- cau_hoi | de_xuat | bao_loi | khen | che | khac
+    topic        TEXT,
+    matched      TEXT,               -- khoá chủ đề khớp (đề xuất)
+    reply        TEXT,               -- nháp trả lời cho Du
+    fetched_at   TEXT
+);
 CREATE TABLE IF NOT EXISTS state (   -- ô nhớ nhỏ: vị trí đọc Telegram, v.v.
     key   TEXT PRIMARY KEY,
     value TEXT

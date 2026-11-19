@@ -198,7 +198,10 @@ class WeeklyRunTest(unittest.TestCase):
             n = int(vid[2:])
             return {"views": 100 * n, "likes": n, "averageViewPercentage": 40.0 + n,
                     "averageViewDuration": 30, "subscribersGained": 1, "engagedViews": 43 * n}
+        snap = {"date": "2026-11-15", "subscribers": 312, "views_28d": 18420, "shorts_views_28d": 17170,
+                "long_hours_28d": 37.0, "net_subs_28d": 41, "shorts_views_90d": 25000, "long_hours_365d": 37.0}
         with mock.patch.dict(os.environ, {"YT_CLIENT_ID": "c", "YT_CLIENT_SECRET": "s"}), \
+             mock.patch("src.growth.snapshot", return_value=snap), \
              mock.patch.object(youtube, "access_token", return_value="AT"), \
              mock.patch.object(youtube, "analytics_video", side_effect=video_stats), \
              mock.patch.object(youtube, "analytics_retention",
@@ -211,6 +214,11 @@ class WeeklyRunTest(unittest.TestCase):
         self.assertIn("Người xem mất đi theo loại cảnh", report)
         self.assertIn("curiosity: 1.0 → 1.1", report)
         self.assertLess(report.index("#12 "), report.index("#1 Video 1 "))      # xếp theo % xem giảm dần
+        # agent Tăng trưởng: số liệu cả kênh + tiến độ YPP + dự báo (+41 sub / 28 ngày -> ~67 tuần tới 1.000)
+        self.assertIn("Người đăng ký: 312 (+41 trong 28 ngày)", report)
+        self.assertIn("Tiến độ YPP: sub 312/1.000", report)
+        self.assertIn("sau khoảng 67 tuần", report)
+        self.assertEqual(learned.load_learned()["growth"]["latest"]["subscribers"], 312)
         saved = learned.load_learned()
         self.assertEqual(saved["scoring_weights"]["curiosity"], 1.1)
         self.assertEqual(saved["insights"], ["Video #12: hook có số giữ chân tốt"])

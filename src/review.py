@@ -498,13 +498,52 @@ def _handle_style(con, text: str) -> bool:
     return True
 
 
+def _handle_growth(con, text: str) -> bool:
+    """/kenh: tình trạng kênh (agent Tăng trưởng). /chude <từ khoá>: Du yêu cầu làm sớm một chủ đề —
+    khớp với chỉ số kênh đang có nguồn (src/topics.py), xếp hàng cho lượt săn ý tưởng kế tiếp."""
+    from . import growth, topics
+    from .main import load_config
+    t = _fold(text)
+    if t == "/kenh":
+        tg.send_message(growth.status_text(load_config()))
+        return True
+    words = text.split()
+    if t.startswith("/chude"):
+        query = " ".join(words[1:])
+    elif t.startswith("/chu de"):
+        query = " ".join(words[2:])
+    else:
+        return False
+    if not query.strip():
+        tg.send_message("Gửi kèm chủ đề, ví dụ: /chude thất nghiệp — kênh sẽ ưu tiên làm chủ đề đó.")
+        return True
+    cfg = load_config()
+    keys = topics.match(cfg, query)
+    if not keys:
+        topics.request(con, None, query, "du")
+        tg.send_message(f"Kênh chưa có nguồn số liệu cho “{query}” — đã ghi vào danh sách mong muốn (báo cáo"
+                        " tuần sẽ nhắc để thêm chỉ số mới).")
+        return True
+    names, lines = topics.catalog(cfg), []
+    for key in keys:
+        done = topics.covered(con, key)
+        if done:
+            lines.append(f"• {names[key]}: kênh đã có video — https://youtube.com/shorts/{done[0][1]}")
+            continue
+        status = topics.request(con, key, query, "du")
+        lines.append(f"• {names[key]}: " + {"pending": "đã xếp hàng — lượt săn ý tưởng kế tiếp lấy trước",
+                                            "duplicate": "đã có trong hàng đợi gần đây"}[status])
+    tg.send_message("📌 Chủ đề “" + query + "”:\n" + "\n".join(lines))
+    return True
+
+
 def _handle_message(con, msg: dict) -> None:
     if not _from_owner(msg.get("chat"), msg.get("from")):
         return
     text = (msg.get("text") or "").strip()
     if not text:
         return
-    if _handle_teaching(text) or _handle_style(con, text):
+    if _handle_teaching(text) or _handle_growth(con, text) or _handle_style(con, text):
         return
     if text.lower() in ("/tiktok", "tiktok"):
         _start_tiktok(con)

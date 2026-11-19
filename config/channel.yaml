@@ -262,6 +262,14 @@ pacing:
 style:
   experiments: true   # false = mọi video dùng tâm khung, không thử. Du cũng tạm dừng được: /kieu tat
 
+# ---------- Agent Cộng đồng + agent Tăng trưởng (src/community.py, src/growth.py) ----------
+community:
+  enabled: true       # daily đọc bình luận mới mỗi sáng -> bản tin Telegram + nháp trả lời (Du tự đăng)
+  max_videos: 30      # đọc bình luận của chừng này video đăng gần nhất (mỗi video ~1 đơn vị quota API)
+growth:
+  # ngưỡng YPP từ 1/2/2027 (CLAUDE.md): 1.000 sub + 8.000 giờ xem video dài/năm HOẶC 20 triệu lượt Shorts/90 ngày
+  ypp: {subs: 1000, watch_hours: 8000, shorts_views_90d: 20000000}
+
 # ---------- Phân tích đối thủ (python -m src.analysis.competitors) ----------
 competitor_analysis:
   months_back: 6          # chỉ xét video 6 tháng gần đây
