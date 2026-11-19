@@ -5,8 +5,8 @@ data-driven short video every day (Vietnamese, YouTube Shorts + TikTok), plus a 
 long-form compilation. A human approves every video from Telegram (~5 min/day); everything else
 is automated. It runs on an Oracle Cloud free-tier ARM64 VM using only free-tier APIs.
 
-**Numbers:** ~11.6k lines of Python/TypeScript (+4.5k lines of tests) · 320 unit tests ·
-~110 commits · one 45–60 s video in ~15 min end-to-end on a 4-core ARM VM · $0/month model cost.
+**Numbers:** ~13k lines of Python/TypeScript (+5.3k lines of tests) · 376 unit tests ·
+~120 commits · one 45–60 s video in ~15 min end-to-end on a 4-core ARM VM · $0/month model cost.
 
 ## Pipeline
 
@@ -24,6 +24,8 @@ flowchart LR
   TG -->|approve| YT[YouTube API<br/>scheduled 19:00] & TT[TikTok inbox]
   YT --> Analytics[Weekly analyst<br/>retention -> scoring weights]
   Analytics -.-> Editor
+  Check & Spec & TG & Analytics -.-> Memory[(Learning memory<br/>gate errors, owner rules,<br/>viewer preferences)]
+  Memory -.-> Writer & Spec
 ```
 
 Orchestration is plain Python + CrewAI for the LLM roles, scheduled by systemd user timers;
@@ -50,6 +52,23 @@ every model output passes a deterministic gate:
 - *LLM-as-judge is constrained* — the vision QC model may only report three error classes as
   JSON, and code re-checks its claims against the digits the scene was allowed to show; free-form
   complaints never block a video.
+
+**Agents that learn — without loosening a single gate** (`src/learning.py`). Learning only changes
+prompts and priorities, stored as data (an events table + a YAML file), never code or gates:
+- *Own mistakes* — every gate rejection is classified (matching on the gates' real messages, with
+  tests that fail if a gate's wording drifts); before each run the writer and the scene director
+  each read their own five most frequent mistakes of the last 14 days with a real example.
+  Backfilled from saved fact-check records, the first lessons were exactly the failures seen in
+  testing (reading the table out loud, numbers spelled as words).
+- *The owner* — approvals, rejections and reply notes are recorded; durable rules are taught from
+  Telegram (`/hoc`, listed with `/luat`, removed with `/quen`).
+- *Viewers* — the weekly analyst scores hook type / topic family / video format by retention,
+  shrunk toward the mean (a handful of videos proves nothing) plus a UCB-style exploration bonus so
+  untried styles keep getting tried. It reorders the daily candidates and breaks ties between hook
+  options — capped below one rule point, so a liked style never beats a hook that follows the rules.
+- *Exemplars* — owner-approved scripts that still pass today's gates show the pacing; the prompt
+  forbids copying wording (templated content is demonetised).
+- A broken memory degrades to "learned nothing" instead of stopping the pipeline.
 
 **Designed around free-tier limits, measured in production.** Gemini TTS allows ~15 calls/day,
 so the whole script is voiced in one call and split per sentence with forced alignment
@@ -88,6 +107,7 @@ Posting API · Telegram Bot API · systemd · Oracle Cloud ARM64.
 | Area | Files |
 |---|---|
 | Agents and gates | `src/crew.py`, `src/story.py`, `src/claims.py`, `src/second_source.py` |
+| Self-learning | `src/learning.py`, `tests/test_learning.py` |
 | Audio | `src/audio/tts.py`, `src/audio/batch.py`, `src/audio/subtitles.py`, `src/audio/music.py` |
 | Rendering | `src/render/web.py`, `src/render/web_map.py`, `render-web/src/` |
 | QC and publishing | `src/qc.py`, `src/review.py`, `src/publish/` |

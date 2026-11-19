@@ -79,7 +79,8 @@ KINDS = [
     ("cau_ket", r"câu kết không quay lại", "câu kết không quay lại hook", "nhắc lại đúng con số của hook"),
     ("doc_bang", r"câu có số đứng liền nhau", "đọc bảng: nhiều câu nêu số MỚI liền nhau",
      "sau mỗi con số đắt là một câu nói nó nghĩa là gì, không thêm số mới"),
-    ("moc_nam", r"mốc năm như đọc bảng", "nhắc quá nhiều mốc năm", "giữ 4-5 mốc năm đắt nhất"),
+    ("moc_nam", r"mốc năm như đọc bảng", "nhắc quá nhiều mốc năm",
+     "chỉ giữ vài mốc năm đắt nhất — biểu đồ đã vẽ cả chuỗi năm"),
     ("so_viet_chu", r"viết bằng CHỮ", "viết số bằng chữ", "luôn viết chữ số: 73%, 2018, 8,9"),
     ("hook_lap", r"lặp cách mở", "mở đầu giống video gần đây", "đổi kiểu mở đầu"),
     ("hook_cam", r"^câu mở đầu:", "câu mở đầu phạm khuôn cấm", "xem LUẬT HOOK"),
@@ -251,7 +252,7 @@ def hook_type(text: str) -> str:
         return "moc-thoi-gian"
     if re.search(r"\b(thứ|hạng)\s+\d|đứng đầu|dẫn đầu|bét bảng|chót bảng|cuối bảng|chính giữa|top \d", t):
         return "thu-hang"
-    if re.search(r"gấp|hơn|kém|vượt|chỉ (bằng|còn|có)|ngược lại|trong khi|nhưng|bỏ xa|tụt", t):
+    if re.search(r"gấp|hơn|kém|vượt|chỉ (bằng|còn|có)|ngược lại|trong khi|nhưng|bỏ xa|tụt|từ .{1,25} (lên|xuống)", t):
         return "doi-lap"
     return "khac"
 

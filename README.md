@@ -54,6 +54,7 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `src/daily.py` | **Chuỗi hằng ngày**: một lệnh chạy cả dây chuyền, bước nào hỏng thì thử kịch bản kế và báo Telegram. |
 | `src/analysis/weekly.py` | **Agent Phân tích**: mỗi tuần đo số liệu video, tìm cảnh người xem rời đi, nhích trọng số, rút bài học. |
 | `src/analysis/learned.py` | Đọc/ghi `data/learned.yaml` — thứ kênh tự học được; Biên tập và Biên kịch đọc file này. |
+| `src/learning.py` | **Bộ nhớ tự học** (bảng `learning_events` + `data/learned.yaml`): lỗi các cổng code bắt được (phân loại, Biên kịch và Sản xuất đọc "lỗi hay mắc 14 ngày" của chính mình), luật Du dạy qua Telegram, sở thích người xem (kiểu mở đầu / mảng / dạng video giữ chân tốt), kịch bản Du đã duyệt làm mẫu nhịp kể. Xem mục "Tự học" bên dưới. |
 | `deploy/` | Script cài VM + file systemd (lịch mỗi sáng, báo cáo Chủ nhật, bot chờ duyệt). |
 | `src/review.py` | **Bước Du duyệt + agent Đăng bài**: gửi video kèm nút ✅/❌ vào Telegram, chờ nút bấm, rồi đăng. |
 | `src/publish/metadata.py` | Tiêu đề / mô tả / hashtag: LLM đề xuất, code ép giới hạn YouTube, soát số trong tiêu đề, tự gắn nguồn + khai báo AI. |
@@ -85,7 +86,28 @@ python -m src.review listen     # chạy nền, chờ Du bấm ✅ Duyệt đăn
 
 Vòng đời video (bảng `videos`): `pending_review → approved → published` hoặc `→ rejected`.
 Không có đường nào tới bước đăng mà không qua nút ✅. Bấm trùng hai lần cũng chỉ đăng một lần.
-Trả lời (reply) tin nhắn video để ghi chú/lý do loại; gửi link YouTube để lưu lại cho agent Phân tích.
+Trả lời (reply) tin nhắn video để ghi chú/lý do loại (Biên kịch đọc 5 nhận xét gần nhất); gửi link
+YouTube để lưu lại cho agent Phân tích. Dạy luật lâu dài: **/hoc** `<luật>`, xem: **/luat**, bỏ: **/quen** `<số>`.
+
+### Tự học (`src/learning.py`, từ 19/11/2026)
+
+Bốn vòng học. Mọi thứ học được nằm ở **dữ liệu** (bảng `learning_events`, `data/learned.yaml`) — không
+tự sửa code, và **không bao giờ nới cổng kiểm chứng nào**: học chỉ đổi lời dặn trong prompt và thứ tự ưu tiên.
+
+| Vòng | Học từ | Dùng vào đâu |
+|---|---|---|
+| Lỗi của chính mình | Mỗi lỗi cổng code bắt (đọc bảng, hook "Vì sao", điểm phần trăm, biểu đồ bịa số…) được phân loại | Biên kịch / Sản xuất đọc 5 lỗi hay mắc nhất 14 ngày qua của **chính mình**, kèm ví dụ thật |
+| Du | ✅/❌, nhận xét khi reply video, luật dạy bằng `/hoc` | Biên kịch đọc mọi luật + 5 nhận xét gần nhất |
+| Người xem | Agent Phân tích (Chủ nhật): kiểu mở đầu / mảng / dạng video nào giữ chân tốt — co về trung bình khi ít video, thưởng cái ít được thử (kiểu UCB) | daily xếp ứng viên; máy chọn hook phân thắng thua giữa các phương án ngang điểm luật |
+| Video tốt | Kịch bản Du đã duyệt mà vẫn qua mọi cổng hiện tại | Biên kịch xem làm mẫu nhịp kể (cấm chép câu chữ) |
+
+```bash
+python -m src.learning              # xem hệ thống đang "nhớ" gì
+python -m src.learning --backfill   # một lần khi bật: nạp lỗi đã lưu trong hồ sơ kiểm chứng 14 ngày qua
+```
+
+Bộ nhớ hỏng (file lỗi, bảng thiếu) thì agent chạy như chưa học gì — không chặn dây chuyền. Báo cáo tuần
+có mục "🧠 Tự học" (tỷ lệ kịch bản đạt cổng tuần này so với tuần trước, lỗi hay gặp, luật Du đã dạy).
 
 Hai chế độ đăng, đổi ở `config/channel.yaml` → `publish.youtube.mode`:
 

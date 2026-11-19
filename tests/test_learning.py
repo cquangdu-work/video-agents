@@ -220,6 +220,7 @@ class ViewerTest(MemoryCase):
                            ("Trong 214 nước, Việt Nam đứng đúng chính giữa.", "thu-hang"),
                            ("Việt Nam đứng thứ 10 thế giới về xe điện.", "thu-hang"),
                            ("Hàn Quốc dùng điện gấp 5 lần Việt Nam — 30 năm trước thì ngược lại.", "doi-lap"),
+                           ("Tỷ lệ dùng internet Việt Nam tăng từ 0,25% năm 2000 lên 84,2% năm 2024.", "doi-lap"),
                            ("Năm 2023 có 540.000 người Việt sống ở Hàn.", "khac"),
                            ("", "khac")):
             self.assertEqual(learning.hook_type(text), want, text)
