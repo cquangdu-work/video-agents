@@ -127,6 +127,14 @@ class OpeningTest(unittest.TestCase):
                         "Năm 2025, con số đó đã là 40%.")
         self.assertEqual(story.opening_problems(s), ([], []))
 
+    def test_relatable_small_numbers_are_not_table_reading(self):
+        self.assertFalse(story.has_data_number("Tức là cứ 3 phụ nữ thì 2 người đi làm."))
+        self.assertFalse(story.has_data_number("Việt Nam leo từ hạng 10 lên hạng 8."))
+        self.assertTrue(story.has_data_number("Năm 2025 đạt 68,6%."))
+        self.assertTrue(story.has_data_number("Chỉ 3% dân số."))
+        s = self.script("Năm 2025 đạt 68,6%.", "Cứ 3 người thì 2.", "Hàn Quốc 56,8%.", "Cứ 10 người thì gần 6.")
+        self.assertEqual(story.longest_number_run(s), 1)
+
     def test_ending_must_come_back_to_the_hook(self):
         good = self.script("Việt Nam năm 2025 gấp 5,06 lần Hàn Quốc.", "a 1", "b 2",
                            "Gấp 5,06 lần — và khoảng cách vẫn đang nới rộng.")

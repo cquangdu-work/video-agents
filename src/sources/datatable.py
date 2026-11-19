@@ -257,7 +257,8 @@ def story_beats(named: dict, focus: list, unit: str, step: int = 5) -> list:
             out.append(f"Đỉnh của {n}: năm {s[top][0]} ({_fmt(ys[top], unit)}); năm {s[-1][0]} còn"
                        f" {_fmt(ys[-1], unit)}")
         if 0 < low < len(s) - 1 and ys[low] >= 0 and ys[-1] > 1.05 * ys[low] and ys[0] > 1.05 * ys[low]:
-            out.append(f"Đáy của {n}: năm {s[low][0]} ({_fmt(ys[low], unit)}), rồi hồi lên"
+            # "tăng lên", không "hồi lên": với bụi mịn, tử vong... tăng là XẤU — câu chữ phải trung tính
+            out.append(f"Đáy của {n}: năm {s[low][0]} ({_fmt(ys[low], unit)}), rồi tăng lên"
                        f" {_fmt(ys[-1], unit)} năm {s[-1][0]}")
     s = named[a]
     best = None

@@ -171,10 +171,14 @@ def word_budget(cfg: dict) -> tuple:
     return int(ch["video_seconds_min"] * wps), int(ch["video_seconds_max"] * wps)
 
 
+WORDS_OVER = 1.12        # dư tối đa so với trần từ (= assemble.MAX_TEMPO: đọc nhanh lên bù được)
+
+
 def scene_budget(cfg: dict) -> tuple:
-    """(ít nhất, nhiều nhất) số cảnh để Biên kịch nhắm tới: mỗi cảnh một câu ~11-12 từ."""
+    """(ít nhất, nhiều nhất) số cảnh để Biên kịch nhắm tới: mỗi cảnh một câu ~12 từ. Trần tính
+    sát trần số từ — đo 19/11: cho khoảng cảnh rộng (12-19) thì model viết 15 cảnh x 15 từ = 222 từ."""
     lo_words, hi_words = word_budget(cfg)
-    return max(SCRIPT_MIN_SCENES, int(lo_words / 12)), min(SCRIPT_MAX_SCENES, int(hi_words / 11) + 1)
+    return max(SCRIPT_MIN_SCENES, -(-lo_words // 12)), min(SCRIPT_MAX_SCENES, hi_words // 12)
 
 
 SCRIPT_MIN_NUMBERS = 4   # kênh "Thế giới qua con số" — lời đọc ít số là hỏng từ gốc
@@ -254,19 +258,21 @@ def as_script(obj) -> dict:
     return obj
 
 
-MAX_SPOKEN_YEARS = 4     # lời đọc nhắc quá nhiều mốc năm = đang đọc bảng số, không kể chuyện
-                         # (video 45-60 giây từ 19/11: tối đa 4 mốc; trước là 5 cho 60-90 giây)
+MAX_SPOKEN_YEARS = 5     # lời đọc nhắc quá nhiều mốc năm = đang đọc bảng số, không kể chuyện
+                         # (thử 4 cho khổ 45-60 giây ngày 19/11: điểm nhấn có sẵn năm vượt nhau, năm
+                         # đỉnh... nên 4/5 bản nháp thật bị chặn oan — giữ 5)
 
 DATA_STORY = f"""
 ĐÂY LÀ Ý TƯỞNG TỪ BẢNG SỐ LIỆU (không phải bài báo) — phần này ƯU TIÊN hơn dàn bài chung:
 - Video sẽ có biểu đồ (đường, cuộc đua xếp hạng, bản đồ) vẽ TOÀN BỘ chuỗi năm. Vì vậy lời đọc
   KHÔNG đọc lần lượt từng mốc năm ("năm 1995 là..., năm 2000 là...") — người xem sẽ lướt đi ngay.
-- Kể thành CÂU CHUYỆN dựng từ mục "Điểm nhấn" trong tóm tắt (máy đã tính sẵn từ bảng: năm hai
-  nước vượt nhau, khoảng cách đầu–cuối, đỉnh, giai đoạn thay đổi nhanh nhất, mốc lớn, leo hạng):
-  hook là điều bất ngờ nhất (ví dụ "Việt Nam hôm nay mới bằng Hàn Quốc năm X" — chỉ khi bảng có dòng
-  "tương đương" ghi đúng năm X —, "tăng gấp N lần", "từ bét bảng lên hạng 7"), chứng minh ngay, rồi
-  2-3 điểm nhấn. Bảng có XẾP HẠNG nhiều nước thì kể ai vượt ai (các dòng "hạng ... vượt ..." đã tính
-  sẵn).
+- Kể thành CÂU CHUYỆN: hook là điều bất ngờ nhất (ví dụ "Việt Nam hôm nay mới bằng Hàn Quốc năm X"
+  — chỉ khi bảng có dòng "tương đương" ghi đúng năm X —, "tăng gấp N lần", "từ bét bảng lên hạng 7"),
+  chứng minh ngay, rồi CHỌN 1-2 mục trong "Điểm nhấn" (máy đã tính sẵn từ bảng: năm hai nước vượt
+  nhau, khoảng cách đầu–cuối, đỉnh, giai đoạn thay đổi nhanh nhất, mốc lớn, leo hạng) hợp nhất với
+  hook. KHÔNG đọc hết danh sách điểm nhấn, KHÔNG kể lần lượt từng nước trong top 5 / 3 nơi thấp nhất
+  (cần thì gói lại MỘT câu nêu nơi cao nhất và nơi thấp nhất). Bảng có XẾP HẠNG nhiều nước thì kể ai
+  vượt ai (các dòng "hạng ... vượt ..." đã tính sẵn).
 - Chỉ dùng 4-7 con số đắt nhất, tối đa {MAX_SPOKEN_YEARS} mốc năm khác nhau trong toàn bài.
 - Câu nói Ý NGHĨA của con số: dùng mục "Cách nói dễ hình dung" nếu có ("cứ 5 người thì 2 người
   sống ở thành phố"). KHÔNG thêm con số ngoài bảng, KHÔNG nêu nguyên nhân hay bối cảnh lịch sử
@@ -296,8 +302,9 @@ def script_problems(script: dict, cfg: dict, recent_openers=(), include_soft: bo
     problems = []
     if not SCRIPT_MIN_SCENES <= n <= SCRIPT_MAX_SCENES:
         problems.append(f"{n} cảnh (cần {SCRIPT_MIN_SCENES}-{SCRIPT_MAX_SCENES})")
-    # Cho lệch một chút quanh ngân sách từ: hụt 10% hay dư 5% vẫn ra video đúng cỡ
-    if not 0.9 * lo_words <= words <= 1.05 * hi_words:
+    # Cho lệch quanh ngân sách từ: hụt 10% vẫn đủ dài; dư tới 12% thì assemble.fit_tempo đọc nhanh
+    # lên bù được (tối đa MAX_TEMPO = 1,12) mà video vẫn vừa trần thời lượng
+    if not 0.9 * lo_words <= words <= WORDS_OVER * hi_words:
         problems.append(f"{words} từ (cần {lo_words}-{hi_words})")
     if numbers < SCRIPT_MIN_NUMBERS:
         problems.append(f"chỉ {numbers} con số trong lời đọc (cần ít nhất {SCRIPT_MIN_NUMBERS})")
@@ -398,7 +405,7 @@ Luật chính sách (bắt buộc tuân thủ): {cfg['policy_rules']}
 {_formula_block()}
 
 Yêu cầu CỨNG về cấu trúc (video đổi cảnh mỗi 2-4 giây):
-- Chia thành {lo_scenes}-{hi_scenes} CẢNH. Mỗi cảnh đúng 1 câu lời đọc NGẮN (8-14 từ). Đếm từ trước
+- Chia thành {lo_scenes}-{hi_scenes} CẢNH. Mỗi cảnh đúng 1 câu lời đọc NGẮN (10-13 từ). Đếm từ trước
   khi trả lời: vượt ngân sách từ là bị trả lại.
 - Đây là KỂ CHUYỆN NGẮN, không phải đọc bảng số. Số liệu thật của kênh: người xem bỏ đi nhiều nhất
   trong 15 GIÂY ĐẦU, đúng ở câu định nghĩa ("Chỉ số này đo lường…"), câu đệm chung chung ("Chiếc
@@ -407,9 +414,10 @@ Yêu cầu CỨNG về cấu trúc (video đổi cảnh mỗi 2-4 giây):
   2. CHỨNG MINH NGAY (cảnh 2-4): con số chứng minh hook, nói thẳng. CẤM ở đây: câu định nghĩa chỉ
      số, câu đệm chung chung, câu lùi về quá khứ chỉ để kể "điểm xuất phát". Không để hai câu liền
      nhau không có con số (máy kiểm).
-  3. 2-3 NHỊP, mỗi nhịp 2-3 cảnh: MỘT con số đắt (ưu tiên mục "Điểm nhấn" nếu tóm tắt có) -> câu
-     nói con số đó NGHĨA LÀ GÌ (ưu tiên mục "Cách nói dễ hình dung", hoặc so với thứ quen thuộc có
-     trong nguồn). Không để quá 3 câu có số đứng liền nhau.
+  3. 2-3 NHỊP, mỗi nhịp 2-3 cảnh, XEN KẼ: câu có MỘT con số đắt -> câu nói con số đó NGHĨA LÀ GÌ
+     (KHÔNG thêm số liệu mới; ưu tiên mục "Cách nói dễ hình dung" như "cứ 3 người thì 2", hoặc so với
+     thứ quen thuộc có trong nguồn) -> câu có con số kế tiếp. Không để quá 3 câu có số liệu đứng liền
+     nhau (máy kiểm) — kịch bản câu nào cũng một con số là ĐỌC BẢNG, người xem bỏ đi.
   4. NGÃ RẼ (1-2 cảnh): điều ngược với điều người ta vẫn nghĩ (phải có trong nguồn).
   5. KẾT (1 cảnh): quay lại ĐÚNG con số hoặc đối tượng của hook với góc nhìn mới, để người xem muốn
      xem lại từ đầu (máy kiểm). Không kêu gọi like/đăng ký/bình luận.

@@ -136,11 +136,22 @@ def strip_fillers(script: dict) -> int:
     return n
 
 
+def has_data_number(text: str) -> bool:
+    """Câu có con số SỐ LIỆU: số lẻ/có dấu phân cách, số lớn hơn 10, hoặc tỷ lệ %. Số đếm nhỏ không
+    kèm % ("cứ 3 người thì 2", "hạng 9") là cách nói dễ hình dung, không phải đọc bảng (19/11/2026:
+    câu ý nghĩa kiểu đó từng bị tính là "câu có số" nên kịch bản nào cũng thành chuỗi số dài)."""
+    for m in re.finditer(r"\d[\d.,]*\d|\d", str(text or "")):
+        raw = m.group(0)
+        if not raw.isdigit() or int(raw) > 10 or str(text)[m.end():m.end() + 1] == "%":
+            return True
+    return False
+
+
 def longest_number_run(script: dict) -> int:
-    """Số câu có chứa con số đứng liền nhau dài nhất (đọc số liên tiếp = đọc bảng)."""
+    """Số câu có chứa con số SỐ LIỆU đứng liền nhau dài nhất (đọc số liên tiếp = đọc bảng)."""
     best = run = 0
     for s in script.get("scenes") or []:
-        run = run + 1 if re.search(r"\d", str(s.get("voice") or "")) else 0
+        run = run + 1 if has_data_number(str(s.get("voice") or "")) else 0
         best = max(best, run)
     return best
 
