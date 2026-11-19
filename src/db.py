@@ -113,7 +113,11 @@ CREATE TABLE IF NOT EXISTS comments (   -- bình luận người xem (agent Cộ
     topic        TEXT,
     matched      TEXT,               -- khoá chủ đề khớp (đề xuất)
     reply        TEXT,               -- nháp trả lời cho Du
-    fetched_at   TEXT
+    fetched_at   TEXT,
+    status       TEXT,               -- new (chờ Du) | posting | posted | skipped | done (khen/khác)
+    tg_message_id INTEGER,           -- tin Telegram có nút ✅ Đăng / ❌ Bỏ của bình luận này
+    posted_id    TEXT,               -- id câu trả lời đã đăng
+    posted_at    TEXT
 );
 CREATE TABLE IF NOT EXISTS state (   -- ô nhớ nhỏ: vị trí đọc Telegram, v.v.
     key   TEXT PRIMARY KEY,
@@ -123,7 +127,10 @@ CREATE TABLE IF NOT EXISTS state (   -- ô nhớ nhỏ: vị trí đọc Telegra
 
 
 # Cột thêm SAU khi DB đã có dữ liệu: CREATE TABLE IF NOT EXISTS không thêm cột vào bảng cũ
-_ADDED_COLUMNS = [("video_stats", "engaged_views", "INTEGER")]      # 19/11/2026
+_ADDED_COLUMNS = [("video_stats", "engaged_views", "INTEGER"),       # 19/11/2026
+                  # bảng comments tạo sáng 19/11 chưa có các cột duyệt-đăng trả lời (chiều 19/11)
+                  ("comments", "status", "TEXT"), ("comments", "tg_message_id", "INTEGER"),
+                  ("comments", "posted_id", "TEXT"), ("comments", "posted_at", "TEXT")]
 
 
 def connect() -> sqlite3.Connection:

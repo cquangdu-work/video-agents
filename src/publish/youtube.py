@@ -43,11 +43,16 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
 API_URL = "https://www.googleapis.com/youtube/v3"
 
-# Xin luôn quyền đọc số liệu cho agent Phân tích (bước sau) để Du chỉ phải cấp quyền 1 lần
+# Xin luôn quyền đọc số liệu cho agent Phân tích (bước sau) để Du chỉ phải cấp quyền 1 lần.
+# youtube.force-ssl (Du đồng ý 19/11/2026): agent Cộng đồng đăng câu trả lời bình luận SAU KHI Du bấm ✅
+# trên Telegram. YouTube không có quyền hẹp hơn cho việc này — Google ghi nó là "xem, sửa, xoá video,
+# bình luận, phụ đề"; code chỉ dùng nó ở reply_comment.
+FORCE_SSL = "https://www.googleapis.com/auth/youtube.force-ssl"
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
     "https://www.googleapis.com/auth/yt-analytics.readonly",
+    FORCE_SSL,
 ]
 
 
@@ -414,6 +419,28 @@ def comment_threads(video_id: str, token: str = None, api_key: str = None, page_
         return {"items": []}                     # video tắt bình luận
     r.raise_for_status()
     return r.json()
+
+
+def has_scope(scope: str) -> bool:
+    """Token đang lưu đã được Du cấp quyền này chưa (Google cho bỏ tích từng quyền lúc cấp)."""
+    try:
+        return scope in json.loads(TOKEN_PATH.read_text(encoding="utf-8")).get("scope", "").split()
+    except (OSError, ValueError):
+        return False
+
+
+def reply_comment(parent_id: str, text: str, token: str) -> str:
+    """Đăng một câu trả lời dưới bình luận `parent_id` (tên kênh đứng tên). CHỈ gọi sau khi Du bấm ✅
+    trên Telegram (src/review.py). Tốn 50 đơn vị quota. Trả về id bình luận mới."""
+    r = requests.post(f"{API_URL}/comments", params={"part": "snippet"}, timeout=30,
+                      headers={"Authorization": f"Bearer {token}"},
+                      json={"snippet": {"parentId": parent_id, "textOriginal": text}})
+    if r.status_code in (401, 403) and ("insufficient" in r.text.lower() or "PERMISSION_DENIED" in r.text):
+        raise YouTubeAuthError("Token chưa có quyền đăng bình luận — gửi /capquyen cho bot, tích cả quyền"
+                               " quản lý bình luận, rồi bấm ✅ lại")
+    if r.status_code != 200:
+        raise YouTubeUploadError(f"Không đăng được trả lời ({r.status_code}): {r.text[:200]}")
+    return r.json().get("id", "")
 
 
 def channel_stats(token: str) -> dict:

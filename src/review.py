@@ -270,6 +270,10 @@ def _handle_callback(con, cq: dict, cfg: dict) -> None:
     if not _from_owner(msg.get("chat"), cq.get("from")):
         log.warning("Bỏ qua nút bấm từ người lạ (user %s)", (cq.get("from") or {}).get("id"))
         return
+    cm = _COMMENT_CALLBACK.match(cq.get("data") or "")
+    if cm:                                   # nút của agent Cộng đồng (trả lời bình luận)
+        _handle_comment_button(con, cq, cm.group(1), cm.group(2), msg.get("message_id"))
+        return
     m = _CALLBACK.match(cq.get("data") or "")
     if not m:
         tg.answer_callback(cq["id"], "Nút không hợp lệ")
@@ -333,6 +337,58 @@ def _handle_callback(con, cq: dict, cfg: dict) -> None:
             publish(con, video, cfg)
 
 
+_COMMENT_CALLBACK = re.compile(r"^(cok|cno):([\w-]{5,80})$")
+
+
+def _handle_comment_button(con, cq: dict, action: str, cid: str, mid) -> None:
+    """✅ Đăng trả lời / ❌ Bỏ qua của một bình luận. Kênh CHỈ đăng khi Du bấm ✅ (src/community.py)."""
+    from . import community
+    from .publish import youtube
+    row = con.execute("SELECT * FROM comments WHERE id = ?", (cid,)).fetchone()
+    if not row:
+        tg.answer_callback(cq["id"], "Không tìm thấy bình luận này")
+        return
+    log.info("Nút %s cho bình luận %s (đang %s)", action, cid, row["status"])
+    if action == "cno":
+        con.execute("UPDATE comments SET status = 'skipped' WHERE id = ? AND status = 'new'", (cid,))
+        con.commit()
+        tg.answer_callback(cq["id"], "Đã bỏ qua")
+        if mid:
+            tg.clear_buttons(mid)
+        return
+    try:
+        community.post_reply(con, cid)
+    except youtube.YouTubeAuthError as exc:   # chưa cấp quyền bình luận: GIỮ nút để bấm lại sau /capquyen
+        tg.answer_callback(cq["id"], "Chưa có quyền đăng")
+        tg.send_message(f"🔑 {exc}")
+        return
+    except Exception as exc:
+        tg.answer_callback(cq["id"], "Chưa đăng được")
+        tg.send_message(f"⚠️ Chưa đăng được trả lời: {exc}")
+        return
+    log.info("Đã đăng trả lời bình luận %s", cid)
+    tg.answer_callback(cq["id"], "Đã đăng ✅")
+    if mid:
+        tg.clear_buttons(mid)
+    tg.send_message(f"✅ Kênh đã trả lời {row['author']}: “{str(row['reply'])[:200]}”"
+                    f" — https://youtube.com/shorts/{row['youtube_id']}")
+
+
+def _redraft_comment(con, card, text: str, old_mid: int) -> None:
+    """Du trả lời tin của một bình luận bằng câu của mình -> nháp mới + nút ✅ (KHÔNG đăng thẳng)."""
+    from . import community
+    if card["status"] == "posted":
+        tg.send_message("Bình luận này kênh đã trả lời rồi.")
+        return
+    c = community.set_draft(con, card["id"], text)
+    mid = tg.send_message("Nháp mới — bấm ✅ để đăng:\n\n" + community.card_text(c),
+                          buttons=community.card_buttons(c))
+    if mid:
+        con.execute("UPDATE comments SET tg_message_id = ? WHERE id = ?", (mid, card["id"]))
+        con.commit()
+        tg.clear_buttons(old_mid)
+
+
 RENEW_COMMANDS = {"/capquyen", "/cap_quyen", "capquyen", "cấp quyền", "gia hạn", "/giahan"}
 
 
@@ -349,7 +405,9 @@ def _start_renewal(con) -> None:
     tg.send_message(
         "🔑 Gia hạn quyền đăng YouTube (≈1 phút):\n"
         "1. Mở link dưới, đăng nhập, chọn kênh “Thế giới qua con số”.\n"
-        "2. Có cảnh báo “chưa xác minh” thì bấm Advanced → Go to video-agents; tích cả 3 quyền.\n"
+        "2. Có cảnh báo “chưa xác minh” thì bấm Advanced → Go to video-agents; tích HẾT các quyền. Quyền"
+        " “xem, sửa, xoá video/bình luận” (youtube.force-ssl, thêm 19/11) là để kênh đăng câu trả lời bình"
+        " luận Du bấm ✅ — YouTube không có quyền hẹp hơn; code chỉ dùng nó cho việc đó.\n"
         "3. Trang cuối báo KHÔNG kết nối được tới 127.0.0.1:8765 — đúng như vậy. Chép NGUYÊN địa chỉ"
         " trên thanh địa chỉ rồi gửi vào đây (trong vài phút, mã hết hạn nhanh).\n\n" + a["url"])
 
@@ -369,7 +427,11 @@ def _finish_renewal(con, text: str) -> None:
     db.set_state(con, "yt_auth_state", "")
     db.set_state(con, "yt_auth_verifier", "")
     tg.send_message(f"✅ Đã gia hạn quyền đăng YouTube cho kênh “{who.get('title', '?')}”."
-                    + ("" if who.get("title") else "\n⚠️ Không đọc được tên kênh — kiểm tra đã chọn đúng kênh chưa."))
+                    + ("" if who.get("title") else "\n⚠️ Không đọc được tên kênh — kiểm tra đã chọn đúng kênh chưa.")
+                    + ("\n💬 Có quyền bình luận: bấm ✅ ở tin bình luận là kênh đăng câu trả lời."
+                       if youtube.has_scope(youtube.FORCE_SSL) else
+                       "\nℹ️ Chưa có quyền bình luận (ô đó chưa được tích) — kênh chưa đăng được câu trả lời."
+                       " Muốn có: /capquyen lại và tích hết."))
 
 
 def _start_tiktok(con) -> None:
@@ -560,6 +622,12 @@ def _handle_message(con, msg: dict) -> None:
     reply_mid = (msg.get("reply_to_message") or {}).get("message_id")
     replied = None
     if reply_mid:
+        # trả lời TIN CỦA MỘT BÌNH LUẬN (agent Cộng đồng) = câu Du muốn kênh đăng — xét TRƯỚC link YouTube:
+        # câu trả lời có thể chứa link video mà không được hiểu thành "gắn link cho video"
+        card = con.execute("SELECT id, status FROM comments WHERE tg_message_id=?", (reply_mid,)).fetchone()
+        if card:
+            _redraft_comment(con, card, text, reply_mid)
+            return
         replied = con.execute("SELECT id FROM videos WHERE tg_message_id=?", (reply_mid,)).fetchone()
 
     link = _YT_LINK.search(text)

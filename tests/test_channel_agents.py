@@ -128,25 +128,37 @@ class CommunityTest(Case):
                                {"i": 9, "kind": "cau_hoi"}, "rác"])
         return "Năm 2024 Hàn Quốc là 2,8%, cao hơn Việt Nam 1,6% nhé."
 
+    def send(self, text, buttons=None, **kw):
+        self.sent.append((text, buttons))
+        return 100 + len(self.sent)                                      # message_id giả
+
     def test_one_run_end_to_end(self):
-        sent = []
-        got = community.run(CFG, self.con, fetch=self.fetch, llm=self.llm, send=sent.append)
+        self.sent = []
+        got = community.run(CFG, self.con, fetch=self.fetch, llm=self.llm, send=self.send)
         self.assertEqual([c["kind"] for c in got], ["bao_loi", "cau_hoi", "de_xuat", "khen", "de_xuat"])
         self.assertEqual(got[4]["match"], None)                          # khoá không có thật -> bỏ
         self.assertEqual(got[1]["reply"], "Năm 2024 Hàn Quốc là 2,8%, cao hơn Việt Nam 1,6% nhé.")
-        text = sent[0]
-        self.assertLess(text.index("Báo SAI số liệu"), text.index("Câu hỏi"))   # báo sai lên đầu
-        self.assertIn("✍️ Gợi ý trả lời: Năm 2024 Hàn Quốc là 2,8%", text)
-        self.assertIn("đã xếp hàng ưu tiên", text)
-        self.assertIn("chưa có nguồn số liệu", text)
+        summary, cards = self.sent[0][0], self.sent[1:]
+        self.assertIn("5 bình luận mới", summary)
+        self.assertIn("4 bình luận cần xử lý gửi riêng", summary)
+        self.assertIn("Bot chưa có quyền đăng trả lời: gửi /capquyen", summary)
+        self.assertEqual(len(cards), 4)                                 # khen: chỉ đếm, không gửi riêng
+        self.assertIn("Báo SAI số liệu", cards[0][0])                   # báo sai lên đầu
+        self.assertEqual(cards[0][1], [[("❌ Bỏ qua", "cno:c5")]])        # chưa có nháp: chỉ có nút bỏ qua
+        self.assertIn("✍️ Nháp trả lời: Năm 2024 Hàn Quốc là 2,8%", cards[1][0])
+        self.assertEqual(cards[1][1], [[("✅ Đăng trả lời", "cok:c4"), ("❌ Bỏ qua", "cno:c4")]])
+        self.assertIn("đã xếp hàng ưu tiên", cards[2][0])
+        self.assertIn("chưa có nguồn số liệu", cards[3][0])
         reqs = [tuple(r) for r in self.con.execute("SELECT key, origin, status FROM topic_requests ORDER BY id")]
         self.assertEqual(reqs, [("owid:coffee-production", "viewer", "pending"), (None, "viewer", "wish")])
-        self.assertEqual(self.con.execute("SELECT COUNT(*) FROM comments").fetchone()[0], 5)
+        rows = {r["id"]: (r["status"], r["tg_message_id"]) for r in self.con.execute("SELECT * FROM comments")}
+        self.assertEqual(rows["c4"], ("new", 103))
+        self.assertEqual(rows["c2"], ("done", None))                     # khen
         kinds = [r[0] for r in self.con.execute("SELECT kind FROM learning_events WHERE source='viewer'")]
         self.assertEqual(kinds, ["bao_loi"])
         # lượt sau: không có bình luận mới -> không gửi gì, không trùng
-        self.assertEqual(community.run(CFG, self.con, fetch=self.fetch, llm=self.llm, send=sent.append), [])
-        self.assertEqual(len(sent), 1)
+        self.assertEqual(community.run(CFG, self.con, fetch=self.fetch, llm=self.llm, send=self.send), [])
+        self.assertEqual(len(self.sent), 5)
         self.assertIn("báo sai số liệu 1 · câu hỏi 1 · đề xuất chủ đề 2 · khen 1",
                       "\n".join(community.weekly_lines(self.con)))
 
@@ -163,8 +175,8 @@ class CommunityTest(Case):
     def test_covered_request_gets_a_link_instead_of_a_queue_entry(self):
         self.published(2, "https://ourworldindata.org/grapher/coffee-production?tab=map&time=2023",
                        title="Bản đồ thế giới: cà phê", yt="coffeeaaaaa", source=dt.OWID_SOURCE)
-        sent = []
-        got = community.run(CFG, self.con, fetch=self.fetch, llm=self.llm, send=sent.append)
+        self.sent = []
+        got = community.run(CFG, self.con, fetch=self.fetch, llm=self.llm, send=self.send)
         self.assertEqual(got[2]["reply"], "Kênh đã có video về chủ đề này nè: https://youtube.com/shorts/coffeeaaaaa")
         self.assertEqual([r[0] for r in self.con.execute("SELECT key FROM topic_requests")], [None])
 
@@ -187,6 +199,103 @@ class CommunityTest(Case):
 
     def fail(self, *a, **k):
         raise AssertionError("không được gửi gì")
+
+
+class ReplyApprovalTest(Case):
+    """Kênh CHỈ đăng trả lời bình luận khi Du bấm ✅; mỗi bình luận đúng một lần."""
+
+    def setUp(self):
+        super().setUp()
+        self.published(1, "https://data.worldbank.org/indicator/SL.UEM.TOTL.ZS?locations=VN-KR&end=2024",
+                       yt="vid1aaaaaaa")
+        self.con.execute("INSERT INTO comments (id, youtube_id, video_id, author, text, kind, reply, status,"
+                         " tg_message_id) VALUES ('Ugx123abc', 'vid1aaaaaaa', 1, 'An', 'Hàn Quốc bao nhiêu?',"
+                         " 'cau_hoi', 'Hàn Quốc 2,8% nhé.', 'new', 77)")
+        self.con.commit()
+        self.calls = []
+        for name in ("send_message", "answer_callback", "clear_buttons"):
+            p = mock.patch.object(tg, name, side_effect=self._rec(name)); p.start(); self.addCleanup(p.stop)
+        env = mock.patch.dict(os.environ, {"TELEGRAM_CHAT_ID": OWNER}); env.start(); self.addCleanup(env.stop)
+        from src.publish import youtube
+        self.youtube = youtube
+        p = mock.patch.object(youtube, "access_token", return_value="AT"); p.start(); self.addCleanup(p.stop)
+
+    def _rec(self, name):
+        def f(*a, **k):
+            self.calls.append((name, a, k))
+            return 200 + len(self.calls)
+        return f
+
+    def press(self, data, mid=77):
+        review.handle_update(self.con, {"update_id": 1, "callback_query": {
+            "id": "cb", "data": data, "from": {"id": int(OWNER)},
+            "message": {"message_id": mid, "chat": {"id": int(OWNER)}}}}, {})
+
+    def status(self):
+        return self.con.execute("SELECT status FROM comments WHERE id='Ugx123abc'").fetchone()[0]
+
+    def said(self):
+        return [c[1][0] for c in self.calls if c[0] == "send_message"]
+
+    def test_approve_posts_exactly_once(self):
+        with mock.patch.object(self.youtube, "reply_comment", return_value="Ugx123abc.reply1") as post:
+            self.press("cok:Ugx123abc")
+            self.press("cok:Ugx123abc")                                 # bấm lặp / Telegram gửi lặp
+        post.assert_called_once_with("Ugx123abc", "Hàn Quốc 2,8% nhé.", "AT")
+        row = self.con.execute("SELECT status, posted_id FROM comments").fetchone()
+        self.assertEqual(tuple(row), ("posted", "Ugx123abc.reply1"))
+        self.assertIn(("clear_buttons", (77,), {}), self.calls)
+        self.assertIn("Kênh đã trả lời An", self.said()[0])
+        self.assertIn("đã xử lý rồi", self.said()[1])
+
+    def test_without_the_comment_permission_nothing_is_posted_and_buttons_stay(self):
+        refused = mock.Mock(status_code=403, text='{"error": {"status": "PERMISSION_DENIED", "message":'
+                                                  ' "Request had insufficient authentication scopes."}}')
+        with mock.patch.object(self.youtube.requests, "post", return_value=refused):
+            self.press("cok:Ugx123abc")
+        self.assertEqual(self.status(), "new")                          # bấm lại được sau /capquyen
+        self.assertIn("/capquyen", self.said()[0])
+        self.assertNotIn("clear_buttons", [c[0] for c in self.calls])
+
+    def test_skip(self):
+        self.press("cno:Ugx123abc")
+        self.assertEqual(self.status(), "skipped")
+        self.assertIn(("clear_buttons", (77,), {}), self.calls)
+
+    def test_du_rewrites_the_reply_and_still_confirms_before_posting(self):
+        own = "Cảm ơn bạn! Xem thêm: https://youtube.com/shorts/abcdefghijk"
+        review.handle_update(self.con, {"update_id": 2, "message": {
+            "message_id": 90, "chat": {"id": int(OWNER)}, "from": {"id": int(OWNER)}, "text": own,
+            "reply_to_message": {"message_id": 77}}}, {})
+        row = self.con.execute("SELECT reply, status, tg_message_id FROM comments").fetchone()
+        self.assertEqual((row["reply"], row["status"]), (own, "new"))   # chưa đăng: chờ ✅
+        card = [c for c in self.calls if c[0] == "send_message"][0]
+        self.assertIn("Nháp mới — bấm ✅ để đăng", card[1][0])
+        self.assertEqual(card[2]["buttons"][0][0], ("✅ Đăng trả lời", "cok:Ugx123abc"))
+        self.assertEqual(row["tg_message_id"], 201)                     # tin mới thay tin cũ
+        self.assertIn(("clear_buttons", (77,), {}), self.calls)
+        # link YouTube trong câu trả lời không bị hiểu thành "gắn link cho video"
+        self.assertEqual(self.con.execute("SELECT youtube_id FROM videos WHERE id=1").fetchone()[0], "vid1aaaaaaa")
+        with mock.patch.object(self.youtube, "reply_comment", return_value="r2") as post:
+            self.press("cok:Ugx123abc", mid=201)
+        post.assert_called_once_with("Ugx123abc", own, "AT")
+
+    def test_youtube_reply_call_and_scope_check(self):
+        yt = self.youtube
+        ok = mock.Mock(status_code=200, text="{}"); ok.json.return_value = {"id": "new1"}
+        with mock.patch.object(yt.requests, "post", return_value=ok) as post:
+            self.assertEqual(yt.reply_comment("Ugx1", "chào", "AT"), "new1")
+        self.assertEqual(post.call_args.kwargs["json"], {"snippet": {"parentId": "Ugx1", "textOriginal": "chào"}})
+        with mock.patch.object(yt.requests, "post", return_value=mock.Mock(status_code=500, text="lỗi")):
+            with self.assertRaises(yt.YouTubeUploadError):
+                yt.reply_comment("Ugx1", "chào", "AT")
+        token = self.root / "tok.json"
+        with mock.patch.object(yt, "TOKEN_PATH", token):
+            self.assertFalse(yt.has_scope(yt.FORCE_SSL))                # chưa có token
+            token.write_text(json.dumps({"scope": " ".join(yt.SCOPES[:3])}), encoding="utf-8")
+            self.assertFalse(yt.has_scope(yt.FORCE_SSL))                # token cũ: thiếu quyền bình luận
+            token.write_text(json.dumps({"scope": " ".join(yt.SCOPES)}), encoding="utf-8")
+            self.assertTrue(yt.has_scope(yt.FORCE_SSL))
 
 
 class GrowthTest(Case):

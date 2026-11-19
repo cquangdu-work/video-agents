@@ -4,8 +4,9 @@
    khen / góp ý cách làm / khác.
 2. BÁO SAI SỐ LIỆU -> đứng đầu bản tin gửi Du: uy tín của kênh "qua con số" là số liệu đúng.
 3. CÂU HỎI -> nháp câu trả lời CHỈ từ bảng số của chính video đó (code soát: mọi con số trong câu trả
-   lời phải có trong nguồn). Du tự đăng: token hiện tại không có quyền đăng bình luận (thêm quyền
-   youtube.force-ssl phải hỏi Du — bình luận là nội dung công khai).
+   lời phải có trong nguồn). Mỗi bình luận cần xử lý thành MỘT tin Telegram có nút ✅ Đăng / ❌ Bỏ: chỉ
+   khi Du bấm ✅ kênh mới đăng (Du đồng ý 19/11 thêm quyền youtube.force-ssl cho việc này). Du trả lời tin
+   bằng câu khác -> thành nháp mới, bot hỏi lại trước khi đăng.
 4. ĐỀ XUẤT CHỦ ĐỀ -> model chọn chỉ số khớp trong danh mục kênh đang có (code kiểm khoá có thật):
    đã có video về nó -> nháp trả lời kèm link; chưa có -> xếp hàng ưu tiên (src/topics.py) cho lượt
    Săn ý tưởng kế tiếp; không có nguồn -> danh sách mong muốn trong báo cáo tuần.
@@ -28,8 +29,12 @@ log = logging.getLogger("community")
 
 KINDS = {"bao_loi": "⚠️ Báo SAI số liệu — kiểm tra lại giúp", "cau_hoi": "❓ Câu hỏi",
          "de_xuat": "💡 Đề xuất chủ đề", "che": "🛠 Góp ý cách làm", "khen": "👍 Khen", "khac": "Khác"}
+SHORT = {"bao_loi": "báo sai số liệu", "cau_hoi": "câu hỏi", "de_xuat": "đề xuất chủ đề",
+         "che": "góp ý cách làm", "khen": "khen", "khac": "khác"}
+CARD_KINDS = ("bao_loi", "cau_hoi", "de_xuat", "che")   # loại cần Du xem — mỗi bình luận một tin có nút
 MAX_NEW = 40              # mỗi lượt phân loại tối đa chừng này bình luận (một lần gọi model)
 MAX_REPLIES = 6           # nháp trả lời tối đa chừng này câu hỏi mỗi lượt
+MAX_CARDS = 8             # gửi riêng tối đa chừng này bình luận mỗi sáng (còn lại: xem trong YouTube Studio)
 NO_ANSWER = "KHONG_DU_SO_LIEU"
 
 
@@ -171,27 +176,76 @@ def _link(youtube_id: str) -> str:
     return f"https://youtube.com/shorts/{youtube_id}"
 
 
-def digest(items: list) -> str:
-    """Bản tin cho Du: báo sai số liệu lên đầu, rồi câu hỏi (kèm nháp), đề xuất, góp ý; khen/khác chỉ đếm."""
-    lines = [f"💬 Bình luận mới: {len(items)} — agent Cộng đồng"]
-    for kind in ("bao_loi", "cau_hoi", "de_xuat", "che"):
-        group = [c for c in items if c["kind"] == kind]
-        if not group:
-            continue
-        lines += ["", f"{KINDS[kind]} ({len(group)}):"]
-        for c in group[:10]:
-            lines.append(f"• #{c['video_id']} {_link(c['youtube_id'])}\n  {c['author']}: “{c['text'][:220]}”")
-            if kind == "bao_loi" and c.get("claim"):
-                lines.append(f"  → cho là sai: {c['claim']}")
-            if c.get("note"):
-                lines.append(f"  → {c['note']}")
-            if c.get("reply"):
-                lines.append(f"  ✍️ Gợi ý trả lời: {c['reply']}")
-    rest = {k: sum(1 for c in items if c["kind"] == k) for k in ("khen", "khac")}
-    lines += ["", f"👍 Khen {rest['khen']} · khác {rest['khac']}",
-              "Trả lời trong YouTube Studio / app (bot chưa có quyền đăng bình luận). Góp ý đúng thì dạy"
-              " hệ thống: /hoc <luật> hoặc /nhac, /giong, /nhip, /chu."]
+def digest(items: list, can_post: bool, carded: int) -> str:
+    """Tin TÓM TẮT gửi trước; từng bình luận cần xử lý đi theo sau thành tin riêng có nút (card_text)."""
+    counts = {k: sum(1 for c in items if c["kind"] == k) for k in SHORT}
+    lines = [f"💬 {len(items)} bình luận mới — agent Cộng đồng: "
+             + " · ".join(f"{SHORT[k]} {n}" for k, n in counts.items() if n)]
+    if carded:
+        lines.append(f"{carded} bình luận cần xử lý gửi riêng bên dưới (báo sai số liệu trước).")
+    extra = sum(counts[k] for k in CARD_KINDS) - carded
+    if extra > 0:
+        lines.append(f"Còn {extra} bình luận cần xem nữa — mở YouTube Studio.")
+    if not can_post:
+        lines.append("🔑 Bot chưa có quyền đăng trả lời: gửi /capquyen một lần (tích cả quyền quản lý bình"
+                     " luận). Trước đó Du trả lời tay trong YouTube Studio.")
+    lines.append("Góp ý đúng thì dạy hệ thống: /hoc <luật> hoặc /nhac, /giong, /nhip, /chu.")
     return "\n".join(lines)
+
+
+def card_text(c: dict) -> str:
+    """Tin riêng cho MỘT bình luận: nội dung, ghi chú của agent, nháp trả lời (nếu có)."""
+    lines = [f"{KINDS.get(c['kind'], c['kind'])} — video #{c['video_id']} {_link(c['youtube_id'])}",
+             f"{c['author']}: “{str(c['text'])[:300]}”"]
+    if c["kind"] == "bao_loi" and c.get("claim"):
+        lines.append(f"→ cho là sai: {c['claim']}")
+    if c.get("note"):
+        lines.append(f"→ {c['note']}")
+    if c.get("reply"):
+        lines += [f"✍️ Nháp trả lời: {c['reply']}",
+                  "Bấm ✅ để kênh đăng câu này, hoặc TRẢ LỜI tin này bằng câu khác để sửa nháp."]
+    else:
+        lines.append("Muốn trả lời: TRẢ LỜI tin này bằng câu Du muốn đăng (bot hỏi lại trước khi đăng).")
+    return "\n".join(lines)
+
+
+def card_buttons(c: dict) -> list:
+    row = [("✅ Đăng trả lời", f"cok:{c['id']}")] if c.get("reply") else []
+    return [row + [("❌ Bỏ qua", f"cno:{c['id']}")]]
+
+
+def set_draft(con, comment_id: str, text: str) -> dict:
+    """Du trả lời tin của một bình luận bằng câu của mình -> thành nháp mới, CHỜ Du bấm ✅ (không đăng
+    thẳng: Du trả lời "ok" để ghi nhận cũng không bị đăng lên YouTube)."""
+    con.execute("UPDATE comments SET reply = ?, status = 'new' WHERE id = ? AND COALESCE(status, '') != 'posted'",
+                (" ".join(str(text or "").split())[:1000], comment_id))
+    con.commit()
+    return dict(con.execute("SELECT * FROM comments WHERE id = ?", (comment_id,)).fetchone())
+
+
+def post_reply(con, comment_id: str) -> str:
+    """Đăng nháp đã được duyệt. CHỈ gọi từ nút ✅ của Du (src/review.py). Mỗi bình luận đăng đúng MỘT lần:
+    chuyển trạng thái new -> posting một cách nguyên tử; lỗi thì trả về new để Du bấm lại."""
+    from .publish import youtube
+    row = con.execute("SELECT * FROM comments WHERE id = ?", (comment_id,)).fetchone()
+    if not row:
+        raise ValueError("không tìm thấy bình luận này")
+    if not row["reply"]:
+        raise ValueError("chưa có nháp trả lời — trả lời tin bằng câu Du muốn đăng")
+    cur = con.execute("UPDATE comments SET status = 'posting' WHERE id = ? AND status = 'new'", (comment_id,))
+    con.commit()
+    if cur.rowcount != 1:
+        raise ValueError(f"bình luận này đã xử lý rồi ({row['status']})")
+    try:
+        posted = youtube.reply_comment(comment_id, row["reply"], youtube.access_token())
+    except Exception:
+        con.execute("UPDATE comments SET status = 'new' WHERE id = ?", (comment_id,))
+        con.commit()
+        raise
+    con.execute("UPDATE comments SET status = 'posted', posted_id = ?, posted_at = ? WHERE id = ?",
+                (posted, _now(), comment_id))
+    con.commit()
+    return posted
 
 
 def run(cfg: dict, con, dry_run: bool = False, fetch=None, llm=None, send=None) -> list:
@@ -232,20 +286,30 @@ def run(cfg: dict, con, dry_run: bool = False, fetch=None, llm=None, send=None) 
                 c["note"] = {"pending": "đã xếp hàng ưu tiên cho lượt săn ý tưởng kế tiếp",
                              "duplicate": "chủ đề này đã được xếp hàng gần đây",
                              "wish": "kênh chưa có nguồn số liệu — ghi vào danh sách mong muốn"}[status]
-    text = digest(new)
+    from .publish import youtube
+    cards = sorted([c for c in new if c["kind"] in CARD_KINDS], key=lambda c: CARD_KINDS.index(c["kind"]))
+    cards = cards[:MAX_CARDS]
+    text = digest(new, youtube.has_scope(youtube.FORCE_SSL), len(cards))
     if dry_run:
-        print(text)
+        print("\n\n".join([text] + [card_text(c) for c in cards]))
         return new
     for c in new:
         con.execute("INSERT OR IGNORE INTO comments (id, youtube_id, video_id, author, text, published_at, likes,"
-                    " kind, topic, matched, reply, fetched_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " kind, topic, matched, reply, fetched_at, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (c["id"], c["youtube_id"], c["video_id"], c["author"], c["text"], c["published_at"],
-                     c["likes"], c["kind"], c["topic"], c["match"], c.get("reply"), _now()))
+                     c["likes"], c["kind"], c["topic"], c["match"], c.get("reply"), _now(),
+                     "new" if c["kind"] in CARD_KINDS else "done"))
         if c["kind"] in ("bao_loi", "che"):
             # người xem chê / báo sai là tín hiệu học — báo cáo tuần đếm; thành luật thì Du quyết (/hoc)
             learning.record(con, "viewer", c["kind"], c["text"][:400], "comment")
     con.commit()
-    (send or tg.send_message)(text[:3900])
+    send = send or tg.send_message
+    send(text[:3900])
+    for c in cards:                         # mỗi bình luận một tin có nút: Du duyệt TỪNG câu trước khi đăng
+        mid = send(card_text(c)[:3900], buttons=card_buttons(c))
+        if mid:
+            con.execute("UPDATE comments SET tg_message_id = ? WHERE id = ?", (mid, c["id"]))
+    con.commit()
     return new
 
 
@@ -256,10 +320,10 @@ def weekly_lines(con, now: datetime = None) -> list:
                             (since,)).fetchall())
     if not rows:
         return []
-    short = {"bao_loi": "báo sai số liệu", "cau_hoi": "câu hỏi", "de_xuat": "đề xuất chủ đề",
-             "che": "góp ý cách làm", "khen": "khen", "khac": "khác"}
+    posted = con.execute("SELECT COUNT(*) FROM comments WHERE posted_at >= ?", (since,)).fetchone()[0]
     return ["", "💬 Cộng đồng (bình luận tuần này): "
-            + " · ".join(f"{label} {rows[k]}" for k, label in short.items() if rows.get(k))]
+            + " · ".join(f"{label} {rows[k]}" for k, label in SHORT.items() if rows.get(k))
+            + (f" — kênh đã trả lời {posted} (Du duyệt từng câu)" if posted else "")]
 
 
 def main():
