@@ -318,7 +318,9 @@ DATA_STORY = f"""
   khuyên người xem làm gì.
 - Hook KHÔNG hỏi "Vì sao…?"/"Tại sao…?" (kiểu d): bảng số không trả lời được vì sao, hỏi mà không
   đáp là hứa suông với người xem (máy chặn). Không nói "liên tục tăng/giảm" nếu dãy số có lúc đi ngược.
-- Đây là số liệu thống kê đã ghi nhận, KHÔNG gọi là "dự báo"."""
+- Đây là số liệu thống kê ĐÃ GHI NHẬN: KHÔNG gọi là "dự báo", không nói "dự kiến", "sẽ" cho các năm
+  đã có trong bảng; không nói "nhất lịch sử" (bảng chỉ có từ năm đầu của nó); hiệu hai tỷ lệ % là
+  "điểm phần trăm", không phải "%"; "A vượt B năm Y" chỉ khi điểm nhấn ghi đúng năm Y (máy kiểm cả bốn)."""
 
 
 def spoken_years(script: dict) -> set:
@@ -410,6 +412,8 @@ def content_problems(script: dict, summary: str) -> list:
     out = [f"so sánh sai — {p}" for p in claims.script_comparison_problems(script, summary)]
     out += claims.script_cause_claims(script, summary)
     out += claims.script_trend_problems(script, summary)
+    out += claims.wording_problems([s.get("voice", "") for s in script.get("scenes") or []
+                                    if isinstance(s, dict)], summary)
     why = claims.why_hook_problem(script, summary)
     return out + ([why] if why else [])
 

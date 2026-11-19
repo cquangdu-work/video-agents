@@ -124,6 +124,43 @@ class TrendAndWhyTest(unittest.TestCase):
         self.assertEqual(claims.why_hook_problem(ok, WOMEN), "")
 
 
+RACE = """Cuộc đua quy mô GDP (tỷ USD).
+Trung Quốc theo năm: 1990: 362; 1995: 738; 2000: 1.224; 2005: 2.318; 2010: 6.193; 2015: 11.281; 2020: 14.996; 2025: 19.498.
+Nhật Bản theo năm: 1990: 3.253; 1995: 5.640; 2000: 5.042; 2005: 4.876; 2010: 5.812; 2015: 4.534; 2020: 5.189; 2025: 4.435.
+Việt Nam theo năm: 1990: 6,47; 1995: 20,7; 2000: 31,2; 2005: 57,6; 2010: 147; 2015: 239; 2020: 347; 2025: 515.
+Philippines theo năm: 1990: 50,5; 1995: 84,6; 2000: 83,7; 2005: 107; 2010: 208; 2015: 306; 2020: 362; 2025: 487."""
+
+
+class WordingTest(unittest.TestCase):
+    """Bốn lỗi câu chữ đo trên kịch bản thật #54-#56 (19/11/2026)."""
+
+    def test_gap_of_two_percentages_must_be_points(self):
+        got = claims.wording_problems(["Năm 2025, tỷ lệ phụ nữ Việt Nam đi làm vẫn cao hơn Hàn Quốc 11,8%."],
+                                      WOMEN)
+        self.assertEqual(len(got), 1)
+        self.assertIn("11,8 điểm phần trăm", got[0])
+        self.assertEqual(claims.wording_problems(["Việt Nam hơn Hàn Quốc 11,8 điểm phần trăm."], WOMEN), [])
+        self.assertEqual(claims.wording_problems(["Năm 2025 Việt Nam đạt 68,6%."], WOMEN), [])
+
+    def test_recorded_data_is_not_a_forecast(self):
+        got = claims.wording_problems(["Năm 2025, quy mô kinh tế Việt Nam dự kiến đạt 515 tỷ USD."], RACE)
+        self.assertEqual(len(got), 1)
+        self.assertIn("ĐÃ GHI NHẬN", got[0])
+        self.assertEqual(claims.wording_problems(["Liệu năm 2030 Việt Nam sẽ vượt Philippines xa hơn?"], RACE), [])
+
+    def test_history_claims_beyond_the_table(self):
+        got = claims.wording_problems(["Giai đoạn 1990 đến 1995 tăng nhanh nhất lịch sử."], RACE)
+        self.assertTrue(any("từ năm 1990" in g for g in got))
+
+    def test_overtaking_year_must_match_the_table(self):
+        got = claims.wording_problems(["Trung Quốc từ hạng 2 năm 1990 đã soán ngôi Nhật Bản năm 2025."], RACE)
+        self.assertEqual(len(got), 1)
+        self.assertIn("giữa 2005 và 2010", got[0])
+        # Việt Nam vượt Philippines đúng giai đoạn 2020-2025 (2020: 347 < 362; 2025: 515 > 487)
+        self.assertEqual(claims.wording_problems(["Năm 2025, Việt Nam đã vượt Philippines."], RACE), [])
+        self.assertEqual(claims.wording_problems(["Việt Nam vượt mốc 500 tỷ USD năm 2025."], RACE), [])
+
+
 class ScopeTest(unittest.TestCase):
     def test_article_ideas_have_no_table_and_pass_through(self):
         self.assertEqual(claims.comparison_problems(

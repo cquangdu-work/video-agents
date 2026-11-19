@@ -273,6 +273,77 @@ def script_trend_problems(script: dict, summary: str) -> list:
                           summary)
 
 
+# ----------------------- 4 lỗi đo trên kịch bản viết bằng model mạnh hơn (19/11/2026, #54-#56)
+FUTURE = re.compile(r"\b(?:dự\s+kiến|dự\s+báo|sẽ)\b", re.I)
+HISTORIC = re.compile(r"\b(?:nhất|kỷ\s+lục)\s+(?:trong\s+)?(?:lịch\s+sử|mọi\s+thời\s+đại)\b", re.I)
+OVERTAKE = re.compile(r"\b(?:vượt(?:\s+qua|\s+mặt)?|soán\s+ngôi|qua\s+mặt|bắt\s+kịp)\b", re.I)
+
+
+def wording_problems(texts, summary: str) -> list:
+    """Lỗi câu chữ trái với bảng số, bắt bằng code:
+    - "hơn Hàn Quốc 11,8%" khi bảng ghi 11,8 ĐIỂM PHẦN TRĂM (hiệu hai tỷ lệ — người xem hiểu sai);
+    - "năm 2025 dự kiến đạt", "sẽ vươn lên" — số liệu ĐÃ GHI NHẬN, không phải dự báo;
+    - "nhanh nhất lịch sử" — bảng chỉ có từ năm đầu của nó;
+    - "A soán ngôi B năm Y" trong khi bảng cho thấy A đã vượt B từ trước năm Y."""
+    summary = str(summary or "")
+    table = data_table(summary)
+    if not table:
+        return []
+    years_all = sorted({y for s in table.values() for y in s})
+    first_year, last_year = years_all[0], years_all[-1]
+    points = set(re.findall(r"(\d[\d.,]*)\s+điểm phần trăm", summary))
+    out = []
+    for text in texts:
+        text = " ".join(str(text or "").split())
+        if not text:
+            continue
+        for x in points:
+            if re.search(re.escape(x) + r"\s*%", text) and not re.search(re.escape(x) + r"\s*%", summary):
+                out.append(f"câu “{_short(text)}” ghi {x}% nhưng đây là hiệu hai tỷ lệ — phải nói"
+                           f" “{x} điểm phần trăm”")
+        years = [int(y) for y in YEAR.findall(text)]
+        if FUTURE.search(text) and not text.endswith("?") and years and min(years) <= last_year:
+            out.append(f"câu “{_short(text)}” nói như dự báo (“{FUTURE.search(text).group(0)}”) — số liệu"
+                       f" đến năm {last_year} là số ĐÃ GHI NHẬN")
+        if HISTORIC.search(text):
+            out.append(f"câu “{_short(text)}” nói “{HISTORIC.search(text).group(0)}” — bảng chỉ có từ năm"
+                       f" {first_year}: nói “từ năm {first_year}” hoặc “trong {last_year - first_year} năm qua”")
+        out += _overtake_timing(text, table)
+    return out
+
+
+def _overtake_timing(text: str, table: dict) -> list:
+    """"A vượt/soán ngôi B năm Y" -> A phải ĐANG kém B ở mốc bảng liền trước Y (nếu không, A đã vượt từ trước)."""
+    m = OVERTAKE.search(text)
+    if not m:
+        return []
+    mentions = _mentions(text, table)
+    before = [x for x in mentions if x[1] <= m.start()]
+    after = [x for x in mentions if x[0] >= m.end()]
+    if not before or not after or before[-1][2] == after[0][2]:
+        return []
+    if SEPARATOR.search(text[before[-1][1]:after[0][0]]):
+        return []
+    a, b = before[-1][2], after[0][2]
+    after_years = [int(y.group()) for y in YEAR.finditer(text, m.end())]
+    if not after_years:
+        return []
+    y = after_years[0]
+    common = sorted(set(table.get(a, {})) & set(table.get(b, {})))
+    if y not in common:
+        return []
+    prev = [p for p in common if p < y]
+    if not prev or table[a][y] <= table[b][y]:
+        return []
+    p = prev[-1]
+    if table[a][p] > table[b][p]:
+        lost = [q for q in common if q < y and table[a][q] <= table[b][q]]
+        since = f"giữa {lost[-1]} và {next(q for q in common if q > lost[-1])}" if lost else f"trước {common[0]}"
+        return [f"câu “{_short(text)}” nói {a} vượt {b} năm {y} nhưng bảng cho thấy {a} đã vượt {b} {since}"
+                f" (năm {p}: {vn_number(table[a][p])} so với {vn_number(table[b][p])})"]
+    return []
+
+
 # Hook "Vì sao…?" cho ý tưởng từ BẢNG SỐ: video không trả lời được (bảng số không nói nguyên nhân, và
 # kịch bản bị cấm nêu nguyên nhân) -> hứa suông với người xem. Đo 19/11: 3/3 kịch bản đạt đều mở bằng
 # "Vì sao…?" (model rất thích kiểu này).
