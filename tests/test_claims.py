@@ -51,6 +51,19 @@ class CatchUpTest(unittest.TestCase):
         self.assertEqual(len(got), 1)
         self.assertIn("không có căn cứ", got[0])
 
+    def test_today_means_the_latest_year_in_the_table(self):
+        # Ca thật #37 (19/11): "hôm nay" thay cho năm — Việt Nam 2025: 38,8%, Hàn Quốc 1990: 74%
+        urban = ("Việt Nam theo năm: 1990: 19,2; 2010: 30,3; 2025: 38,8.\n"
+                 "Hàn Quốc theo năm: 1990: 74; 2010: 82; 2025: 81,2.")
+        got = claims.comparison_problems(
+            ["Việt Nam hôm nay mới bằng Hàn Quốc năm 1990 về đô thị hóa."], urban)
+        self.assertEqual(len(got), 1)
+        self.assertIn("Việt Nam năm 2025 là 38,8", got[0])
+        self.assertEqual(claims.comparison_problems(                       # có dòng "tương đương": đúng
+            ["Việt Nam hôm nay mới bằng Hàn Quốc năm 1988."], GDP), [])
+        self.assertEqual(claims.comparison_problems(["Hiện nay, Việt Nam cao hơn Hàn Quốc."], WOMEN), [])
+        self.assertEqual(len(claims.comparison_problems(["Hiện nay, Việt Nam thấp hơn Hàn Quốc."], WOMEN)), 1)
+
     def test_negated_and_compound_sentences_are_left_alone(self):
         texts = ["Hàn Quốc năm 2025 vẫn chưa bằng Việt Nam năm 1990.",
                  "Năm 1990, Việt Nam có tỷ lệ gần bằng 75%, còn Hàn Quốc năm 2025 là 56,8%."]

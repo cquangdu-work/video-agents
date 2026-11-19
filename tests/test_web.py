@@ -56,6 +56,23 @@ def _timed(spec):
     return out
 
 
+class TestNodeEnv(unittest.TestCase):
+    """Node riêng của dự án (REMOTION_NODE_DIR) đứng đầu PATH; không có thì giữ Node hệ thống."""
+
+    def test_project_node_goes_first_on_path(self):
+        import os
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"REMOTION_NODE_DIR": d}):
+            _, env = web.node_env()
+            self.assertTrue(env["PATH"].startswith(d + os.pathsep))
+
+    def test_missing_or_unset_dir_keeps_the_system_node(self):
+        import os
+        for value in ("/khong/co/thu/muc/nay", ""):
+            with mock.patch.dict(os.environ, {"REMOTION_NODE_DIR": value}):
+                _, env = web.node_env()
+                self.assertEqual(env["PATH"], os.environ["PATH"])
+
+
 class TestHelpers(unittest.TestCase):
     def test_pick_icon(self):
         self.assertEqual(web.pick_icon("Thuê bao di động tăng mạnh"), "smartphone")

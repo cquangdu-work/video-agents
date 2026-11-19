@@ -320,8 +320,9 @@ def main():
     tempo = fit_tempo(raw_secs, [len(r) for r in voiced], fixed,
                       float(cfg["channel"].get("video_seconds_max", 90)))
     if tempo > 1.0:
-        log.info("Giọng đọc dài %.1fs — đọc nhanh lên %.3f lần để video vừa %ss", sum(raw_secs) + fixed,
-                 tempo, cfg["channel"].get("video_seconds_max", 90))
+        planned = fixed + sum(run_seconds(d, len(r)) for d, r in zip(raw_secs, voiced))
+        log.info("Video sẽ dài %.1fs — đọc nhanh lên %.3f lần để vừa %ss", planned, tempo,
+                 cfg["channel"].get("video_seconds_max", 90))
         for r in voiced:
             wavs[r[0]] = speed_up(wavs[r[0]], audio_dir / f"fit_{r[0]:02d}.wav", tempo)
 

@@ -13,7 +13,8 @@ nên cần một cổng riêng, bằng code, không nhờ model nhỏ phán.
 Ba dạng câu được soát, CHỈ khi câu nhắc đúng hai đối tượng có trong bảng (nước, "Thế giới"...)
 và từ so sánh nằm GIỮA hai tên, không bị ngắt bởi dấu phẩy/"còn"/"trong khi" (tránh báo nhầm câu
 ghép kiểu "Việt Nam gần bằng 75%, còn Hàn Quốc năm 2025 là 56,8%"):
-- MỐC THỜI GIAN: "A năm Y1 mới bằng/đạt/ngang B năm Y2" -> hai giá trị phải lệch nhau không quá 5%
+- MỐC THỜI GIAN: "A năm Y1 (hoặc "hôm nay" = năm mới nhất) mới bằng/đạt/ngang B năm Y2" -> hai giá
+  trị phải lệch nhau không quá 5%
   (cùng ngưỡng với worldbank.catch_up_year), hoặc tóm tắt có sẵn dòng "A năm Y1 (...) tương đương
   B năm Y2". Bảng không có năm đó để kiểm cũng tính là lỗi: model chỉ được dùng mốc đã tính sẵn.
 - HƠN/KÉM trong MỘT năm: "năm Y, A cao hơn B" -> so giá trị năm Y (bảng không có năm đó thì bỏ qua).
@@ -36,6 +37,10 @@ NEGATED = re.compile(r"\b(?:chưa|không|chẳng)\s+(?:hề\s+|thể\s+)?(?:bằ
 MORE = re.compile(r"\b(?:cao\s+hơn|nhiều\s+hơn|lớn\s+hơn|vượt(?:\s+qua)?|bỏ\s+xa)\b", re.I)
 LESS = re.compile(r"\b(?:thấp\s+hơn|ít\s+hơn|nhỏ\s+hơn|kém|thua)\b", re.I)
 CHANGE = re.compile(r"\b(?:tăng|giảm|nhanh|chậm|tốc\s+độ)\b", re.I)
+# "hôm nay" = năm mới nhất trong bảng. Ca thật #37 (19/11): "Việt Nam HÔM NAY mới bằng Hàn Quốc năm
+# 1990 về đô thị hóa" (38,8% so với 74%) lọt bản đầu của cổng này vì câu không ghi năm cho Việt Nam.
+NOW = re.compile(r"\b(?:hôm\s+nay|hiện\s+nay|ngày\s+nay|bây\s+giờ|hiện\s+tại|năm\s+nay|mới\s+nhất)\b",
+                 re.I)
 # dấu phẩy NGẮT CÂU, không phải dấu thập phân ("gấp 7,15 lần" không bị coi là hai vế)
 SEPARATOR = re.compile(r"[,;:](?!\d)|\b(?:còn|trong\s+khi|nhưng|tuy\s+nhiên)\b", re.I)
 TIMES = re.compile(r"gấp\s+(\d[\d.,]*)\s+lần", re.I)
@@ -73,9 +78,10 @@ def _mentions(text: str, labels) -> list:
     return sorted(out)
 
 
-def _assign_years(text: str, mentions: list) -> dict:
+def _assign_years(text: str, mentions: list, table: dict = None) -> dict:
     """{nhãn: năm}: mỗi đối tượng nhận năm ĐẦU TIÊN đứng sau tên nó (trước tên kế tiếp). Đối tượng
-    không có năm phía sau nhận năm còn thừa — "Năm 2024, Việt Nam mới bằng Hàn Quốc năm 1991"."""
+    không có năm phía sau nhận năm còn thừa — "Năm 2024, Việt Nam mới bằng Hàn Quốc năm 1991" — hoặc,
+    nếu câu nói "hôm nay/hiện nay…", năm mới nhất của nó trong bảng."""
     years = [(m.start(), int(m.group())) for m in YEAR.finditer(text)]
     got = {}
     for k, (_, end, lab) in enumerate(mentions):
@@ -90,6 +96,8 @@ def _assign_years(text: str, mentions: list) -> dict:
     missing = [lab for lab in labels if lab not in got]
     if len(missing) == 1 and len(set(left)) == 1:
         got[missing[0]] = left[0]
+    elif len(missing) == 1 and not left and NOW.search(text) and (table or {}).get(missing[0]):
+        got[missing[0]] = max(table[missing[0]])
     return got
 
 
@@ -117,11 +125,15 @@ def _check_catch_up(text, between, labels, years, table, known_pairs) -> str:
 
 
 def _check_direction(text, between, labels, table) -> str:
+    a, b = labels[0], labels[1]
     years = sorted({int(m.group()) for m in YEAR.finditer(text)})
+    if not years and NOW.search(text):              # "hiện nay A cao hơn B" = năm chung mới nhất
+        common = set(table.get(a, {})) & set(table.get(b, {}))
+        years = [max(common)] if common else []
     more, less = MORE.search(between), LESS.search(between)
     if len(years) != 1 or bool(more) == bool(less) or CHANGE.search(between):
         return ""
-    a, b, y = labels[0], labels[1], years[0]
+    y = years[0]
     va, vb = table.get(a, {}).get(y), table.get(b, {}).get(y)
     if va is None or vb is None or va == vb:
         return ""
@@ -175,7 +187,8 @@ def comparison_problems(texts, summary: str) -> list:
         between = text[first_a[1]:first_b[0]]
         if SEPARATOR.search(between):
             continue
-        problem = (_check_catch_up(text, between, labels, _assign_years(text, mentions), table, known)
+        problem = (_check_catch_up(text, between, labels, _assign_years(text, mentions, table), table,
+                                   known)
                    or _check_direction(text, between, labels, table)
                    or _check_times(text, first_a[1], first_b[0], labels, table, summary))
         if problem:

@@ -48,11 +48,50 @@ else
 fi
 
 echo
-echo "== 3/5 Môi trường Python (venv) =="
-[[ -d venv ]] || python3 -m venv venv
-venv/bin/pip install --upgrade pip >/dev/null
-venv/bin/pip install -r requirements.txt
+echo "== 3/5 Môi trường Python 3.13 (venv) + Node riêng cho Remotion =="
+# Python 3.10 của Ubuntu 22.04 hết hạn hỗ trợ 10/2026 -> Python 3.13 do uv tải về thư mục người dùng
+# (không đụng Python hệ thống). Thư viện cài ĐÚNG phiên bản trong requirements.lock — bộ đã thử trên
+# cả laptop lẫn VM; requirements.txt chỉ ghi ý định ("crewai>=0.80"), tạo lại lock bằng lệnh ở đầu file lock.
+PYV=3.13
+UV="$(command -v uv || true)"
+[[ -z "$UV" && -x "$HOME/.local/bin/uv" ]] && UV="$HOME/.local/bin/uv"
+[[ -z "$UV" && -x venv/bin/uv ]] && UV="$REPO/venv/bin/uv"
+if [[ -z "$UV" ]]; then
+    ask "Chưa có uv. Cài uv vào ~/.local/bin (không cần sudo, từ astral.sh)?" || exit 1
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    UV="$HOME/.local/bin/uv"
+fi
+if [[ -x venv/bin/python ]] && ! venv/bin/python -c "import sys; sys.exit(sys.version_info[:2] != (3, 13))"; then
+    old="venv-py$(venv/bin/python -c 'import sys; print("%d%d" % sys.version_info[:2])')"
+    UV_COPY="$REPO/$old/bin/uv"
+    echo "venv đang là Python cũ -> đổi tên thành $old (giữ để lùi lại nếu cần), tạo venv Python $PYV mới"
+    mv venv "$old"
+    [[ "$UV" == "$REPO/venv/bin/uv" ]] && UV="$UV_COPY"
+fi
+[[ -d venv ]] || "$UV" venv venv --python "$PYV" --seed
+VIRTUAL_ENV="$REPO/venv" "$UV" pip sync requirements.lock
 venv/bin/python -m unittest discover -s tests 2>&1 | tail -3
+
+# Node 20 hệ thống (nếu có) đã hết hạn hỗ trợ 4/2026; VM còn dịch vụ khác dùng chung Node hệ thống
+# nên Remotion dùng Node 24 LTS RIÊNG trong ~/.local, khai báo cho code qua REMOTION_NODE_DIR (.env)
+NODE_V=v24.22.3
+NODE_DIR="$HOME/.local/node-$NODE_V-linux-$( [[ "$(uname -m)" == "aarch64" ]] && echo arm64 || echo x64 )"
+if [[ ! -x "$NODE_DIR/bin/node" ]] && ask "Tải Node $NODE_V vào ~/.local cho Remotion (không đụng Node hệ thống)?"; then
+    f="$(basename "$NODE_DIR").tar.xz"
+    mkdir -p "$HOME/.local/dl"
+    (cd "$HOME/.local/dl" && curl -fsSLO "https://nodejs.org/dist/$NODE_V/$f" \
+        && curl -fsSLO "https://nodejs.org/dist/$NODE_V/SHASUMS256.txt" \
+        && grep " $f\$" SHASUMS256.txt | sha256sum -c - && tar -xJf "$f" -C "$HOME/.local")
+fi
+if [[ -x "$NODE_DIR/bin/node" ]]; then
+    ln -sfn "$NODE_DIR" "$HOME/.local/node24"
+    if [[ ! -f .env ]]; then
+        echo "Nhớ thêm vào .env (khi chép sang): REMOTION_NODE_DIR=$HOME/.local/node24/bin"
+    elif ! grep -q '^REMOTION_NODE_DIR=' .env; then
+        echo "REMOTION_NODE_DIR=$HOME/.local/node24/bin" >> .env
+    fi
+    [[ -d render-web/node_modules ]] || (cd render-web && PATH="$HOME/.local/node24/bin:$PATH" npm ci)
+fi
 
 echo
 echo "== 4/5 Kiểm tra file bí mật và dữ liệu =="

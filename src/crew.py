@@ -256,7 +256,8 @@ DATA_STORY = """
   lời đọc KHÔNG đọc lần lượt từng mốc năm ("năm 1995 là..., năm 2000 là...") — người xem sẽ
   lướt đi ngay.
 - Kể thành CÂU CHUYỆN: hook là điều bất ngờ nhất trong bảng (ví dụ "Việt Nam hôm nay mới bằng
-  Hàn Quốc năm X", "tăng gấp N lần", "từ bét bảng lên hạng 7"); rồi điểm xuất phát, hiện tại,
+  Hàn Quốc năm X" — chỉ khi bảng có dòng "tương đương" ghi đúng năm X —, "tăng gấp N lần", "từ bét
+  bảng lên hạng 7"); rồi điểm xuất phát, hiện tại,
   khoảng cách. Bảng có XẾP HẠNG nhiều nước thì kể ai vượt ai, Việt Nam và Hàn Quốc đứng thứ
   mấy lúc đầu và bây giờ (các dòng "hạng ... vượt ..." đã tính sẵn trong bảng).
 - Chỉ dùng 5-8 con số đắt nhất, tối đa 4 mốc năm khác nhau trong toàn bài.
@@ -322,7 +323,9 @@ LUẬT HOOK (cảnh 1 — quyết định người xem có ở lại không):
 - Viết 3 PHƯƠNG ÁN hook thuộc 3 KIỂU KHÁC NHAU trong các kiểu sau; máy sẽ chấm và chọn câu mạnh
   nhất đặt vào cảnh 1:
   a) Đối lập bằng con số: "Hàn Quốc dùng điện gấp 5 lần Việt Nam — 30 năm trước thì ngược lại."
-  b) Mốc thời gian: "Việt Nam hôm nay mới bằng Hàn Quốc năm 1991."
+  b) Mốc thời gian: "Việt Nam hôm nay mới bằng Hàn Quốc năm 1991." — CHỈ KHI tóm tắt nguồn có sẵn
+     dòng "… tương đương … năm …", và dùng ĐÚNG hai mốc năm của dòng đó. Không có dòng đó nghĩa là
+     hai nước chưa từng ngang nhau: KHÔNG viết kiểu này (máy so từng câu "mới bằng" với bảng số).
   c) Thứ hạng bất ngờ: "Trong 214 nước, Việt Nam đứng đúng chính giữa."
   d) Câu hỏi có điều cụ thể (không phải câu hỏi chung chung): "Vì sao Hàn Quốc sinh ít con nhất
      thế giới dù giàu gấp 7 lần?"

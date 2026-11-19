@@ -9,6 +9,7 @@ Python vẫn làm chủ mọi thứ quan trọng: số liệu (lấy từ bảng
 """
 import json
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -73,18 +74,34 @@ def brand_props() -> dict:
     return {**b["colors"], "channel": b["intro"]["text"]}
 
 
+def node_env() -> tuple:
+    """(lệnh npx, biến môi trường) để chạy Remotion.
+
+    REMOTION_NODE_DIR (trong .env, ví dụ ~/.local/node24/bin) = dùng bộ Node RIÊNG của dự án, đặt
+    lên đầu PATH. Lý do (19/11/2026): Node 20 hệ thống trên VM đã hết hạn hỗ trợ từ 4/2026, nhưng
+    máy còn chạy dịch vụ khác của Du — nâng Node hệ thống có thể làm hỏng dịch vụ đó. Không đặt
+    biến (hoặc thư mục không tồn tại) thì dùng Node trên PATH như trước."""
+    env = dict(os.environ)
+    node_dir = Path(os.getenv("REMOTION_NODE_DIR", "") or "~/__none__").expanduser()
+    if os.getenv("REMOTION_NODE_DIR") and node_dir.is_dir():
+        env["PATH"] = str(node_dir) + os.pathsep + env.get("PATH", "")
+    path = env.get("PATH")
+    npx = shutil.which("npx", path=path) or shutil.which("npx.cmd", path=path) or "npx"
+    return npx, env
+
+
 def render(props: dict, out: Path, concurrency: int = 3, crf: int = 23, composition: str = "Story") -> Path:
     """Ghi props ra JSON rồi gọi Remotion. Lần đầu trên máy mới cần `npm ci` trong render-web/.
     crf 23: video 72 giây ở mức mặc định (18) nặng 36 MB — sát trần 50 MB của bot Telegram."""
     out.parent.mkdir(parents=True, exist_ok=True)
     props_path = out.with_suffix(".props.json")
     props_path.write_text(json.dumps(props, ensure_ascii=False), encoding="utf-8")
-    npx = shutil.which("npx") or shutil.which("npx.cmd") or "npx"
+    npx, env = node_env()
     cmd = [npx, "remotion", "render", "src/index.ts", composition, str(out.resolve()),
            f"--props={props_path.resolve()}", f"--concurrency={concurrency}", f"--crf={crf}",
            "--enforce-audio-track", "--log=error"]
     log.info("Remotion render -> %s", out.name)
-    subprocess.run(cmd, cwd=WEB, check=True)
+    subprocess.run(cmd, cwd=WEB, check=True, env=env)
     return out
 
 
