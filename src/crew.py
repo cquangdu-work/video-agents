@@ -34,6 +34,10 @@ def writer_chain() -> list:
     return list(dict.fromkeys(chain + _model_chain()))
 
 
+_skip_until = {}          # model -> thời điểm (time.time) tới đó thì bỏ qua: quá tải / hết hạn mức ngày
+SKIP_OVERLOADED = 600     # giây bỏ qua một model vừa quá tải 3 lần liền
+
+
 def _is_transient(exc: Exception) -> bool:
     s = str(exc)
     # "timed out"/Timeout: model mới đông khách có khi treo quá giờ thay vì báo 503 (đo 19/11)
@@ -53,7 +57,12 @@ def _run_single_task(role: str, goal: str, description: str, expected_output: st
     from crewai import LLM, Agent, Crew, Task
 
     last_exc = None
-    for model in models or _model_chain():
+    chain = models or _model_chain()
+    # "Cầu dao" (19/11/2026): model vừa quá tải 3 lần / hết hạn mức ngày thì các lượt gọi SAU trong cùng
+    # tiến trình bỏ qua nó luôn — trước đây lượt nào cũng chờ ~2 phút cho model đang 503 rồi mới lùi.
+    # Model cuối chuỗi luôn được thử (đường lùi chót).
+    active = [m for m in chain if _skip_until.get(m, 0) <= time.time()] or chain[-1:]
+    for model in active:
         for attempt in range(3):
             try:
                 # timeout: model mới đông khách có khi treo hàng phút thay vì báo 503 -> coi là tạm thời
@@ -68,10 +77,13 @@ def _run_single_task(role: str, goal: str, description: str, expected_output: st
                 if "per day" in str(exc) or "PerDay" in str(exc):
                     # hết hạn mức NGÀY (vd gemini-3-flash miễn phí chỉ 20 lượt/ngày, đo 19/11): chờ vô ích
                     log.warning("%s hết hạn mức ngày — chuyển model dự phòng", model)
+                    _skip_until[model] = time.time() + 12 * 3600
                     break
                 wait = 20 * (attempt + 1)
                 log.warning("%s quá tải (lần %d) — chờ %ds rồi thử lại", model, attempt + 1, wait)
                 time.sleep(wait)
+        else:
+            _skip_until[model] = time.time() + SKIP_OVERLOADED
         log.warning("Bỏ %s, chuyển model dự phòng tiếp theo", model)
     raise RuntimeError(f"Mọi model đều quá tải: {last_exc}")
 

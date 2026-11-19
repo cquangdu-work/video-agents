@@ -220,6 +220,41 @@ class WriterModelTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"MODEL": "gemini/lite", "MODEL_FALLBACKS": "", "WRITER_MODEL": ""}):
             self.assertEqual(crew.writer_chain(), ["gemini/lite"])          # không cấu hình: như cũ
 
+    def test_overloaded_or_exhausted_models_are_skipped_on_later_calls(self):
+        import sys
+        import types
+        from unittest import mock
+        calls = []
+
+        def make_fake(behaviour):
+            def kickoff(self):
+                model = self.agents[0].llm.model
+                calls.append(model)
+                err = behaviour.get(model)
+                if err:
+                    raise RuntimeError(err)
+                return "ok"
+            ns = lambda **kw: types.SimpleNamespace(**kw)
+            crew_cls = type("Crew", (), {"__init__": lambda self, agents, tasks, verbose: setattr(self, "agents", agents),
+                                         "kickoff": kickoff})
+            return types.SimpleNamespace(LLM=ns, Agent=ns, Task=ns, Crew=crew_cls)
+        fake = make_fake({"m1": "503 UNAVAILABLE", "m3": "429 RESOURCE_EXHAUSTED requests per day"})
+        with mock.patch.dict(sys.modules, {"crewai": fake}), mock.patch("time.sleep"), \
+                mock.patch.object(crew, "_skip_until", {}):
+            run = lambda chain: crew._run_single_task("r", "g", "d", "e", models=chain)
+            self.assertEqual(run(["m1", "m2"]), "ok")
+            self.assertEqual(calls, ["m1", "m1", "m1", "m2"])          # quá tải: thử 3 lần rồi lùi
+            calls.clear()
+            self.assertEqual(run(["m1", "m2"]), "ok")
+            self.assertEqual(calls, ["m2"])                             # lượt sau: bỏ qua m1 luôn
+            calls.clear()
+            self.assertEqual(run(["m3", "m2"]), "ok")
+            self.assertEqual(calls, ["m3", "m2"])                       # hết hạn mức ngày: không thử lại
+            calls.clear()
+            with self.assertRaises(RuntimeError):
+                run(["m1"])                                             # chỉ còn model đang bị bỏ qua: vẫn thử
+            self.assertEqual(calls, ["m1", "m1", "m1"])
+
     def test_a_hanging_model_counts_as_transient(self):
         self.assertTrue(crew._is_transient(TimeoutError("Request timed out")))
         self.assertFalse(crew._is_transient(ValueError("bad json")))
