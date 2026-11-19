@@ -112,11 +112,13 @@ def opening_problems(body: str) -> list:
 
 
 def comparison_problems(body: str, summary: str) -> list:
-    """Câu so sánh sai với bảng số (src/claims.py) trong lời đọc của một kịch bản đã lưu."""
-    from .claims import comparison_problems as check
+    """Lỗi nội dung code soát được với bảng số (crew.content_problems: so sánh sai, nêu nguyên nhân,
+    "liên tục tăng" trái dãy số, hook "Vì sao…?") trong lời đọc của một kịch bản ĐÃ LƯU — kịch bản viết
+    trước khi có cổng vẫn có thể đang ở trạng thái "verified"."""
+    from .crew import content_problems
     try:
         scenes = yaml.safe_load(body or "") or []
-        return check([s.get("voice", "") for s in scenes if isinstance(s, dict)], summary)
+        return content_problems({"scenes": [s for s in scenes if isinstance(s, dict)]}, summary)
     except Exception:
         return []
 

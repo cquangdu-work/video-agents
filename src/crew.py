@@ -316,6 +316,8 @@ DATA_STORY = f"""
   sống ở thành phố"). KHÔNG thêm con số ngoài bảng, KHÔNG nêu nguyên nhân hay bối cảnh lịch sử
   (chính sách, cải cách, mở cửa, sự kiện...) — bảng số không nói nguyên nhân, máy sẽ chặn. Không
   khuyên người xem làm gì.
+- Hook KHÔNG hỏi "Vì sao…?"/"Tại sao…?" (kiểu d): bảng số không trả lời được vì sao, hỏi mà không
+  đáp là hứa suông với người xem (máy chặn). Không nói "liên tục tăng/giảm" nếu dãy số có lúc đi ngược.
 - Đây là số liệu thống kê đã ghi nhận, KHÔNG gọi là "dự báo"."""
 
 
@@ -398,6 +400,18 @@ LUẬT HOOK (cảnh 1 — quyết định người xem có ở lại không):
 - CẤM (video theo mẫu và câu view bị YouTube cắt kiếm tiền): mở bằng "Đừng…", "Sai lầm…",
   "Bạn có biết…", "Hôm nay…", "Cùng tìm hiểu…"; các từ "sốc", "giật mình", "kinh hoàng", "không
   thể tin", "sự thật sẽ khiến bạn…"; câu hỏi chung chung kiểu "…đạt bao nhiêu?"."""
+
+
+def content_problems(script: dict, summary: str) -> list:
+    """Lỗi NỘI DUNG mà code soát được với bảng số của ý tưởng (src/claims.py): so sánh sai, nêu nguyên
+    nhân mà bảng không nói, "liên tục tăng" trái dãy số, hook "Vì sao…?" không trả lời được. Dùng chung
+    cho Biên kịch (trả về viết lại), main (cổng cuối) và daily (kịch bản cũ đã lưu)."""
+    from . import claims
+    out = [f"so sánh sai — {p}" for p in claims.script_comparison_problems(script, summary)]
+    out += claims.script_cause_claims(script, summary)
+    out += claims.script_trend_problems(script, summary)
+    why = claims.why_hook_problem(script, summary)
+    return out + ([why] if why else [])
 
 
 def recent_hooks_block(recent: list) -> str:
@@ -506,15 +520,13 @@ AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — 
         # Máy sửa những thứ sửa được: gọt câu đệm, chọn câu mở đầu mạnh nhất trong 3 phương án
         # (phương án có số không có trong nguồn thì không được chọn)
         story.strip_fillers(script)
+        summary = idea.get("summary")
         story.pick_hook(script, recent_openers, is_sourced=lambda text: not unsourced_numbers(
             {"scenes": [{"voice": text}]}, idea, source_text)
-            and not claims.comparison_problems([text], idea.get("summary")))
+            and not claims.comparison_problems([text], summary)
+            and not (claims.data_table(str(summary or "")) and claims.WHY_HOOK.search(text)))
         problems = script_problems(script, cfg, recent_openers)
-        # Câu so sánh sai với bảng số ("A năm X mới bằng B năm Y" mà hai mức không ngang nhau)
-        problems += [f"so sánh sai — {p}" for p in
-                     claims.script_comparison_problems(script, idea.get("summary"))]
-        # Câu nêu nguyên nhân/bối cảnh mà bảng số không nói ("Sự mở cửa đã thu hút…", ca thật #23)
-        problems += claims.script_cause_claims(script, idea.get("summary"))
+        problems += content_problems(script, summary)
         if best is None or len(problems) <= len(best_problems):
             best, best_problems = script, problems
         if not problems:

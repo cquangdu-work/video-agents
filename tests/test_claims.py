@@ -101,6 +101,29 @@ class TimesTest(unittest.TestCase):
         self.assertEqual(len(got), 1)
 
 
+class TrendAndWhyTest(unittest.TestCase):
+    def test_continuous_rise_that_the_table_contradicts_is_caught(self):
+        # Ca thật 19/11: Hàn Quốc 2005: 50,7 -> 2010: 49,8 mà kịch bản nói "liên tục tăng"
+        for text in ("Trái lại, Hàn Quốc liên tục tăng trưởng từ 1990 đến năm 2025.",
+                     "Ngược lại, Hàn Quốc đi theo một quỹ đạo tăng trưởng liên tục.",
+                     "Hàn Quốc chưa bao giờ giảm suốt 35 năm."):
+            got = claims.trend_problems([text], WOMEN)
+            self.assertEqual(len(got), 1, text)
+            self.assertIn("2005: 50,7 → 2010: 49,8", got[0])
+
+    def test_true_or_unscoped_trends_pass(self):
+        self.assertEqual(claims.trend_problems(["Hàn Quốc tăng liên tục từ 2010 đến 2025."], WOMEN), [])
+        self.assertEqual(claims.trend_problems(["Tỷ lệ này tăng liên tục."], WOMEN), [])     # không rõ nước nào
+        self.assertEqual(claims.trend_problems(["Hàn Quốc liên tục tăng."], "Bài báo, không bảng."), [])
+
+    def test_why_hook_only_blocked_for_data_ideas(self):
+        why = {"scenes": [{"voice": "Vì sao Qatar có bụi mịn cao gấp 2,95 lần Việt Nam?"}]}
+        self.assertIn("Vì sao", claims.why_hook_problem(why, WOMEN))
+        self.assertEqual(claims.why_hook_problem(why, "Bài báo ScienceDaily."), "")    # bài báo trả lời được
+        ok = {"scenes": [{"voice": "Năm 1990 Việt Nam hơn Hàn Quốc 27,5 điểm phần trăm."}]}
+        self.assertEqual(claims.why_hook_problem(ok, WOMEN), "")
+
+
 class ScopeTest(unittest.TestCase):
     def test_article_ideas_have_no_table_and_pass_through(self):
         self.assertEqual(claims.comparison_problems(

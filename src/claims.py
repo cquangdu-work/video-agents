@@ -229,6 +229,64 @@ def script_cause_claims(script: dict, summary: str) -> list:
                         summary)
 
 
+# "Liên tục tăng" mà dãy số có năm giảm. Ca thật 19/11: "Hàn Quốc liên tục tăng từ 1990 đến 2025" —
+# bảng ghi 2005: 50,7 -> 2010: 49,8; kịch bản #46 gốc cũng có "quỹ đạo tăng trưởng liên tục". Agent
+# Kiểm chứng (LLM) cho qua cả hai.
+TREND = re.compile(r"\b(?:(?:liên\s+tục|đều\s+đặn|không\s+ngừng)\s+(?P<a>tăng|giảm)"
+                   r"|(?P<b>tăng|giảm)(?:\s+\w+){0,2}?\s+(?:liên\s+tục|đều\s+đặn|không\s+ngừng)"
+                   r"|chưa\s+(?:bao\s+giờ|từng)\s+(?P<c>giảm|tăng))\b", re.I)
+
+
+def trend_problems(texts, summary: str) -> list:
+    """Câu nói một đối tượng tăng/giảm LIÊN TỤC mà dãy số của nó trong bảng có lúc đi ngược chiều.
+    Câu có hai mốc năm thì chỉ xét đoạn giữa hai mốc đó."""
+    table = data_table(str(summary or ""))
+    if not table:
+        return []
+    out = []
+    for text in texts:
+        text = " ".join(str(text or "").split())
+        m = TREND.search(text)
+        if not m:
+            continue
+        word = (m.group("a") or m.group("b") or m.group("c")).lower()
+        up = (word == "tăng") != bool(m.group("c"))          # "chưa bao giờ giảm" = luôn tăng
+        before = [x for x in _mentions(text, table) if x[0] < m.start()]
+        mentions = before or _mentions(text, table)
+        if not mentions:
+            continue
+        label = mentions[-1][2] if before else mentions[0][2]
+        years = sorted(int(y) for y in YEAR.findall(text))
+        pts = sorted(table[label].items())
+        if len(years) >= 2:
+            pts = [p for p in pts if years[0] <= p[0] <= years[-1]]
+        bad = next(((a, b) for a, b in zip(pts, pts[1:]) if (b[1] < a[1] if up else b[1] > a[1])), None)
+        if bad:
+            (y0, v0), (y1, v1) = bad
+            out.append(f"câu “{_short(text)}” nói {label} {'tăng' if up else 'giảm'} liên tục nhưng bảng ghi"
+                       f" {y0}: {vn_number(v0)} → {y1}: {vn_number(v1)}")
+    return out
+
+
+def script_trend_problems(script: dict, summary: str) -> list:
+    return trend_problems([s.get("voice", "") for s in script.get("scenes") or [] if isinstance(s, dict)],
+                          summary)
+
+
+# Hook "Vì sao…?" cho ý tưởng từ BẢNG SỐ: video không trả lời được (bảng số không nói nguyên nhân, và
+# kịch bản bị cấm nêu nguyên nhân) -> hứa suông với người xem. Đo 19/11: 3/3 kịch bản đạt đều mở bằng
+# "Vì sao…?" (model rất thích kiểu này).
+WHY_HOOK = re.compile(r"^\W*(vì\s+sao|tại\s+sao|lý\s+do\s+(gì|nào))\b", re.I)
+
+
+def why_hook_problem(script: dict, summary: str) -> str:
+    scenes = [s for s in script.get("scenes") or [] if isinstance(s, dict)]
+    if scenes and data_table(str(summary or "")) and WHY_HOOK.search(str(scenes[0].get("voice") or "")):
+        return ("câu mở đầu hỏi “Vì sao…?” mà video từ bảng số không trả lời được nguyên nhân — mở bằng"
+                " đối lập con số, mốc thời gian hoặc thứ hạng bất ngờ")
+    return ""
+
+
 def script_comparison_problems(script: dict, summary: str) -> list:
     """comparison_problems trên lời đọc của mọi cảnh trong một kịch bản."""
     return comparison_problems([s.get("voice", "") for s in script.get("scenes") or []
