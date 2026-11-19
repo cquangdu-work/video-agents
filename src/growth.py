@@ -168,8 +168,15 @@ def report_lines(snap: dict, rows: list, notes: list, cfg: dict) -> list:
             bits.append(f"lượt xem Shorts 90 ngày {_vn(snap['shorts_views_90d'])}/{_vn(ypp['shorts_views_90d'])}")
         lines.append("  Tiến độ YPP: " + " · ".join(bits))
         weeks = forecast_weeks(snap, ypp["subs"])
-        lines.append(f"  Dự báo: đủ {_vn(ypp['subs'])} người đăng ký sau khoảng {weeks} tuần nếu giữ nhịp 28 ngày qua"
-                     if weeks else "  Dự báo: chưa tính được (nhịp người đăng ký 28 ngày qua chưa dương)")
+        if weeks and weeks <= 104:
+            lines.append(f"  Dự báo: đủ {_vn(ypp['subs'])} người đăng ký sau khoảng {weeks} tuần nếu giữ nhịp 28 ngày qua")
+        elif snap["subscribers"] < ypp["subs"]:
+            # kênh mới: nhịp hiện tại cho ra con số hàng nghìn tuần — vô ích; nói mục tiêu mỗi tuần thì hơn
+            need = (ypp["subs"] - snap["subscribers"]) / 52
+            pace = (snap.get("net_subs_28d") or 0) / 4
+            pace_text = f"{pace:+.1f}".replace(".", ",")
+            lines.append(f"  Mục tiêu: muốn đủ {_vn(ypp['subs'])} người đăng ký trong 12 tháng cần ~{need:.0f} người"
+                         f" mới mỗi tuần (28 ngày qua: {pace_text}/tuần)")
     else:
         lines.append("  (chưa đo được cả kênh — cần token YouTube có quyền Analytics)")
     top = [(r, x) for r, x in sub_rates(rows)[:3] if x > 0]

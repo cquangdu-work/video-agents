@@ -217,6 +217,11 @@ class GrowthTest(Case):
         self.assertNotIn("#9", text)
         self.assertIsNone(growth.forecast_weeks({"subscribers": 10, "net_subs_28d": 0}, 1000))
         self.assertIn("chưa đo được cả kênh", "\n".join(growth.report_lines({}, [], [], {})))
+        # kênh mới (đo thật trên VM 19/11: 3 sub, +1/28 ngày): nói mục tiêu mỗi tuần, không nói "3.988 tuần"
+        tiny = dict(snap, subscribers=3, net_subs_28d=1)
+        text = "\n".join(growth.report_lines(tiny, [], [], {}))
+        self.assertIn("cần ~19 người mới mỗi tuần (28 ngày qua: +0,2/tuần)", text)
+        self.assertNotIn("tuần nếu giữ nhịp", text)
 
     def test_snapshot_reads_channel_reports(self):
         from src.publish import youtube
