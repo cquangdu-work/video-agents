@@ -255,6 +255,13 @@ pacing:
   # này để viết đủ dài: 60-90 giây ≈ 204-306 từ. Đổi giọng (TTS_VOICE) thì đo lại.
   words_per_second: 3.4
 
+# ---------- Học cách dựng (src/style.py) ----------
+# Mỗi video mới thử một tổ hợp "núm vặn" trong khung an toàn (tốc độ đọc ×1,00-1,12, nhạc nền ±dB,
+# nhịp đổi cảnh 2,5-5 giây/hình — đè scene_seconds_max ở trên cho video đó, cỡ phụ đề 72-96 px); agent
+# Phân tích so % thời lượng được xem mỗi Chủ nhật. Khung và số liệu nằm ở data/learned.yaml ("style").
+style:
+  experiments: true   # false = mọi video dùng tâm khung, không thử. Du cũng tạm dừng được: /kieu tat
+
 # ---------- Phân tích đối thủ (python -m src.analysis.competitors) ----------
 competitor_analysis:
   months_back: 6          # chỉ xét video 6 tháng gần đây

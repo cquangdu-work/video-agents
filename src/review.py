@@ -109,6 +109,9 @@ def _send_for_review(cfg, con, script_id, force, skip_qc):
         from . import qc
         checks = qc.collect_checks(script_id)
         if not all(c["ok"] for c in checks) and not force:
+            from . import learning           # lỗi dựng cũng là bài học (agent Sản xuất / báo cáo tuần)
+            learning.record_problems(con, [f"{c['name']}: {c['value']}" for c in checks if not c["ok"]],
+                                     "qc", script_id=script_id)
             for c in checks:
                 print(f"  {'✅' if c['ok'] else '❌'} {c['name']}: {c['value']}")
             print("Kiểm định CHƯA ĐẠT — không gửi duyệt (thêm --force nếu vẫn muốn gửi).")
@@ -443,13 +446,65 @@ def _handle_teaching(text: str) -> bool:
     return False
 
 
+# Du chỉnh CÁCH DỰNG (src/style.py): mỗi lệnh dời khung thử nghiệm của một núm một nấc. So trên chữ đã
+# bỏ dấu: "/Nhạc nhỏ" = "/nhac nho".
+STYLE_COMMANDS = {("nhac", "to"): ("music", 1), ("nhac", "lon"): ("music", 1),
+                  ("nhac", "nho"): ("music", -1), ("nhac", "be"): ("music", -1),
+                  ("giong", "nhanh"): ("tempo", 1), ("giong", "cham"): ("tempo", -1),
+                  ("nhip", "nhanh"): ("pace", -1), ("nhip", "cham"): ("pace", 1),   # nhanh = ít giây mỗi hình
+                  ("chu", "to"): ("captions", 1), ("chu", "lon"): ("captions", 1),
+                  ("chu", "nho"): ("captions", -1), ("chu", "be"): ("captions", -1)}
+
+
+def _fold(text: str) -> str:
+    """Chữ thường, bỏ dấu tiếng Việt, gộp khoảng trắng: "/Nhạc  nhỏ" -> "/nhac nho"."""
+    import unicodedata
+    s = unicodedata.normalize("NFD", text.lower().replace("đ", "d"))
+    return " ".join("".join(ch for ch in s if unicodedata.category(ch) != "Mn").split())
+
+
+def _handle_style(con, text: str) -> bool:
+    """/kieu (xem), /kieu tat|bat, /nhac to|nho, /giong nhanh|cham, /nhip nhanh|cham, /chu to|nho."""
+    from . import style
+    t = _fold(text)
+    parts = t.split()
+    if not parts or parts[0] not in ("/kieu", "/nhac", "/giong", "/nhip", "/chu"):
+        return False
+    try:
+        if t == "/kieu":
+            tg.send_message(style.status_text())
+        elif t in ("/kieu tat", "/kieu bat"):
+            style.set_paused(t.endswith("tat"))
+            tg.send_message("⏸ Tạm dừng thử nghiệm: video kế tiếp dùng tâm khung của mỗi núm. /kieu bat để thử tiếp."
+                            if t.endswith("tat") else "▶️ Thử nghiệm tiếp: mỗi video một tổ hợp mới.")
+        elif len(parts) == 2 and (parts[0][1:], parts[1]) in STYLE_COMMANDS:
+            knob, direction = STYLE_COMMANDS[(parts[0][1:], parts[1])]
+            last = style.latest_applied(con, knob)
+            before, after = style.shift(knob, direction)
+            label = style.KNOBS[knob]["label"]
+            show = lambda vals: " · ".join(style.fmt(knob, v) for v in vals)
+            if before == after:
+                tg.send_message(f"{label}: đã ở giới hạn an toàn ({show(after)}), không dời thêm được.")
+            else:
+                log.info("Du chỉnh cách dựng: %s %s -> %s", knob, before, after)
+                tg.send_message(f"🎛 {label}: khung thử mới {show(after)} (trước: {show(before)}). Áp dụng từ"
+                                " video dựng kế tiếp; hệ thống sẽ không tự dời ngược lại."
+                                + (f"\nVideo gửi gần nhất dùng {style.fmt(knob, last)}." if last is not None else ""))
+        else:
+            tg.send_message("Lệnh chỉnh cách dựng: /giong nhanh|cham · /nhac to|nho · /nhip nhanh|cham ·"
+                            " /chu to|nho · /kieu (xem) · /kieu tat|bat")
+    except Exception as exc:                 # learned.yaml hỏng: báo chứ không ghi đè mất cái đã học
+        tg.send_message(f"⚠️ Chưa chỉnh được ({exc}). Kiểm tra data/learned.yaml trên VM.")
+    return True
+
+
 def _handle_message(con, msg: dict) -> None:
     if not _from_owner(msg.get("chat"), msg.get("from")):
         return
     text = (msg.get("text") or "").strip()
     if not text:
         return
-    if _handle_teaching(text):
+    if _handle_teaching(text) or _handle_style(con, text):
         return
     if text.lower() in ("/tiktok", "tiktok"):
         _start_tiktok(con)

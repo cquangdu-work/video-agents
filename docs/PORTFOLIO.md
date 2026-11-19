@@ -5,7 +5,7 @@ data-driven short video every day (Vietnamese, YouTube Shorts + TikTok), plus a 
 long-form compilation. A human approves every video from Telegram (~5 min/day); everything else
 is automated. It runs on an Oracle Cloud free-tier ARM64 VM using only free-tier APIs.
 
-**Numbers:** ~13k lines of Python/TypeScript (+5.3k lines of tests) · 376 unit tests ·
+**Numbers:** ~13.5k lines of Python/TypeScript (+5.6k lines of tests) · 395 unit tests ·
 ~120 commits · one 45–60 s video in ~15 min end-to-end on a 4-core ARM VM · $0/month model cost.
 
 ## Pipeline
@@ -26,6 +26,8 @@ flowchart LR
   Analytics -.-> Editor
   Check & Spec & TG & Analytics -.-> Memory[(Learning memory<br/>gate errors, owner rules,<br/>viewer preferences)]
   Memory -.-> Writer & Spec
+  Analytics -.-> Style[(Style experiments<br/>Thompson sampling)]
+  Style -.-> Spec & TTS & Render
 ```
 
 Orchestration is plain Python + CrewAI for the LLM roles, scheduled by systemd user timers;
@@ -70,6 +72,19 @@ prompts and priorities, stored as data (an events table + a YAML file), never co
   forbids copying wording (templated content is demonetised).
 - A broken memory degrades to "learned nothing" instead of stopping the pipeline.
 
+**Production that experiments on itself** (`src/style.py`). Every new video gets a randomly assigned
+combination of production "knobs" — narration speed, music level, max seconds per picture, caption
+size — three levels each inside hard, on-brand limits (a factorial design: every video informs every
+knob). The weekly analyst compares average view percentage per level, counting a video only for the
+knobs that actually got their assigned level (a slow TTS day forces faster narration; an empty music
+library means no music). Assignment then uses Thompson sampling with shrinkage, and when a neighbouring
+level wins clearly the window itself moves one step — the style drifts toward what viewers watch
+longer, never past the hard limits. The owner steers from Telegram (`/nhac nho` = "music quieter"),
+and auto-drift is never allowed to move back against a direction the owner chose. Retention per scene
+type and per opening-scene type feeds the scene director's prompt; QC failures are split into
+"the model can fix this" (clipped titles, picture contradicts narration → prompt lessons) and
+"code bug" (black frames, render fallback → weekly report only).
+
 **Designed around free-tier limits, measured in production.** Gemini TTS allows ~15 calls/day,
 so the whole script is voiced in one call and split per sentence with forced alignment
 (`audio/batch.py`); Whisper only supplies timestamps while subtitles use the script's own words
@@ -107,7 +122,7 @@ Posting API · Telegram Bot API · systemd · Oracle Cloud ARM64.
 | Area | Files |
 |---|---|
 | Agents and gates | `src/crew.py`, `src/story.py`, `src/claims.py`, `src/second_source.py` |
-| Self-learning | `src/learning.py`, `tests/test_learning.py` |
+| Self-learning | `src/learning.py`, `src/style.py`, `tests/test_learning.py`, `tests/test_style.py` |
 | Audio | `src/audio/tts.py`, `src/audio/batch.py`, `src/audio/subtitles.py`, `src/audio/music.py` |
 | Rendering | `src/render/web.py`, `src/render/web_map.py`, `render-web/src/` |
 | QC and publishing | `src/qc.py`, `src/review.py`, `src/publish/` |

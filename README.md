@@ -54,6 +54,7 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `src/daily.py` | **Chuỗi hằng ngày**: một lệnh chạy cả dây chuyền, bước nào hỏng thì thử kịch bản kế và báo Telegram. |
 | `src/analysis/weekly.py` | **Agent Phân tích**: mỗi tuần đo số liệu video, tìm cảnh người xem rời đi, nhích trọng số, rút bài học. |
 | `src/analysis/learned.py` | Đọc/ghi `data/learned.yaml` — thứ kênh tự học được; Biên tập và Biên kịch đọc file này. |
+| `src/style.py` | **Học cách dựng**: mỗi video thử một tổ hợp "núm vặn" trong khung an toàn (tốc độ đọc, nhạc nền, nhịp đổi cảnh, cỡ phụ đề), Chủ nhật so % thời lượng được xem (Thompson sampling), khung tự dời về mức thắng rõ; học loại cảnh nào giữ chân / đuổi người xem cho agent Sản xuất; Du chỉnh bằng /nhac, /giong, /nhip, /chu. |
 | `src/learning.py` | **Bộ nhớ tự học** (bảng `learning_events` + `data/learned.yaml`): lỗi các cổng code bắt được (phân loại, Biên kịch và Sản xuất đọc "lỗi hay mắc 14 ngày" của chính mình), luật Du dạy qua Telegram, sở thích người xem (kiểu mở đầu / mảng / dạng video giữ chân tốt), kịch bản Du đã duyệt làm mẫu nhịp kể. Xem mục "Tự học" bên dưới. |
 | `deploy/` | Script cài VM + file systemd (lịch mỗi sáng, báo cáo Chủ nhật, bot chờ duyệt). |
 | `src/review.py` | **Bước Du duyệt + agent Đăng bài**: gửi video kèm nút ✅/❌ vào Telegram, chờ nút bấm, rồi đăng. |
@@ -108,6 +109,33 @@ python -m src.learning --backfill   # một lần khi bật: nạp lỗi đã l�
 
 Bộ nhớ hỏng (file lỗi, bảng thiếu) thì agent chạy như chưa học gì — không chặn dây chuyền. Báo cáo tuần
 có mục "🧠 Tự học" (tỷ lệ kịch bản đạt cổng tuần này so với tuần trước, lỗi hay gặp, luật Du đã dạy).
+
+### Học cách dựng (`src/style.py`, từ 19/11/2026)
+
+Mỗi video mới được gán một tổ hợp "núm vặn", mỗi núm 3 mức quanh tâm khung (bảng `video_styles` ghi mức
+được gán và giá trị thật đã dùng). Không đụng bộ nhận diện kênh (màu, font, logo) hay cổng Kiểm định nào.
+
+| Núm | Khung ban đầu | Giới hạn cứng | Áp dụng ở |
+|---|---|---|---|
+| Tốc độ đọc | ×1,00 / ×1,05 / ×1,10 | ×1,00–×1,12, video không ngắn hơn 45 giây | `assemble` (atempo) |
+| Nhạc nền | −3 / 0 / +3 dB | −9…+6 dB | `assemble` (trộn nhạc) |
+| Nhịp đổi cảnh | tối đa 3 / 3,5 / 4 giây mỗi hình | 2,5–5 giây | `produce` (agent Sản xuất, tách câu dài) |
+| Cỡ phụ đề | 80 / 88 / 96 px | 72–96 px | Remotion (`Captions.tsx`) |
+
+- **Chủ nhật** agent Phân tích so % thời lượng được xem giữa các mức; video nào dùng khác mức được gán
+  (giọng hôm đó chậm phải đọc nhanh hơn, kho nhạc trống, Remotion lùi về Manim) không tính cho núm đó.
+- **Lần gán sau** dùng Thompson sampling: mức tốt được chọn nhiều hơn, mức ít dữ liệu vẫn được thử.
+- **Tự phát triển:** mức bên cạnh thắng rõ (≥ 4 video, hơn ≥ 0,3 độ lệch chuẩn) thì khung dời một nấc về phía đó.
+- **Loại cảnh:** loại cảnh nào làm người xem rời đi nhanh / giữ chân tốt, cảnh mở đầu dạng nào giữ người xem
+  qua vài giây đầu → lời dặn agent Sản xuất. Lỗi Kiểm định cũng vào bộ nhớ (chữ tràn, hình lệch lời → lời
+  dặn; khung đen, âm lượng, Remotion lỗi → báo cáo tuần là "lỗi phía code").
+- **Du chỉnh qua Telegram:** `/giong nhanh|cham`, `/nhac to|nho`, `/nhip nhanh|cham`, `/chu to|nho` dời khung
+  một nấc (gõ có dấu cũng được) — việc tự dời khung không bao giờ đi ngược phía Du đã chê. `/kieu` xem đang
+  thử gì, `/kieu tat|bat` tạm dừng / thử tiếp. Tắt hẳn: `style.experiments: false` trong `config/channel.yaml`.
+
+```bash
+python -m src.style              # khung đang thử, mức nào đang dẫn, điều người xem cho thấy theo loại cảnh
+```
 
 Hai chế độ đăng, đổi ở `config/channel.yaml` → `publish.youtube.mode`:
 

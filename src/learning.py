@@ -42,6 +42,19 @@ def _safe(fn, default, what: str):
 # (khoá, mẫu nhận ra trong lời báo lỗi của các cổng, tên dễ đọc, cách sửa) — mẫu đầu tiên khớp là thắng.
 # Mẫu so trên lời báo lỗi ĐÃ BỎ phần trích câu trong “…” (câu bị trích có thể chứa chữ bất kỳ).
 KINDS = [
+    # Kiểm định (review gửi duyệt: "<tên phép kiểm>: <giá trị>") và Remotion lùi về Manim (assemble) — đứng
+    # ĐẦU vì nhận xét tự do của model nhìn ảnh có thể chứa chữ bất kỳ. Cách tránh rỗng = lỗi phía CODE:
+    # không đưa vào prompt agent nào, chỉ đếm trong báo cáo tuần để người sửa tay.
+    ("qc_chu_tran", r"^Hình khớp lời.*\[clipped\]", "chữ tràn/bị cắt ở mép khung (AI soát)",
+     "tiêu đề cảnh ngắn (≤ 7 từ), nhãn ngắn"),
+    ("qc_hinh_lech", r"^Hình khớp lời", "hình không khớp lời đọc (AI soát)",
+     "con số và hướng tăng/giảm trên hình phải đúng câu đọc của chính cảnh đó"),
+    ("qc_do_dai", r"^Độ dài:", "video ngoài khung độ dài", ""),
+    ("qc_khung_den", r"^Khung hình đen:", "có khung hình đen", ""),
+    ("qc_am_luong", r"^Âm lượng:", "âm lượng lệch chuẩn phát hành", ""),
+    ("qc_giay_phep", r"^Giấy phép", "chất liệu thiếu giấy phép", ""),
+    ("qc_giong_doc", r"^Lời đọc khớp", "giọng đọc lệch kịch bản (lặp/cụt)", ""),
+    ("render_loi", r"^Remotion lỗi", "engine Remotion lỗi, phải lùi về Manim", ""),
     # Kiểm chứng (main): "SAI: <khẳng định> -> <ghi chú>", "SAI (cảnh 3): …" — model nhận xét, không phân loại sâu
     ("kiem_chung", r"^SAI(:| \(cảnh)", "Kiểm chứng: câu trái nguồn", "đối chiếu từng câu với tóm tắt"),
     ("hook_vi_sao", r"không trả lời được nguyên nhân", "mở đầu bằng “Vì sao…?” với ý tưởng bảng số",
@@ -92,7 +105,8 @@ KINDS = [
 ]
 LESSON_DAYS = 14
 WRITER_STAGES = ("writer", "final")       # lỗi lúc viết + lỗi Kiểm chứng/chống bịa số -> Biên kịch học
-PRODUCER_STAGES = ("spec",)               # lỗi spec cảnh -> agent Sản xuất học
+PRODUCER_STAGES = ("spec", "qc", "render")  # lỗi spec cảnh, Kiểm định, render -> agent Sản xuất / báo cáo
+CODE_ONLY = {key for key, _, _, fix in KINDS if not fix}   # lỗi phía code: chỉ báo cáo, không vào prompt
 QUOTED = re.compile(r"“[^”]*”")
 
 
@@ -149,14 +163,17 @@ def backfill(con, now: datetime = None) -> int:
 
 
 def top_mistakes(con, days: int = LESSON_DAYS, n: int = 5, now: datetime = None,
-                 stages=WRITER_STAGES) -> list:
+                 stages=WRITER_STAGES, code_only: bool = True) -> list:
     """[(khoá, số lần, ví dụ gần nhất)] các lỗi cổng code bắt nhiều nhất trong `days` ngày ở các
-    khâu `stages` (None = mọi khâu)."""
+    khâu `stages` (None = mọi khâu). code_only=False: bỏ lỗi phía code (để đưa vào prompt)."""
     since = ((now or datetime.now(timezone.utc)) - timedelta(days=days)).isoformat(timespec="seconds")
     where, args = "source='gate' AND kind != 'khac' AND at >= ?", [since]
     if stages:
         where += f" AND stage IN ({','.join('?' * len(stages))})"
         args += list(stages)
+    if not code_only:
+        where += f" AND kind NOT IN ({','.join('?' * len(CODE_ONLY))})"
+        args += sorted(CODE_ONLY)
     rows = con.execute(f"SELECT kind, COUNT(*) AS c, MAX(id) AS last FROM learning_events WHERE {where}"
                        " GROUP BY kind ORDER BY c DESC, last DESC LIMIT ?", args + [n]).fetchall()
     out = []
@@ -172,7 +189,7 @@ def _label(kind: str) -> tuple:
 
 def mistakes_block(con, now: datetime = None, stages=WRITER_STAGES, who: str = "BIÊN KỊCH") -> str:
     """Lỗi hay mắc nhất của một agent, kèm cách tránh và ví dụ thật gần nhất — đưa vào prompt."""
-    rows = top_mistakes(con, now=now, stages=stages)
+    rows = top_mistakes(con, now=now, stages=stages, code_only=False)
     if not rows:
         return ""
     lines = [f"\nLỖI {who} HAY MẮC {LESSON_DAYS} NGÀY QUA (máy đã bắt — đừng lặp lại):"]
@@ -183,9 +200,11 @@ def mistakes_block(con, now: datetime = None, stages=WRITER_STAGES, who: str = "
 
 
 def producer_lessons(con) -> str:
-    """Bài học cho agent Sản xuất (dịch kịch bản thành cảnh): lỗi spec hay mắc."""
-    return _safe(lambda: mistakes_block(con, stages=PRODUCER_STAGES, who="SẢN XUẤT"), "",
-                 "bài học Sản xuất")
+    """Bài học cho agent Sản xuất (dịch kịch bản thành cảnh): lỗi spec / Kiểm định hay mắc + loại cảnh
+    nào người xem đã cho thấy giữ chân tốt hay đuổi người xem (src/style.py)."""
+    from . import style
+    return (_safe(lambda: mistakes_block(con, stages=PRODUCER_STAGES, who="SẢN XUẤT"), "", "bài học Sản xuất")
+            + _safe(style.production_block, "", "điều người xem cho thấy về loại cảnh"))
 
 
 # ------------------------------------------------------------------------------ 2. học từ Du
@@ -435,7 +454,8 @@ def weekly_lines(con, now: datetime = None) -> list:
         lines.append(f"  Kịch bản đạt cổng tuần này: {v1}/{t1}" + (f" (tuần trước {v0}/{t0})" if t0 else ""))
     for stages, who in ((WRITER_STAGES, "Biên kịch"), (PRODUCER_STAGES, "Sản xuất")):
         for kind, count, _ in top_mistakes(con, days=7, n=3, now=now, stages=stages):
-            lines.append(f"  Lỗi {who} hay gặp: {_label(kind)[0]} — {count} lần (đã đưa vào lời dặn)")
+            where = "lỗi phía code — cần sửa tay" if kind in CODE_ONLY else "đã đưa vào lời dặn"
+            lines.append(f"  Lỗi {who} hay gặp: {_label(kind)[0]} — {count} lần ({where})")
     du = dict(con.execute("SELECT kind, COUNT(*) FROM learning_events WHERE source='du' AND at >= ?"
                           " GROUP BY kind", (week,)).fetchall())
     if du:

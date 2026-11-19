@@ -225,6 +225,12 @@ class TestBuildStory(unittest.TestCase):
         st = web.build_story(spec, _timed(spec), "t4")["scenes"]
         self.assertEqual([s["style"] for s in st[1:]], [0, 1, 0])
 
+    def test_caption_size_of_the_style_experiment_reaches_remotion(self):
+        bars = {"template": "bar_chart", "seconds": 3, "voice": "Xếp hạng.",
+                "params": {"title": "Hạng", "items": [{"label": "Việt Nam", "value": 3}, {"label": "Lào", "value": 1}]}}
+        self.assertNotIn("captionSize", web.build_story([dict(bars)], _timed([bars]), "t6"))   # mặc định 80
+        self.assertEqual(web.build_story([dict(bars)], _timed([bars]), "t7", caption_size=88.0)["captionSize"], 88)
+
     def test_first_voiced_scene_is_the_hook_and_text_scenes_keep_the_chart(self):
         # 19/11/2026: không còn thẻ intro -> cảnh có lời đầu tiên là cảnh mở đầu; cảnh chữ SAU khi biểu
         # đồ chính đã vẽ thì giữ biểu đồ ở nửa dưới thay vì nền trống

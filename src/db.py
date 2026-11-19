@@ -85,6 +85,12 @@ CREATE TABLE IF NOT EXISTS learning_events (  -- bộ nhớ tự học (src/lear
     idea_id   INTEGER,
     script_id INTEGER
 );
+CREATE TABLE IF NOT EXISTS video_styles (   -- phong cách dựng từng video (src/style.py: thử nghiệm tự học)
+    script_id INTEGER PRIMARY KEY,
+    assigned  TEXT,       -- JSON: mức được gán cho từng núm (tốc độ đọc, nhạc, nhịp cảnh, cỡ phụ đề)
+    applied   TEXT,       -- JSON: giá trị THẬT đã dùng (khác mức gán thì video không tính cho núm đó)
+    at        TEXT
+);
 CREATE TABLE IF NOT EXISTS state (   -- ô nhớ nhỏ: vị trí đọc Telegram, v.v.
     key   TEXT PRIMARY KEY,
     value TEXT

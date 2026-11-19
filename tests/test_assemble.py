@@ -190,6 +190,15 @@ class TtsQuotaTest(TtsCase):
         self.assertNotIn("SECRET", " ".join(logs.output) + str(cm.exception))
 
 
+def isolate(case, root: Path) -> None:
+    """assemble.main gán phong cách dựng (src/style.py) vào DB: test phải dùng DB + learned.yaml tạm,
+    không thì ghi vào data/pipeline.db thật (trên VM là DB đang chạy)."""
+    from src import db
+    from src.analysis import learned
+    for target, attr, val in [(db, "DB_PATH", root / "t.db"), (learned, "LEARNED_PATH", root / "learned.yaml")]:
+        p = mock.patch.object(target, attr, val); p.start(); case.addCleanup(p.stop)
+
+
 class AssembleQuotaExitTest(unittest.TestCase):
     def test_quota_exhausted_exits_with_retry_later_code_and_keeps_cache(self):
         tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
@@ -210,6 +219,7 @@ class AssembleQuotaExitTest(unittest.TestCase):
             wav.write_bytes(b"x")
 
         engine = types.SimpleNamespace(concat=None, render_scene=None)   # khỏi cần cài manim
+        isolate(self, root)
         with mock.patch.object(assemble, "ROOT", root), \
                 mock.patch.dict("os.environ", {"TTS_BATCH_WORDS": "0"}), \
                 mock.patch.object(assemble, "RENDER", root / "data" / "render"), \
@@ -240,6 +250,7 @@ class AssembleQuotaExitTest(unittest.TestCase):
             raise tts.QuotaExhausted("hết quota")
 
         engine = types.SimpleNamespace(concat=None, render_scene=None)
+        isolate(self, root)
         patches = [mock.patch.object(assemble, "ROOT", root),
                    mock.patch.object(assemble, "RENDER", root / "data" / "render"),
                    mock.patch.dict(sys.modules, {"src.render.engine": engine}),

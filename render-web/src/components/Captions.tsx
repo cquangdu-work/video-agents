@@ -7,7 +7,8 @@ import { clamp01 } from "../lib/anim";
 const RING = [[4, 0], [-4, 0], [0, 4], [0, -4], [3, 3], [-3, 3], [3, -3], [-3, -3]]
   .map(([x, y]) => `${x}px ${y}px 0 rgba(6,10,20,0.95)`).join(", ") + ", 0 6px 24px rgba(0,0,0,0.6)";
 
-export const Captions: React.FC<{ words: Word[]; t: number; brand: Brand }> = ({ words, t, brand }) => {
+// size: cỡ chữ (px) — một "núm" đang thử nghiệm của src/style.py (72-96 px), mặc định 80 như trước 19/11.
+export const Captions: React.FC<{ words: Word[]; t: number; brand: Brand; size?: number }> = ({ words, t, brand, size = 80 }) => {
   if (!words.length) return null;
   const chunks = new Map<number, Word[]>();
   for (const w of words) chunks.set(w.c, [...(chunks.get(w.c) ?? []), w]);
@@ -24,7 +25,7 @@ export const Captions: React.FC<{ words: Word[]; t: number; brand: Brand }> = ({
   return (
     <div style={{
       position: "absolute", top: 1395, left: 60, right: 60, textAlign: "center",
-      fontSize: 80, fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.01em",
+      fontSize: size, fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.01em",
       opacity: enter, transform: `translateY(${(1 - enter) * 18}px)`,
     }}>
       {cur.map((w, i) => {

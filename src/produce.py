@@ -265,11 +265,15 @@ def main():
     idea = {"title": s["title"], "angle": s["angle"], "source_url": s["source_url"],
             "summary": s["summary"], "source_name": s["source_name"]}
     # TỰ HỌC (src/learning.py): lỗi spec (bịa số, cảnh đứng yên...) được ghi lại, và lần sau agent
-    # Sản xuất đọc "lỗi hay mắc" của chính nó trước khi dựng
-    from . import learning
+    # Sản xuất đọc "lỗi hay mắc" của chính nó + điều người xem đã cho thấy trước khi dựng
+    from . import learning, style
+    # Học cách dựng (src/style.py): nhịp đổi cảnh của video này là một mức đang thử nghiệm
+    st = style.assign(con, s["id"], cfg)
+    cfg = style.with_pacing(cfg, st)
     remember = lambda problems, stage: learning.record_problems(con, problems, stage, s["idea_id"], s["id"])
     spec = validate_spec(design_scenes(idea, scenes, cfg, log_problems=remember,
                                        lessons=learning.producer_lessons(con)), cfg)
+    style.record_applied(con, s["id"], pace=st.get("pace"))
 
     SPEC_DIR.mkdir(parents=True, exist_ok=True)
     spec_path = SPEC_DIR / f"script_{s['id']}.yaml"

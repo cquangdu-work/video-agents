@@ -58,7 +58,8 @@ const CornerLogo: React.FC<{ brand: StoryProps["brand"] }> = ({ brand }) => (
   </div>
 );
 
-export const Story: React.FC<StoryProps> = ({ brand, scenes, words, source, sfx, world, hideCaptions, hideLogo }) => {
+export const Story: React.FC<StoryProps> = ({ brand, scenes, words, source, sfx, world, hideCaptions, hideLogo,
+  captionSize }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
@@ -77,7 +78,7 @@ export const Story: React.FC<StoryProps> = ({ brand, scenes, words, source, sfx,
         </Sequence>
       ))}
       {!hideLogo && !scenes.some((sc) => sc.kind === "intro") && <CornerLogo brand={brand} />}
-      {!hideCaptions && <Captions words={words} t={t} brand={brand} />}
+      {!hideCaptions && <Captions words={words} t={t} brand={brand} size={captionSize} />}
       {src && current?.kind !== "clip" && (
         <div style={{ position: "absolute", bottom: 46, left: 40, right: 40, textAlign: "center", fontSize: 24,
           fontWeight: 500, color: brand.muted }}>Nguồn: {src}</div>

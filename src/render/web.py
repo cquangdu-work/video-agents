@@ -301,11 +301,12 @@ def _nice_ticks(y_max: float) -> list:
     return sorted(out)
 
 
-def build_story(spec: list, timed_words: list, script_id, render_clip=None) -> dict:
+def build_story(spec: list, timed_words: list, script_id, render_clip=None, caption_size=None) -> dict:
     """Spec đã có thời lượng thật + từ có mốc thời gian -> props cho Remotion.
 
     render_clip(scene, index) -> Path: dựng một cảnh bằng Manim (bản đồ, cuộc đua...) để lồng vào;
     không truyền thì cảnh chưa có bản Remotion sẽ báo lỗi (assemble lùi về Manim cả video).
+    caption_size: cỡ chữ phụ đề (px) của phong cách đang thử nghiệm (src/style.py); None = mặc định 80.
     Mỗi cảnh trong spec được gắn thêm "shown": các con số engine này có thể hiện (Kiểm định đọc)."""
     from .base import fmt_num
     from .templates import highlights, label_decimals
@@ -473,5 +474,8 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None) -> d
         sc["shown"] = world_numbers + extra_shown
 
     sources = [s["source"] for s in scenes if s.get("source")]
-    return {"brand": brand_props(), "duration": round(t, 3), "scenes": scenes, "words": words,
-            "source": max(set(sources), key=sources.count) if sources else "", "sfx": sfx, "world": world}
+    props = {"brand": brand_props(), "duration": round(t, 3), "scenes": scenes, "words": words,
+             "source": max(set(sources), key=sources.count) if sources else "", "sfx": sfx, "world": world}
+    if caption_size:
+        props["captionSize"] = int(round(float(caption_size)))
+    return props

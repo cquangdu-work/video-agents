@@ -122,6 +122,16 @@ def fit_tempo(voice_seconds: list, scene_counts: list, fixed: float, target: flo
     return math.ceil(hi * 1000) / 1000        # làm tròn LÊN để chắc chắn vừa
 
 
+def styled_tempo(fit: float, want, total, min_secs: float, max_tempo: float = MAX_TEMPO) -> float:
+    """Tốc độ đọc cuối cùng: mức vừa khung thời lượng (fit_tempo), hoặc mức của phong cách đang thử
+    nghiệm (src/style.py) nếu nó nhanh hơn — nhưng không để video ngắn hơn min_secs (khổ 45-60 giây).
+    total(t): thời lượng cả video khi đọc nhanh t lần."""
+    if not want or float(want) <= fit:
+        return fit
+    want = min(float(want), max_tempo)
+    return want if total(want) >= min_secs else fit
+
+
 def speed_up(src: Path, dst: Path, tempo: float) -> Path:
     """Đọc nhanh lên `tempo` lần mà giữ nguyên cao độ giọng (bộ lọc atempo của ffmpeg)."""
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-filter:a", f"atempo={tempo:.3f}",
@@ -249,6 +259,23 @@ def main():
     # Intro do produce quyết lúc sinh spec (render.intro). KHÔNG bỏ intro của spec cũ ở đây: giọng
     # trong bộ đệm gắn với SỐ THỨ TỰ cảnh (v_01.wav...) -> bỏ một cảnh là câu sau dùng nhầm giọng câu trước.
 
+    # Học cách dựng (src/style.py): video thật dùng phong cách đã gán (produce gán khi sinh spec; spec cũ
+    # hơn thì gán ở đây, không thử nhịp cảnh). CHẠY THỬ (--out) không gán mới: dựng lại Shorts cũ cho
+    # video dài hằng tuần phải giống hệt bản đã đăng.
+    from . import db as pipeline_db, style
+
+    def with_db(fn):
+        """Kết nối DB ngắn cho từng việc — không giữ khoá SQLite suốt mấy phút render."""
+        con_ = pipeline_db.connect()
+        try:
+            return fn(con_)
+        finally:
+            con_.close()
+    if args.out:
+        st = with_db(lambda c: (style.get(c, args.script_id) or {}).get("assigned") or {})
+    else:
+        st = with_db(lambda c: style.assign(c, args.script_id, cfg, legacy_spec=True))
+
     from . import assets_db
     from .audio.batch import batch_words, synth_batch, tokens
     from .audio.tts import QuotaExhausted, synth, wav_duration
@@ -319,12 +346,14 @@ def main():
     # lên chút ít (fit_tempo). File giọng gốc giữ nguyên trong cache; bản đọc nhanh là fit_XX.wav
     fixed =sum(float(spec[i].get("seconds") or 0) for r in runs if not _voice(spec[r[0]]) for i in r)
     raw_secs = [wav_duration(wavs[r[0]]) for r in voiced]
-    tempo = fit_tempo(raw_secs, [len(r) for r in voiced], fixed,
-                      float(cfg["channel"].get("video_seconds_max", 90)))
+    total_at = lambda t: fixed + sum(run_seconds(d, len(r), t) for d, r in zip(raw_secs, voiced))
+    fit = fit_tempo(raw_secs, [len(r) for r in voiced], fixed,
+                    float(cfg["channel"].get("video_seconds_max", 90)))
+    tempo = styled_tempo(fit, st.get("tempo"), total_at, float(cfg["channel"].get("video_seconds_min", 0)))
     if tempo > 1.0:
-        planned = fixed + sum(run_seconds(d, len(r)) for d, r in zip(raw_secs, voiced))
-        log.info("Video sẽ dài %.1fs — đọc nhanh lên %.3f lần để vừa %ss", planned, tempo,
-                 cfg["channel"].get("video_seconds_max", 90))
+        log.info("Video sẽ dài %.1fs — đọc nhanh lên %.3f lần (%s)", total_at(1.0), tempo,
+                 "phong cách đang thử nghiệm" if tempo != fit
+                 else f"để vừa {cfg['channel'].get('video_seconds_max', 90)}s")
         for r in voiced:
             wavs[r[0]] = speed_up(wavs[r[0]], audio_dir / f"fit_{r[0]:02d}.wav", tempo)
 
@@ -349,6 +378,8 @@ def main():
     con = assets_db.init_assets()
     narration = " ".join(_voice(spec[g[0]]) for g in todo)
     track = music.select(con, narration, f"script_{args.script_id}", cfg)
+    if track and st.get("music") is not None:
+        track["gain_db"] = round(float(track["gain_db"]) + float(st["music"]), 1)   # mức nhạc đang thử
     if track:
         log.info("Nhạc nền: %s (nhóm %s, lời đọc nghiêng về %s, chỉnh %+.1f dB)", track["name"],
                  track["mood"], track["mood_wanted"], track["gain_db"])
@@ -364,7 +395,8 @@ def main():
             timed = narration_words(full_wav, spec, todo, audio_dir)
             from .render import web
             props = web.build_story(spec, timed, args.script_id,
-                                    render_clip=lambda sc, i: render_scene(sc, i))
+                                    render_clip=lambda sc, i: render_scene(sc, i),
+                                    caption_size=st.get("captions"))
             final_spec_path.write_text(yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
             raw = web.render(props, RENDER / f"web_{args.script_id}.mp4",
                              concurrency=int(rcfg.get("web_concurrency", 3)))
@@ -376,6 +408,11 @@ def main():
         except Exception as exc:
             log.error("Engine Remotion lỗi (%s: %s) — lùi về Manim", type(exc).__name__, exc)
             engine = "manim"
+            if not args.out:                 # lỗi phía code: báo cáo tuần đếm để người sửa tay
+                from . import learning
+                with_db(lambda c: learning.record(c, "gate", "render_loi",
+                                                  f"Remotion lỗi: {type(exc).__name__}: {exc}", "render",
+                                                  script_id=args.script_id))
 
     if engine != "web":
         # ---- 2. Render hình theo thời lượng giọng
@@ -419,6 +456,11 @@ def main():
     meta["music_credit"] = track["credit"] if track else None   # mô tả video ghi công bài nhạc
     meta["engine"] = engine
     meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    # Giá trị THẬT đã dùng cho thử nghiệm phong cách (khác mức được gán -> video không tính cho núm đó:
+    # giọng hôm nay chậm phải đọc nhanh hơn mức gán, kho nhạc trống, Remotion lùi về Manim...)
+    with_db(lambda c: style.record_applied(c, args.script_id, tempo=round(tempo, 3),
+                                           music=st.get("music") if track else None,
+                                           captions=st.get("captions") if engine == "web" else None))
     if track:
         assets_db.record_use(con, track["name"], final.name)
     for name in used or []:

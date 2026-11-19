@@ -123,4 +123,5 @@ export type StoryProps = {
   world?: World | null;
   hideCaptions?: boolean; // video dài (Wide): phụ đề vẽ to ở cột phải thay vì trong khung dọc
   hideLogo?: boolean; // video dài (Wide) đã có nhận diện riêng ở cột phải
+  captionSize?: number; // cỡ chữ phụ đề (px) của phong cách đang thử nghiệm (src/style.py); thiếu = 80
 };

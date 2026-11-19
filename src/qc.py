@@ -223,7 +223,8 @@ def check_visuals_match(video: Path, spec: list, duration: float) -> dict:
                 log.warning("Vision %.0fs nghi có lỗi: %s — hỏi lại lần 2", ts, verdict.get("note", ""))
                 again = ask(img, voice)
                 if real_issue(again, voice, allowed):
-                    issues.append(f"{ts:.0f}s: {str(again.get('note', ''))[:80]}")
+                    # [loại lỗi] để bộ nhớ tự học (src/learning.py) phân biệt chữ tràn với hình sai số
+                    issues.append(f"{ts:.0f}s [{again.get('kind', '?')}]: {str(again.get('note', ''))[:80]}")
             elif not verdict.get("ok", True):
                 log.info("Vision %.0fs: bỏ qua nhận xét không thuộc loại lỗi nào (%s)",
                          ts, verdict.get("note", ""))

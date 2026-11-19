@@ -12,6 +12,8 @@ Việc nó làm:
   4. Nhờ LLM rút vài bài học từ bảng số liệu, đưa cho agent Biên kịch đọc.
   5. Cập nhật "sở thích người xem" (src/learning.py): kiểu mở đầu / mảng / dạng video nào giữ chân
      tốt -> daily ưu tiên, máy chọn hook cộng điểm; báo cáo thêm mục "Tự học".
+  6. Học cách dựng (src/style.py): so % xem giữa các mức thử nghiệm (tốc độ đọc, nhạc, nhịp cảnh, cỡ phụ
+     đề), tự dời khung khi một mức thắng rõ, học loại cảnh nào giữ chân; báo cáo mục "Học cách dựng".
 
 Thành thật về thống kê: vài video đầu KHÔNG đủ để kết luận gì. Vì vậy có ngưỡng tối
 thiểu, mỗi tuần chỉ nhích trọng số 0.1, và báo cáo luôn ghi dựa trên bao nhiêu video.
@@ -281,6 +283,8 @@ def build_rows(con, videos: list, now: datetime) -> list:
         timeline = scene_timeline(v["script_id"])
         row["retention"] = retention_findings(retention, timeline)
         row["losses"] = scene_losses(retention, timeline)
+        # dạng cảnh MỞ ĐẦU (bỏ thẻ intro của video đời cũ) — học cách dựng (src/style.py)
+        row["opening"] = next((tpl for _, _, tpl, _ in timeline if tpl != "intro"), None)
         rows.append(row)
     return rows
 
@@ -392,7 +396,8 @@ def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
         except Exception as exc:
             log.warning("LLM rút bài học lỗi: %s", exc)
 
-    from .. import learning
+    from .. import learning, style
+    style_notes = []
     if not dry_run:
         try:
             # TỰ HỌC từ người xem: kiểu mở đầu / mảng / dạng video nào giữ chân tốt -> learned.yaml,
@@ -400,12 +405,19 @@ def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
             learning.update_preferences(con, rows, now)
         except Exception as exc:
             log.warning("Cập nhật sở thích người xem lỗi: %s", exc)
+        try:
+            # HỌC CÁCH DỰNG: so % xem giữa các mức thử nghiệm, tự dời khung, học theo loại cảnh
+            style_notes = style.update(con, rows, now)
+        except Exception as exc:
+            log.warning("Cập nhật học cách dựng lỗi: %s", exc)
 
     report = format_report(rows, len(videos), source, weight_notes, insights)
-    try:
-        report = "\n".join([report] + learning.weekly_lines(con, now))
-    except Exception as exc:
-        log.warning("Tóm tắt tự học lỗi: %s", exc)
+    for part, what in ((lambda: learning.weekly_lines(con, now), "tự học"),
+                       (lambda: style.weekly_lines(con, now, style_notes), "học cách dựng")):
+        try:
+            report = "\n".join([report] + part())
+        except Exception as exc:
+            log.warning("Tóm tắt %s lỗi: %s", what, exc)
     if dry_run:
         print(report)
         return report
