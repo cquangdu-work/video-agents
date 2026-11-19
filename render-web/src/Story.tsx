@@ -16,10 +16,16 @@ import { Scene, StoryProps } from "./types";
 // Font của bộ nhận diện (Be Vietnam Pro, giấy phép OFL) — tải lúc render, đủ dấu tiếng Việt.
 const { fontFamily } = loadFont("normal", { weights: ["500", "600", "700", "800"], subsets: ["vietnamese", "latin"] });
 
+// Cảnh MỞ ĐẦU chạy hiệu ứng "đi trước" chừng này giây: khung hình đầu tiên đã có hình (cột, số) thay vì
+// đang mọc từ 0 — người xem quyết định lướt đi trong 1-2 giây đầu (bản thử 19/11: khung 0 chỉ có tiêu đề).
+// Cộng cả vào dur để hiệu ứng thoát cuối cảnh vẫn đúng lúc.
+const HOOK_HEAD = 0.6;
+
 const SceneView: React.FC<{ scene: Scene; brand: StoryProps["brand"] }> = ({ scene, brand }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const tl = frame / fps, dur = scene.end - scene.start;
+  const head = scene.hook ? HOOK_HEAD : 0;
+  const tl = frame / fps + head, dur = scene.end - scene.start + head;
   const common = { brand, tl, dur };
   switch (scene.kind) {
     case "intro": return <Intro {...common} />;
