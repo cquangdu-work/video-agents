@@ -10,6 +10,7 @@ tay rồi render lại bằng: python -m src.render.engine data/specs/script_2.y
 import argparse
 import json
 import logging
+import re
 import sys
 from pathlib import Path
 
@@ -170,6 +171,35 @@ def intro_enabled(cfg: dict) -> bool:
     return bool((cfg.get("render") or {}).get("intro", False))
 
 
+_SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
+
+
+def split_long_scenes(spec: list, cfg: dict) -> list:
+    """Cảnh ĐỨNG MỘT MÌNH gánh nhiều câu quá giới hạn -> tách từng câu: câu đầu giữ hình gốc, các câu
+    sau thành cảnh chữ (đè lên biểu đồ chính nếu đã vẽ — render-web compact). Ca thật #59 (19/11):
+    model lite gộp 4 câu (48 từ) vào một biểu đồ đường đứng yên 17,6 giây; cổng "cảnh đứng yên quá
+    lâu" trả lại 3 lần mà model không sửa. Bản đồ / cuộc đua được gánh dài hơn (crew.WORDS_ALLOWANCE)
+    và cảnh nằm trong cụm cùng lời (cố ý chia một câu cho nhiều hình) thì để nguyên."""
+    from .crew import WORDS_ALLOWANCE, _voice_runs, words_per_second
+    pacing = cfg.get("pacing", {"scene_seconds_min": 2, "scene_seconds_max": 4})
+    max_words = int(2 * pacing["scene_seconds_max"] * words_per_second(cfg))
+    out = []
+    for voice, idx in _voice_runs(spec):
+        sc = spec[idx[0]]
+        parts = [p for p in _SENTENCE_END.split(voice) if p.strip()]
+        limit = max_words * WORDS_ALLOWANCE.get(sc.get("template"), 1.0)
+        if len(idx) > 1 or len(parts) < 2 or len(voice.split()) <= limit:
+            out += [spec[i] for i in idx]
+            continue
+        log.warning("Cảnh %s gánh %d câu (%d từ) — tách mỗi câu một cảnh", sc.get("template"), len(parts),
+                    len(voice.split()))
+        out.append(dict(sc, voice=parts[0]))
+        src = (sc.get("params") or {}).get("source", "")
+        out += [{"template": "statement", "seconds": 3, "voice": p, "params": {"text": p, "source": src}}
+                for p in parts[1:]]
+    return out
+
+
 def validate_spec(raw: list, cfg: dict) -> list:
     """Kiểm từng cảnh, kẹp thời lượng về nhịp 2-4s, thêm intro đầu video nếu config bật.
     Tự sửa những thứ LLM hay quên: số lẻ thiếu 'decimals' (38.4 hiện thành 38),
@@ -179,6 +209,7 @@ def validate_spec(raw: list, cfg: dict) -> list:
     lo, hi = pacing["scene_seconds_min"], pacing["scene_seconds_max"]
     ok = [{"template": "intro", "seconds": 1.2, "params": {}}] if intro_enabled(cfg) else []
     statements = 0
+    raw = split_long_scenes([sc for sc in raw if isinstance(sc, dict)], cfg)
     for i, sc in enumerate(raw):
         if sc.get("template") == "intro":                # intro do code quyết, không do model
             continue

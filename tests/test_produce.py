@@ -28,6 +28,24 @@ class ValidateSpecTest(unittest.TestCase):
         self.assertFalse(produce.intro_enabled({"render": {"intro": False}}))
         self.assertTrue(produce.intro_enabled(CFG))
 
+    def test_a_lone_scene_carrying_many_sentences_is_split(self):
+        # Ca thật #59 (19/11): 4 câu, 48 từ trên một biểu đồ đường đứng yên 17,6 giây
+        four = ("Đỉnh cao của Việt Nam là năm 1994 với 75,2 phần trăm. Năm 2024 tỷ lệ này chỉ còn 42,3 phần"
+                " trăm. Mức đáy của Việt Nam ghi nhận năm 2019 là 30,4 phần trăm. Sau đó tỷ lệ này đã tăng lên"
+                " 42,3 phần trăm năm 2024.")
+        chart = {"template": "line_chart", "seconds": 4, "voice": four,
+                 "params": {"title": "Điện tái tạo", "xs": [1990, 2024], "ys": [70.0, 42.3], "source": "OWID"}}
+        cfg = {"pacing": {"scene_seconds_min": 2, "scene_seconds_max": 4, "words_per_second": 3.4}}
+        spec = produce.validate_spec([dict(chart)], cfg)
+        self.assertEqual([s["template"] for s in spec], ["line_chart", "statement", "statement", "statement"])
+        self.assertEqual(spec[0]["voice"], "Đỉnh cao của Việt Nam là năm 1994 với 75,2 phần trăm.")
+        self.assertEqual(spec[1]["params"]["text"], spec[1]["voice"])
+        self.assertEqual(" ".join(s["voice"] for s in spec), four)         # không mất chữ nào
+        short = dict(chart, voice="Đỉnh năm 1994 là 75,2%. Nay còn 42,3%.")
+        self.assertEqual(len(produce.validate_spec([short], cfg)), 1)       # ngắn: để nguyên
+        shared = [dict(chart), dict(chart)]                                   # cụm cùng lời: cố ý chia hình
+        self.assertEqual(len(produce.validate_spec(shared, cfg)), 2)
+
     def test_intro_is_added_and_broken_scenes_are_dropped(self):
         spec = produce.validate_spec([
             st("a"), {"template": "pie_3d", "params": {}},
