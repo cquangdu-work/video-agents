@@ -216,9 +216,11 @@ def status_text(cfg: dict = None) -> str:
     """Tình trạng kênh lần đo gần nhất (Telegram /kenh)."""
     data = _data()
     snap = data.get("latest") or {}
+    if not snap:
+        return ("📈 Chưa có lần đo cả kênh nào — agent Tăng trưởng đo trong lượt Phân tích mỗi Chủ nhật"
+                " (21:00 giờ Hàn), kết quả nằm trong báo cáo tuần.")
     lines = report_lines(snap, [], [], cfg or {})[1:]
-    if snap:
-        lines.insert(0, f"Lần đo gần nhất: {snap['date']} (agent Phân tích đo mỗi Chủ nhật)")
+    lines.insert(0, f"📈 Lần đo gần nhất: {snap['date']} (agent Tăng trưởng đo mỗi Chủ nhật)")
     return "\n".join(lines)
 
 

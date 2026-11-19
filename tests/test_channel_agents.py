@@ -278,7 +278,13 @@ class TelegramTest(Case):
         self.assertIn("đã có trong hàng đợi", self.say("/chủ đề Thất Nghiệp"))
         self.assertIn("chưa có nguồn số liệu cho “lương”", self.say("/chude lương"))
         self.assertIn("Gửi kèm chủ đề", self.say("/chude"))
-        self.assertIn("chưa đo được cả kênh", self.say("/kenh"))
+        self.assertIn("Chưa có lần đo cả kênh nào", self.say("/kenh"))
+        learned.save_learned({"growth": {"latest": {"date": "2026-11-22", "subscribers": 3, "views_28d": 868,
+                                                    "shorts_views_28d": 868, "long_hours_28d": 0.0, "net_subs_28d": 1,
+                                                    "shorts_views_90d": 868, "long_hours_365d": 0.0}}})
+        text = self.say("/kenh")
+        self.assertIn("Lần đo gần nhất: 2026-11-22", text)
+        self.assertIn("Người đăng ký: 3 (+1 trong 28 ngày)", text)
         self.assertEqual([r[0] for r in self.con.execute("SELECT origin FROM topic_requests")], ["du", "du"])
 
 
