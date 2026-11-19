@@ -59,9 +59,13 @@ class MapIdeaTest(unittest.TestCase):
         # bảng mọi nước để tô bản đồ + chuỗi theo năm để vẽ biểu đồ đường, đúng khuôn World Bank
         self.assertEqual(datatable.parse_world_table(s)["year"], 2023)
         self.assertEqual([x["label"] for x in datatable.parse_series(s)], ["Việt Nam", "Thế giới"])
-        # chủ đề thế giới: chỉ neo Việt Nam, không có dòng so găng hai nước ("gấp", "tương đương")
+        # chủ đề thế giới: chỉ neo Việt Nam, không có dòng so găng HAI NƯỚC Việt–Hàn ("tương đương",
+        # "Hàn Quốc gấp…"); tỷ số so với nơi cao nhất / thấp nhất / trung vị thế giới thì có (19/11)
         self.assertNotIn("tương đương", s)
-        self.assertNotIn(" lần ", s.split(datatable.WORLD_TABLE)[0])
+        head = s.split(datatable.WORLD_TABLE)[0]
+        self.assertNotIn("lần Hàn Quốc", head)
+        self.assertNotIn("Hàn Quốc gấp", head)
+        self.assertIn("Thái Lan (cao nhất) gấp 2,06 lần Việt Nam", head)
 
     def test_world_total_is_not_drawn_next_to_countries(self):
         # CO2 cả năm của "Thế giới" là TỔNG, lớn hơn mọi nước: vẽ chung trục thì các nước dẹp lép

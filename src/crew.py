@@ -456,6 +456,8 @@ Yêu cầu CỨNG về cấu trúc (video đổi cảnh mỗi 2-4 giây):
   억 = 100 triệu; million = triệu, billion = tỷ. Quy đổi sai một bậc là tai nạn.
 - TUYỆT ĐỐI không tự chế con số để giật gân ("99% người...", "9 trên 10 người...") — hook
   cũng chỉ được dùng con số có trong bài nguồn. Máy sẽ đối chiếu TỪNG con số với nguồn.
+- KHÔNG TỰ TÍNH số mới (hiệu số "tăng thêm 168", tỷ số "gấp 86 lần", số năm "sau 35 năm"): tóm tắt
+  đã tính sẵn nhiều dòng "gấp N lần", "Sau N năm" — chỉ dùng đúng những con số đã có.
 - Mọi con số trong lời đọc phải ghi rõ lấy từ nguồn nào.
 {HOOK_GUIDE}{recent_block}""" + data_story
     if feedback:

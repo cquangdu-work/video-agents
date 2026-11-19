@@ -18,8 +18,8 @@ from datetime import date
 import requests
 
 from .datatable import (WB_SOURCE, beats_lines, lower_first, parse_series,  # noqa: F401
-                        parse_vn_number, race_lines, race_years, ranking, relatable_line,
-                        spoken_scale, story_beats, trim_leading, vn_number)
+                        parse_vn_number, race_lines, race_years, ranking, ratio_phrase,
+                        relatable_line, spoken_scale, story_beats, trim_leading, vn_number)
 
 log = logging.getLogger(__name__)
 
@@ -305,8 +305,15 @@ def build_world_item(ind: dict, year: int, table: dict, names: dict, focus: list
     if relate:
         lines.append(relate)
     hist_named = {names[c]: history[c] for c in focus if c in names and len(history.get(c) or []) >= 2}
-    lines += beats_lines(story_beats(hist_named, [names[c] for c in focus if names.get(c) in hist_named],
-                                     unit))
+    beats = story_beats(hist_named, [names[c] for c in focus if names.get(c) in hist_named], unit)
+    if a in table:                         # so với nơi cao nhất / thấp nhất / trung vị — tính sẵn
+        top, bottom, med = order[0], order[-1], statistics.median(table.values())
+        beats += [r for r in (
+            ratio_phrase(f"{names[top]} (cao nhất)", table[top], names[a], table[a]) if top != a else "",
+            ratio_phrase(names[a], table[a], f"{names[bottom]} (thấp nhất)", table[bottom]) if bottom != a else "",
+            ratio_phrase(names[a], table[a], "trung vị thế giới", med, 1.2),
+            ratio_phrase("Trung vị thế giới", med, names[a], table[a], 1.2)) if r]
+    lines += beats_lines(beats)
     # chuỗi theo năm -> biểu đồ đường (các nước focus, rồi chuỗi thêm như "Thế giới")
     series = [(names[c], history.get(c) or []) for c in focus] + list((extra_series or {}).items())
     for label, s in series:

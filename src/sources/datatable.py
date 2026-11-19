@@ -285,7 +285,28 @@ def story_beats(named: dict, focus: list, unit: str, step: int = 5) -> list:
     if crossed:
         m, y = crossed[-1] if up else crossed[0]
         out.append(f"{a} {'vượt' if up else 'xuống dưới'} mốc {_fmt(m, unit)} vào năm {y}")
+    # Cả chặng, kèm số năm và tỷ số TÍNH SẴN: model mạnh hơn hay tự tính (515 - 347 = 168, "gấp 12 lần"
+    # khi thật là 12,6) — đúng hay sai thì cổng chống bịa số cũng không kiểm được (19/11/2026)
+    y0, y1 = s[0][0], s[-1][0]
+    if y1 > y0 and first != last:
+        bit = (f"Sau {y1 - y0} năm ({y0}–{y1}): {a} từ {_fmt(first, unit)} {'lên' if up else 'xuống'}"
+               f" {_fmt(last, unit)}")
+        if pct:
+            bit += (f", {'tăng' if up else 'giảm'} "
+                    f"{vn_number(abs(round(shown_value(last) - shown_value(first), 6)))} điểm phần trăm")
+        elif first > 0 and last > 0:
+            r = last / first
+            bit += (f", gấp {vn_number(r)} lần" if r >= 1.5
+                    else f", còn {vn_number(100 * r)}% mức năm {y0}" if r <= 0.67 else "")
+        out.append(bit)
     return out
+
+
+def ratio_phrase(hi_name: str, hi: float, lo_name: str, lo: float, min_ratio: float = 1.5) -> str:
+    """"A gấp N lần B" tính sẵn (hai giá trị dương, tỷ số đủ lớn để đáng nói) — hoặc ""."""
+    if hi > 0 and lo > 0 and hi / lo >= min_ratio:
+        return f"{hi_name} gấp {vn_number(hi / lo)} lần {lo_name}"
+    return ""
 
 
 def trim_leading(*series, share: float = 0.001) -> tuple:
@@ -340,6 +361,13 @@ def race_lines(series: dict, years: list, focus: list, unit: str = None) -> list
             verb = "leo" if ranks[k + 1] < ranks[k] else "tụt"
             beats.append(f"Giai đoạn {n} {verb} hạng mạnh nhất: {years[k]}–{years[k + 1]}, từ hạng"
                          f" {ranks[k]} {'lên' if verb == 'leo' else 'xuống'} hạng {ranks[k + 1]}")
+    for n in focus:                       # bên dẫn đầu gấp bao nhiêu lần — tính sẵn cho năm đầu, năm cuối
+        if n not in series:
+            continue
+        bits = [f"năm {y}: {r}" for y, order in ((y0, first), (y1, last))
+                for r in [ratio_phrase(f"{order[0]} (dẫn đầu)", at[order[0]][y], n, at[n][y])] if r and order[0] != n]
+        if bits:
+            beats.append("; ".join(bits))
     lines += beats_lines(beats)
     for n in sorted(series, key=lambda n: -at[n][y1]):
         lines.append(f"{n} theo năm: " + "; ".join(f"{y}: {vn_number(at[n][y])}" for y in years) + ".")

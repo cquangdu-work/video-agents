@@ -106,8 +106,11 @@ class BuildItemTest(unittest.TestCase):
         script = {"scenes": [
             {"voice": "Năm 2025, GDP đầu người Việt Nam đạt 5.066 USD, Hàn Quốc 36.227 USD."},
             {"voice": "Tức là gấp 7,15 lần, và Việt Nam hôm nay bằng Hàn Quốc năm 1988."},
-            {"voice": "Khoảng cách là 37 năm; sau 40 năm Việt Nam tăng gấp 21,2 lần."}]}
-        self.assertEqual(crew.unsourced_numbers(script, idea, item["summary"]), ["40"])   # 40 là tự suy
+            {"voice": "Khoảng cách là 37 năm; sau 40 năm Việt Nam tăng gấp 21,2 lần."},
+            {"voice": "Hơn 45 năm, Việt Nam chưa bao giờ giảm."}]}
+        # "40 năm" giờ do code tính sẵn ("Sau 40 năm (1985–2025)"), còn 45 vẫn là tự suy -> bị bắt
+        self.assertIn("Sau 40 năm (1985–2025)", item["summary"])
+        self.assertEqual(crew.unsourced_numbers(script, idea, item["summary"]), ["45"])
 
 
 class FetchTest(unittest.TestCase):

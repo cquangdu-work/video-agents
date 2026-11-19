@@ -137,13 +137,23 @@ def strip_fillers(script: dict) -> int:
 
 
 def has_data_number(text: str) -> bool:
-    """Câu có con số SỐ LIỆU: số lẻ/có dấu phân cách, số lớn hơn 10, hoặc tỷ lệ %. Số đếm nhỏ không
-    kèm % ("cứ 3 người thì 2", "hạng 9") là cách nói dễ hình dung, không phải đọc bảng (19/11/2026:
-    câu ý nghĩa kiểu đó từng bị tính là "câu có số" nên kịch bản nào cũng thành chuỗi số dài)."""
-    for m in re.finditer(r"\d[\d.,]*\d|\d", str(text or "")):
+    """Câu nêu GIÁ TRỊ THÔ của bảng số (thứ làm kịch bản thành "đọc bảng").
+
+    Không tính (19/11/2026, đo trên bản nháp thật — câu diễn giải từng bị đếm là "câu có số" nên
+    kịch bản nào cũng thành chuỗi số dài): mốc năm (đã có luật số mốc năm riêng); số trong phép so
+    sánh/xếp hạng ("gấp 5,22 lần", "đứng thứ 56 trên 231", "hạng 9"); cách nói "cứ 3 người thì 2";
+    số đếm nhỏ (đến 10) không kèm %."""
+    t = str(text or "")
+    for m in re.finditer(r"\d[\d.,]*\d|\d", t):
         raw = m.group(0)
-        if not raw.isdigit() or int(raw) > 10 or str(text)[m.end():m.end() + 1] == "%":
-            return True
+        before, after = t[max(0, m.start() - 12):m.start()].lower(), t[m.end():m.end() + 8].lower()
+        if re.fullmatch(r"(?:19|20)\d{2}", raw):
+            continue
+        if re.search(r"(gấp|thứ|hạng|vị trí|top|cứ|trên)\s*$", before) or re.match(r"\s*lần\b", after):
+            continue
+        if raw.isdigit() and int(raw) <= 10 and not after.startswith("%"):
+            continue
+        return True
     return False
 
 
