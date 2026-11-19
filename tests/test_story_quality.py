@@ -135,6 +135,12 @@ class OpeningTest(unittest.TestCase):
         self.assertTrue(story.has_data_number("Chỉ 3% dân số."))
         s = self.script("Năm 2025 đạt 68,6%.", "Cứ 3 người thì 2.", "Hàn Quốc 56,8%.", "Cứ 10 người thì gần 6.")
         self.assertEqual(story.longest_number_run(s), 1)
+        # nhắc lại con số đã nói để diễn giải: không phải đọc bảng (bản nháp thật 19/11)
+        s = self.script("Năm 2025 đạt 68,6%.", "Mức 68,6% tức là cứ 3 phụ nữ thì có 2 người.",
+                        "Hàn Quốc 56,8%.", "Con số 56,8% tức là cứ 10 phụ nữ thì gần 6.")
+        self.assertEqual(story.longest_number_run(s), 1)
+        s = self.script("Đạt 68,6%.", "Hàn Quốc 56,8%.", "Năm 1990 là 74,7%.")
+        self.assertEqual(story.longest_number_run(s), 3)
 
     def test_ending_must_come_back_to_the_hook(self):
         good = self.script("Việt Nam năm 2025 gấp 5,06 lần Hàn Quốc.", "a 1", "b 2",
@@ -191,6 +197,16 @@ class QcBoundsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RoundingTest(unittest.TestCase):
+    def test_correct_rounding_of_a_source_number_is_not_fabrication(self):
+        src = "năm 1990: Mỹ (dẫn đầu) gấp 86,4 lần Việt Nam; Việt Nam tăng gấp 12,6 lần."
+        say = lambda v: {"scenes": [{"voice": v}]}
+        self.assertEqual(crew.unsourced_numbers(say("Mỹ gấp 86 lần Việt Nam."), {}, src), [])
+        self.assertEqual(crew.unsourced_numbers(say("Việt Nam tăng gấp 12 lần."), {}, src), ["12"])  # 12,6 -> 13
+        world = "Việt Nam 25,6.\n" + dt.WORLD_TABLE + " 2024 (máy): Pakistan 53,8; Qatar 75,5."
+        self.assertEqual(crew.unsourced_numbers(say("Có 54 nước như vậy."), {}, world), ["54"])
 
 
 class WriterModelTest(unittest.TestCase):

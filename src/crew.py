@@ -65,6 +65,10 @@ def _run_single_task(role: str, goal: str, description: str, expected_output: st
                 if not _is_transient(exc):
                     raise
                 last_exc = exc
+                if "per day" in str(exc) or "PerDay" in str(exc):
+                    # hết hạn mức NGÀY (vd gemini-3-flash miễn phí chỉ 20 lượt/ngày, đo 19/11): chờ vô ích
+                    log.warning("%s hết hạn mức ngày — chuyển model dự phòng", model)
+                    break
                 wait = 20 * (attempt + 1)
                 log.warning("%s quá tải (lần %d) — chờ %ds rồi thử lại", model, attempt + 1, wait)
                 time.sleep(wait)
@@ -230,9 +234,15 @@ def unsourced_numbers(script: dict, idea: dict, source_text: str) -> list:
     - bỏ qua số 0 ở đuôi để chịu được quy đổi đơn vị ("540.000" khớp "54만", "5 triệu");
     - số đếm thông thường từ 0 đến 10 (không kèm %) được miễn ("3 lý do", "2 nhóm").
     """
-    from .utils import digit_set
-    have = digit_set(f"{source_text} {idea.get('title', '')} {idea.get('summary', '')}")
+    from .utils import digit_set, number_values
+    pool = f"{source_text} {idea.get('title', '')} {idea.get('summary', '')}"
+    have = digit_set(pool)
     loose = {h.rstrip("0") for h in have}
+    # Làm tròn ĐÚNG về số nguyên của một số có trong nguồn cũng được ("gấp 86,4 lần" đọc thành "gấp 86
+    # lần"); làm tròn sai thì vẫn bị bắt (12,6 thành "12 lần"). Không lấy từ bảng mọi nước (200 số lẻ
+    # phủ gần hết số nguyên hai chữ số — cổng sẽ lỏng)
+    from .sources.datatable import WORLD_TABLE
+    have |= {str(round(v)) for v in number_values(pool.split(WORLD_TABLE)[0]) if v != int(v)}
     voice = " ".join(str(s.get("voice", "")) for s in script.get("scenes", []))
     out = []
     for m in re.finditer(r"\d[\d.,]*\d|\d", voice):

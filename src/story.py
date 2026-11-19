@@ -136,14 +136,14 @@ def strip_fillers(script: dict) -> int:
     return n
 
 
-def has_data_number(text: str) -> bool:
-    """Câu nêu GIÁ TRỊ THÔ của bảng số (thứ làm kịch bản thành "đọc bảng").
+def data_numbers(text: str) -> set:
+    """Các GIÁ TRỊ THÔ của bảng số trong một câu (chuỗi chữ số đã bỏ dấu phân cách).
 
     Không tính (19/11/2026, đo trên bản nháp thật — câu diễn giải từng bị đếm là "câu có số" nên
     kịch bản nào cũng thành chuỗi số dài): mốc năm (đã có luật số mốc năm riêng); số trong phép so
     sánh/xếp hạng ("gấp 5,22 lần", "đứng thứ 56 trên 231", "hạng 9"); cách nói "cứ 3 người thì 2";
     số đếm nhỏ (đến 10) không kèm %."""
-    t = str(text or "")
+    t, out = str(text or ""), set()
     for m in re.finditer(r"\d[\d.,]*\d|\d", t):
         raw = m.group(0)
         before, after = t[max(0, m.start() - 12):m.start()].lower(), t[m.end():m.end() + 8].lower()
@@ -153,15 +153,23 @@ def has_data_number(text: str) -> bool:
             continue
         if raw.isdigit() and int(raw) <= 10 and not after.startswith("%"):
             continue
-        return True
-    return False
+        out.add(re.sub(r"[.,]", "", raw))
+    return out
+
+
+def has_data_number(text: str) -> bool:
+    return bool(data_numbers(text))
 
 
 def longest_number_run(script: dict) -> int:
-    """Số câu có chứa con số SỐ LIỆU đứng liền nhau dài nhất (đọc số liên tiếp = đọc bảng)."""
+    """Số câu nêu con số MỚI đứng liền nhau dài nhất — đọc số mới liên tiếp mới là đọc bảng. Câu
+    nhắc lại con số đã nói để diễn giải ("Mức 68,6% tức là cứ 3 phụ nữ thì 2 người") không tính."""
     best = run = 0
+    seen = set()
     for s in script.get("scenes") or []:
-        run = run + 1 if has_data_number(str(s.get("voice") or "")) else 0
+        nums = data_numbers(str(s.get("voice") or ""))
+        run = run + 1 if nums - seen else 0
+        seen |= nums
         best = max(best, run)
     return best
 
