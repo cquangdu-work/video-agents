@@ -5,7 +5,7 @@ data-driven short video every day (Vietnamese, YouTube Shorts + TikTok), plus a 
 long-form compilation. A human approves every video from Telegram (~5 min/day); everything else
 is automated. It runs on an Oracle Cloud free-tier ARM64 VM using only free-tier APIs.
 
-**Numbers:** ~14k lines of Python/TypeScript (+6k lines of tests) · 413 unit tests ·
+**Numbers:** ~14k lines of Python/TypeScript (+6k lines of tests) · 418 unit tests ·
 ~120 commits · one 45–60 s video in ~15 min end-to-end on a 4-core ARM VM · $0/month model cost.
 
 ## Pipeline
@@ -93,9 +93,11 @@ data table, and turns topic requests into either a link to an existing video or 
 next idea run. A growth agent measures the whole channel (subscribers, Shorts vs long-form via the
 Analytics `creatorContentType` dimension, YPP progress), blends subscribers-per-1,000-views into the
 viewer-preference score, and detects breakout videos (views/day ≥ 2.5× the channel median) to boost that
-topic family and format for ten days and queue the same indicator in another format. Neither posts
-anything publicly: reading comments uses an API key because the stored OAuth token deliberately lacks
-the `force-ssl` scope that would also allow posting.
+topic family and format for ten days and queue the same indicator in another format. Nothing is posted
+without the owner: each actionable comment arrives as its own Telegram message with ✅ Post / ❌ Skip
+buttons, replying to that message turns the owner's text into a new draft that still needs ✅, and a
+post happens exactly once (atomic `new → posting` transition). The `force-ssl` scope this needs was
+added only after the owner agreed — YouTube has no narrower scope for posting comments.
 
 **Designed around free-tier limits, measured in production.** Gemini TTS allows ~15 calls/day,
 so the whole script is voiced in one call and split per sentence with forced alignment

@@ -142,14 +142,16 @@ python -m src.style              # khung đang thử, mức nào đang dẫn, đ
 
 ### Agent Cộng đồng và agent Tăng trưởng (từ 19/11/2026)
 
-Hai agent nhìn **cả kênh** thay vì từng video. Không đăng gì công khai: bình luận do Du tự trả lời (token
-không có quyền `youtube.force-ssl`; thêm quyền đó phải hỏi Du).
+Hai agent nhìn **cả kênh** thay vì từng video. Không tự đăng gì: câu trả lời bình luận chỉ được đăng khi Du
+bấm **✅ Đăng trả lời** ở tin Telegram của bình luận đó (Du đồng ý 19/11/2026; cần quyền `youtube.force-ssl`
+— cấp một lần bằng `/capquyen`, tích hết các quyền). Muốn đăng câu khác: trả lời tin đó bằng câu của Du,
+bot hỏi lại rồi mới đăng.
 
 - **Cộng đồng** (`python -m src.community`, daily gọi mỗi sáng nếu `community.enabled`; `--dry-run` để
   xem thử): bình luận mới → phân loại (câu hỏi / đề xuất chủ đề / báo sai số liệu / góp ý / khen / khác) →
-  bản tin Telegram. Báo sai số liệu lên đầu. Câu hỏi kèm nháp trả lời chỉ dùng số trong bảng của video
-  (code soát từng con số). Đề xuất chủ đề → link video đã có, hoặc xếp hàng ưu tiên, hoặc danh sách
-  mong muốn nếu kênh chưa có nguồn số liệu. Đọc bằng `YOUTUBE_API_KEY`.
+  tin tóm tắt + mỗi bình luận cần xử lý một tin có nút ✅ / ❌ (báo sai số liệu gửi trước). Câu hỏi kèm nháp
+  trả lời chỉ dùng số trong bảng của video (code soát từng con số). Đề xuất chủ đề → link video đã có,
+  hoặc xếp hàng ưu tiên, hoặc danh sách mong muốn nếu kênh chưa có nguồn số liệu. Đọc bằng `YOUTUBE_API_KEY`.
 - **Tăng trưởng** (`python -m src.growth` xem lần đo gần nhất; chạy trong lượt Phân tích Chủ nhật):
   người đăng ký, lượt xem / giờ xem tách Shorts và video dài, tiến độ YPP (`growth.ypp`), mục tiêu mỗi tuần.
   Học video nào kéo người đăng ký (gộp vào điểm sở thích người xem). Video đột biến (lượt xem mỗi ngày
