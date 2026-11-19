@@ -117,6 +117,9 @@ class OpeningTest(unittest.TestCase):
                         "Năm 2025, con số của Việt Nam là 4,1% GDP.")
         hard, _ = story.opening_problems(s)
         self.assertTrue(any("định nghĩa" in p for p in hard))
+        value = self.script("Vốn FDI so với GDP của Việt Nam năm 2025 gấp 5,06 lần Hàn Quốc.",
+                            "Năm 2025, chỉ số này là 4,1% GDP ở Việt Nam.", "Hàn Quốc chỉ 0,8%.")
+        self.assertEqual(story.opening_problems(value), ([], []))      # nêu giá trị, không phải định nghĩa
 
     def test_going_back_to_a_year_the_hook_names_is_proof_not_filler(self):
         s = self.script("Năm 2018 Việt Nam xếp chót bảng nhưng năm 2025 đã vượt Mỹ và Anh.",

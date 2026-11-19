@@ -173,7 +173,8 @@ def opening_problems(script: dict) -> tuple:
     hook_years = set(_YEARS.findall(voices[0]))
     hard, soft = [], []
     for k, v in enumerate(voices[1:], 2):
-        if DEFINITION.search(v):
+        # câu định nghĩa thật không có con số; "Năm 2025, chỉ số này là 68,6%" là nêu giá trị — được
+        if DEFINITION.search(v) and not re.search(r"\d", v):
             hard.append(f"cảnh {k} định nghĩa chỉ số (“{v[:60]}”) — định nghĩa để trên chữ của biểu"
                         " đồ, lời đọc 15 giây đầu phải chứng minh hook bằng con số")
         elif BACKTRACK.search(v) and not (set(_YEARS.findall(v)) & hook_years):

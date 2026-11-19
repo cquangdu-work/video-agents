@@ -159,11 +159,17 @@ Mỗi ngày (tính theo giờ Hàn) đúng một lượt `daily` được phép 
 
 ### Cổng chất lượng trước khi tốn công dựng
 
-- **Kịch bản phải đủ dài và đủ số:** `daily.min_script_words` (165 từ ≈ 48 giây) và
+- **Kịch bản phải đủ dài và đủ số:** `daily.min_script_words` (125 từ ≈ 37 giây) và
   `daily.min_script_numbers` (4 con số). Ngay khâu viết, kịch bản hụt chuẩn bị giữ ở `draft`
   và dây chuyền viết ý tưởng kế tiếp (`daily.extra_script_tries`).
 - **Độ dài kịch bản tính từ tốc độ đọc đo thật:** `pacing.words_per_second` = 3,4 →
-  60–90 giây cần 204–306 từ. Đổi giọng (`TTS_VOICE`) thì đo lại con số này.
+  45–60 giây (Du chốt 19/11/2026) cần 153–204 từ. Đổi giọng (`TTS_VOICE`) thì đo lại con số này.
+  Giọng hôm đó chậm thì `assemble.fit_tempo` đọc nhanh lên tối đa 1,12 lần cho vừa 60 giây.
+- **15 giây đầu và câu kết (từ số liệu giữ chân người xem):** `story.opening_problems` chặn câu
+  định nghĩa và hai câu liền nhau không có số ở cảnh 2–5; `story.ending_problem` đòi câu kết quay
+  lại con số của câu mở đầu. Bảng số có sẵn "Điểm nhấn" và "Cách nói dễ hình dung" do code tính
+  (`datatable.story_beats`, `relatable_line`) để model có chuyện thật mà kể thay vì tự chế câu
+  giải thích; câu nêu nguyên nhân mà bảng số không nói bị chặn (`claims.cause_claims`).
 - **Mọi con số trong lời đọc phải có trong bài nguồn:** agent Kiểm chứng (LLM) chỉ soát các
   "claims" Biên kịch tự khai, nên `crew.unsourced_numbers()` đối chiếu bằng code từng con số
   với toàn văn bài nguồn. Thiếu căn cứ thì trả về viết lại một lần; vẫn còn thì kịch bản ở

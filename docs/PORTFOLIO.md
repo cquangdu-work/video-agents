@@ -6,7 +6,7 @@ long-form compilation. A human approves every video from Telegram (~5 min/day); 
 is automated. It runs on an Oracle Cloud free-tier ARM64 VM using only free-tier APIs.
 
 **Numbers:** ~11.6k lines of Python/TypeScript (+4.5k lines of tests) · 320 unit tests ·
-~105 commits · one 60–90 s video in ~15 min end-to-end on a 4-core ARM VM · $0/month model cost.
+~110 commits · one 45–60 s video in ~15 min end-to-end on a 4-core ARM VM · $0/month model cost.
 
 ## Pipeline
 
