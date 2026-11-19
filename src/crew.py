@@ -203,7 +203,8 @@ def word_budget(cfg: dict) -> tuple:
     return int(ch["video_seconds_min"] * wps), int(ch["video_seconds_max"] * wps)
 
 
-WORDS_OVER = 1.12        # dư tối đa so với trần từ (= assemble.MAX_TEMPO: đọc nhanh lên bù được)
+WORDS_OVER = 1.05        # dư tối đa so với trần từ. Đo 19/11: 223 từ, giọng chậm (3,2 từ/giây), đã đọc
+                         # nhanh tối đa 1,12 lần vẫn ra 66,7 giây; 214 từ thì tệ nhất ~65 giây, thường ~60
 
 
 def scene_budget(cfg: dict) -> tuple:
@@ -344,8 +345,8 @@ def script_problems(script: dict, cfg: dict, recent_openers=(), include_soft: bo
     problems = []
     if not SCRIPT_MIN_SCENES <= n <= SCRIPT_MAX_SCENES:
         problems.append(f"{n} cảnh (cần {SCRIPT_MIN_SCENES}-{SCRIPT_MAX_SCENES})")
-    # Cho lệch quanh ngân sách từ: hụt 10% vẫn đủ dài; dư tới 12% thì assemble.fit_tempo đọc nhanh
-    # lên bù được (tối đa MAX_TEMPO = 1,12) mà video vẫn vừa trần thời lượng
+    # Cho lệch quanh ngân sách từ: hụt 10% vẫn đủ dài; dư tới 5% thì assemble.fit_tempo đọc nhanh lên bù
+    # (giọng chậm + khoảng lặng cuối câu ăn mất phần lớn biên đọc nhanh — xem WORDS_OVER)
     if not 0.9 * lo_words <= words <= WORDS_OVER * hi_words:
         problems.append(f"{words} từ (cần {lo_words}-{hi_words})")
     if numbers < SCRIPT_MIN_NUMBERS:
