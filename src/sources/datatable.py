@@ -261,18 +261,21 @@ def story_beats(named: dict, focus: list, unit: str, step: int = 5) -> list:
             out.append(f"Đáy của {n}: năm {s[low][0]} ({_fmt(ys[low], unit)}), rồi tăng lên"
                        f" {_fmt(ys[-1], unit)} năm {s[-1][0]}")
     s = named[a]
-    best = None
-    for y, v in s:
-        if y + step in da:
-            d = da[y + step] - v
-            if best is None or abs(d) > abs(best[2]):
-                best = (y, v, d)
-    if best and len(s) >= 3 and best[2] != 0 and s[-1][0] - s[0][0] >= 2 * step:
-        y, v, d = best
-        out.append(f"Giai đoạn {a} thay đổi nhanh nhất: {y}–{y + step}, từ {_fmt(v, unit)}"
-                   f" {'lên' if d > 0 else 'xuống'} {_fmt(v + d, unit)}")
     first, last = s[0][1], s[-1][1]
     up = last > first
+    # Giai đoạn `step` năm đổi nhanh nhất THEO CHIỀU CHÍNH của chuỗi: tỷ lệ % đo bằng điểm phần trăm,
+    # số khác đo bằng TỶ SỐ (GDP tăng theo cấp số nhân: đo mức tăng tuyệt đối thì giai đoạn cuối luôn
+    # "nhanh nhất" — vô vị, và Kiểm chứng 19/11 bắt đúng: model đọc thành "tăng trưởng nhanh nhất")
+    windows = [(y, v, da[y + step]) for y, v in s if y + step in da]
+    if not pct:
+        windows = [w for w in windows if w[1] > 0 and w[2] > 0]
+    speed = (lambda w: w[2] - w[1]) if pct else (lambda w: w[2] / w[1])
+    windows = [w for w in windows if (speed(w) > (0 if pct else 1)) == up and speed(w) != (0 if pct else 1)]
+    if windows and len(s) >= 3 and s[-1][0] - s[0][0] >= 2 * step:
+        y, v, w = (max if up else min)(windows, key=speed)
+        times = f" (gấp {vn_number(w / v)} lần)" if not pct and up and w / v >= 1.5 else ""
+        out.append(f"Giai đoạn {a} {'tăng' if up else 'giảm'} nhanh nhất: {y}–{y + step}, từ {_fmt(v, unit)}"
+                   f" {'lên' if up else 'xuống'} {_fmt(w, unit)}{times}")
     crossed = []
     for m in _milestones(min(first, last), max(first, last), pct):
         for (y0, v0), (y1, v1) in zip(s, s[1:]):

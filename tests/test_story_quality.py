@@ -49,7 +49,8 @@ class BeatsTest(unittest.TestCase):
         b = self.beats()
         self.assertIn("Năm 2005: Việt Nam vượt Hàn Quốc (Việt Nam 9 kWh, Hàn Quốc 8 kWh)", b)
         self.assertIn("Khoảng cách: năm 1990 Hàn Quốc gấp 5 lần Việt Nam; năm 2025 Việt Nam gấp 1,3 lần Hàn Quốc", b)
-        self.assertIn("Giai đoạn Việt Nam thay đổi nhanh nhất: 2000–2005, từ 4 kWh lên 9 kWh", b)
+        # nhanh nhất theo TỶ SỐ (2000-2005 gấp 2,25 lần), không theo mức tăng tuyệt đối
+        self.assertIn("Giai đoạn Việt Nam tăng nhanh nhất: 2000–2005, từ 4 kWh lên 9 kWh (gấp 2,25 lần)", b)
         self.assertIn("Việt Nam vượt mốc 10 kWh vào năm 2010", b)
         self.assertFalse(any(x.startswith("Đỉnh của Việt Nam") for x in b))      # 2015 -> 2025 vẫn cao hơn
 

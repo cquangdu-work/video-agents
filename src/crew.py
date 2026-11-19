@@ -409,18 +409,23 @@ Yêu cầu CỨNG về cấu trúc (video đổi cảnh mỗi 2-4 giây):
   khi trả lời: vượt ngân sách từ là bị trả lại.
 - Đây là KỂ CHUYỆN NGẮN, không phải đọc bảng số. Số liệu thật của kênh: người xem bỏ đi nhiều nhất
   trong 15 GIÂY ĐẦU, đúng ở câu định nghĩa ("Chỉ số này đo lường…"), câu đệm chung chung ("Chiếc
-  điện thoại trong tay bạn là…") và câu lùi về năm đầu bảng ("Nhìn lại năm 1960…"). Dàn bài:
-  1. HOOK (cảnh 1) — xem luật hook bên dưới.
-  2. CHỨNG MINH NGAY (cảnh 2-4): con số chứng minh hook, nói thẳng. CẤM ở đây: câu định nghĩa chỉ
-     số, câu đệm chung chung, câu lùi về quá khứ chỉ để kể "điểm xuất phát". Không để hai câu liền
-     nhau không có con số (máy kiểm).
-  3. 2-3 NHỊP, mỗi nhịp 2-3 cảnh, XEN KẼ: câu có MỘT con số đắt -> câu nói con số đó NGHĨA LÀ GÌ
-     (KHÔNG thêm số liệu mới; ưu tiên mục "Cách nói dễ hình dung" như "cứ 3 người thì 2", hoặc so với
-     thứ quen thuộc có trong nguồn) -> câu có con số kế tiếp. Không để quá 3 câu có số liệu đứng liền
-     nhau (máy kiểm) — kịch bản câu nào cũng một con số là ĐỌC BẢNG, người xem bỏ đi.
-  4. NGÃ RẼ (1-2 cảnh): điều ngược với điều người ta vẫn nghĩ (phải có trong nguồn).
-  5. KẾT (1 cảnh): quay lại ĐÚNG con số hoặc đối tượng của hook với góc nhìn mới, để người xem muốn
-     xem lại từ đầu (máy kiểm). Không kêu gọi like/đăng ký/bình luận.
+  điện thoại trong tay bạn là…") và câu lùi về năm đầu bảng ("Nhìn lại năm 1960…"); còn kịch bản
+  câu nào cũng một con số là ĐỌC BẢNG. Viết ĐÚNG THEO KHUÔN CẢNH sau (mỗi dòng một cảnh, giữ đúng
+  vai; thêm 1-3 cặp SỐ+NGHĨA trước NGÃ RẼ để đủ {lo_scenes}-{hi_scenes} cảnh):
+  1. HOOK — xem luật hook bên dưới.
+  2. SỐ — con số chứng minh hook, nói thẳng (biểu đồ hiện cùng lúc).
+  3. NGHĨA — KHÔNG thêm số liệu mới: con số ở cảnh 2 nghĩa là gì — dùng "Cách nói dễ hình dung"
+     nếu tóm tắt có ("tức là cứ 3 người thì 2…"), hoặc so với thứ quen thuộc CÓ TRONG NGUỒN, hoặc hệ
+     quả trực tiếp của con số. Không nêu nguyên nhân, không định nghĩa chỉ số, không câu đệm.
+  4. SỐ — điểm nhấn thứ nhất.
+  5. NGHĨA — như cảnh 3, cho con số ở cảnh 4.
+  6. SỐ — điểm nhấn thứ hai.
+  7. NGHĨA.
+  8. NGÃ RẼ — điều ngược với điều người ta vẫn nghĩ (phải có trong nguồn), có con số.
+  9. NGHĨA.
+  10. SỐ — con số khép lại câu chuyện.
+  11. KẾT — nhắc lại ĐÚNG con số hoặc đối tượng của hook với góc nhìn mới, để người xem muốn xem lại
+      từ đầu (máy kiểm). Không kêu gọi like/đăng ký/bình luận.
 - KHÔNG nêu nguyên nhân hay bối cảnh lịch sử (chính sách, cải cách, mở cửa, sự kiện…) mà nguồn
   không nói rõ — đó là bịa, máy sẽ chặn.
 - VĂN NÓI: câu ngắn, tự nhiên như kể cho bạn nghe — NHƯNG mọi con số vẫn viết bằng CHỮ SỐ
