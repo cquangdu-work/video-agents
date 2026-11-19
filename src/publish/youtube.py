@@ -397,8 +397,9 @@ def analytics_retention(video_id: str, start: str, end: str, token: str) -> list
 
 
 def comment_threads(video_id: str, token: str = None, api_key: str = None, page_token: str = None) -> dict:
-    """Một trang bình luận gốc của một video, MỚI NHẤT trước (agent Cộng đồng). Chỉ ĐỌC: token hiện có
-    (youtube.readonly) hoặc API key là đủ; đăng trả lời cần quyền youtube.force-ssl — chưa xin."""
+    """Một trang bình luận gốc của một video, MỚI NHẤT trước (agent Cộng đồng). Chỉ ĐỌC, bằng API key:
+    token OAuth hiện có (youtube.readonly) KHÔNG đủ — commentThreads đòi youtube.force-ssl (đo 19/11/2026:
+    403 insufficientPermissions), quyền đó còn cho đăng/xoá bình luận nên chưa xin."""
     params = {"part": "snippet", "videoId": video_id, "maxResults": 100, "order": "time",
               "textFormat": "plainText"}
     if page_token:

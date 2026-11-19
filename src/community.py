@@ -56,7 +56,11 @@ def fetch_new(con, videos: list, token: str = None, api_key: str = None, fetch=N
     for v in videos:
         page = None
         for _ in range(5):                                    # tối đa 500 bình luận mỗi video mỗi lượt
-            data = fetch(v["youtube_id"], token=token, api_key=api_key, page_token=page)
+            try:
+                data = fetch(v["youtube_id"], token=token, api_key=api_key, page_token=page)
+            except Exception as exc:          # video còn riêng tư / bị gỡ: bỏ qua video đó, không hỏng cả lượt
+                log.info("Không đọc được bình luận video #%s: %s", v["id"], str(exc)[:120])
+                break
             stop = False
             for item in data.get("items") or []:
                 if con.execute("SELECT 1 FROM comments WHERE id = ?", (item["id"],)).fetchone():
@@ -194,18 +198,15 @@ def run(cfg: dict, con, dry_run: bool = False, fetch=None, llm=None, send=None) 
     """Một lượt: đọc -> phân loại -> nháp trả lời / xếp hàng chủ đề -> lưu -> gửi bản tin. Trả về
     danh sách bình luận mới đã xử lý."""
     from . import learning, topics
-    from .publish import youtube
-    token, api_key = None, os.getenv("YOUTUBE_API_KEY")
-    if fetch is None:
-        try:
-            token = youtube.access_token()
-        except Exception as exc:
-            log.info("Không dùng được token YouTube (%s) — đọc bình luận bằng API key", exc)
-        if not token and not api_key:
-            log.warning("Thiếu cả token YouTube lẫn YOUTUBE_API_KEY — bỏ qua agent Cộng đồng")
-            return []
+    # Đọc bằng API key: bình luận công khai. Token OAuth hiện có (youtube.readonly) KHÔNG đọc được bình
+    # luận — commentThreads đòi youtube.force-ssl (đo 19/11: 403 insufficientPermissions), mà quyền đó
+    # cũng cho đăng/xoá bình luận nên không xin khi Du chưa đồng ý.
+    api_key = os.getenv("YOUTUBE_API_KEY")
+    if fetch is None and not api_key:
+        log.warning("Thiếu YOUTUBE_API_KEY — agent Cộng đồng cần nó để đọc bình luận công khai")
+        return []
     videos = recent_videos(con, limit=int((cfg.get("community") or {}).get("max_videos", 30)))
-    new = fetch_new(con, videos, token, api_key, fetch)[:MAX_NEW]
+    new = fetch_new(con, videos, None, api_key, fetch)[:MAX_NEW]
     if not new:
         log.info("Không có bình luận mới.")
         return []

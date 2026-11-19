@@ -173,6 +173,21 @@ class CommunityTest(Case):
         got = community.fetch_new(self.con, [{"id": 1, "youtube_id": "vid1aaaaaaa", "title": "t"}], fetch=self.fetch)
         self.assertEqual([c["id"] for c in got], ["c5", "c4"])
 
+    def test_one_unreadable_video_does_not_sink_the_run(self):
+        def fetch(video_id, **kw):
+            if video_id == "private0000":
+                raise RuntimeError("403 forbidden")
+            return self.fetch(video_id, **kw)
+        videos = [{"id": 9, "youtube_id": "private0000", "title": "x"}, {"id": 1, "youtube_id": "vid1aaaaaaa", "title": "t"}]
+        self.assertEqual(len(community.fetch_new(self.con, videos, fetch=fetch)), 5)
+
+    def test_without_an_api_key_the_agent_skips_quietly(self):
+        with mock.patch.dict(os.environ, {"YOUTUBE_API_KEY": ""}):
+            self.assertEqual(community.run(CFG, self.con, llm=self.llm, send=self.fail), [])
+
+    def fail(self, *a, **k):
+        raise AssertionError("không được gửi gì")
+
 
 class GrowthTest(Case):
     def rows(self, views):
