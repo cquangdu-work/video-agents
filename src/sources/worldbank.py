@@ -87,8 +87,26 @@ def catch_up_year(latest_a: float, series_b: list):
     return (year, value) if abs(value - latest_a) <= 0.05 * abs(latest_a) else None
 
 
-def change_phrase(first: float, last: float) -> str:
-    """Mô tả thay đổi từ số đầu tới số cuối bằng lời: 'tăng gấp 21,2 lần' / 'giảm 69,8%'."""
+def shown(v: float) -> float:
+    """Giá trị đúng như được ĐỌC lên (đã làm tròn bằng vn_number) — phép trừ hai tỷ lệ phải ra
+    đúng hiệu của hai số người xem nghe thấy (74,7 - 68,6 = 6,1, không phải 6,13)."""
+    return parse_vn_number(vn_number(v))
+
+
+def change_phrase(first: float, last: float, unit: str = "") -> str:
+    """Mô tả thay đổi từ số đầu tới số cuối bằng lời: 'tăng gấp 21,2 lần' / 'giảm 69,8%'.
+
+    Chỉ số là TỶ LỆ % (unit bắt đầu bằng "%") thì nói bằng ĐIỂM PHẦN TRĂM: 74,7% -> 68,6% là
+    "giảm 6,1 điểm phần trăm". Nói "giảm 8,28%" (thay đổi tương đối của một tỷ lệ) là đúng toán
+    nhưng người xem hiểu thành 74,7% - 8,28% — ca thật kịch bản #46 (19/11/2026)."""
+    if unit.startswith("%"):
+        gap = round(shown(last) - shown(first), 6)
+        if gap == 0:
+            return "giữ nguyên"
+        phrase = f"{'tăng' if gap > 0 else 'giảm'} {vn_number(abs(gap))} điểm phần trăm"
+        if first > 0 and last / first >= 2:
+            phrase += f" (gấp {vn_number(last / first)} lần)"
+        return phrase
     if first <= 0 or last < 0:
         return ""
     ratio = last / first
@@ -97,6 +115,18 @@ def change_phrase(first: float, last: float) -> str:
     if ratio >= 1:
         return f"tăng {vn_number((ratio - 1) * 100)}%"
     return f"giảm {vn_number((1 - ratio) * 100)}%"
+
+
+def latest_gap_line(name_a: str, va: float, name_b: str, vb: float, unit: str) -> str:
+    """Dòng so hai nước ở số mới nhất. Tỷ lệ % chênh ít (dưới 1,5 lần) thì nói hiệu bằng điểm
+    phần trăm ("hơn 11,8 điểm phần trăm") — "gấp 1,21 lần" của hai tỷ lệ nghe gượng và dễ hiểu sai."""
+    if not va or not vb or min(va, vb) <= 0:
+        return ""
+    (hi, v_hi), (lo, v_lo) = sorted(((name_a, va), (name_b, vb)), key=lambda p: -p[1])
+    if unit.startswith("%") and v_hi / v_lo < 1.5:
+        gap = round(shown(v_hi) - shown(v_lo), 6)
+        return f"Số mới nhất: {hi} hơn {lo} {vn_number(gap)} điểm phần trăm." if gap else ""
+    return f"Số mới nhất: {hi} gấp {vn_number(v_hi / v_lo)} lần {lo}."
 
 
 def build_item(ind: dict, countries: list, series: dict):
@@ -118,12 +148,12 @@ def build_item(ind: dict, countries: list, series: dict):
         f"{name_b}: năm {yb0} là {val(vb0)}; năm {yb1} là {val(vb1)}.",
     ]
     for name, (y0, v0), (y1, v1) in ((name_a, sa[0], sa[-1]), (name_b, sb[0], sb[-1])):
-        phrase = change_phrase(v0, v1)
+        phrase = change_phrase(v0, v1, unit)
         if phrase:
             lines.append(f"Từ {y0} đến {y1}, {name} {phrase}.")
-    if va1 and vb1 and min(va1, vb1) > 0:
-        hi, lo = (name_b, name_a) if vb1 >= va1 else (name_a, name_b)
-        lines.append(f"Số mới nhất: {hi} gấp {vn_number(max(va1, vb1) / min(va1, vb1))} lần {lo}.")
+    gap_line = latest_gap_line(name_a, va1, name_b, vb1, unit)
+    if gap_line:
+        lines.append(gap_line)
     match = catch_up_year(va1, sb)
     if match:
         lines.append(f"{name_a} năm {ya1} ({val(va1)}) tương đương {name_b} năm {match[0]}"
@@ -254,7 +284,6 @@ def build_world_item(ind: dict, year: int, table: dict, names: dict, focus: list
             lines.append(f"Năm {year}: {names[hi]} gấp {vn_number(table[hi] / table[lo])} lần {names[lo]}.")
         else:                    # hiệu của hai tỷ lệ % là "điểm phần trăm", không phải %
             # trừ trên số ĐÃ LÀM TRÒN như được đọc lên (83,6 - 74,7 = 8,9, không phải 8,89)
-            shown = lambda v: parse_vn_number(vn_number(v))
             gap = round(shown(table[hi]) - shown(table[lo]), 6)
             gap_text = (f"{vn_number(gap)} điểm phần trăm" if unit.startswith("%") else val(gap))
             lines.append(f"Năm {year}: {names[hi]} hơn {names[lo]} {gap_text}.")

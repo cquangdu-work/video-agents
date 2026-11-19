@@ -102,13 +102,16 @@ def hook_score(text: str, recent_openers=()) -> float:
 def pick_hook(script: dict, recent_openers=(), is_sourced=lambda text: True) -> str:
     """Chọn câu mở đầu mạnh nhất trong các phương án "hooks" và cảnh 1 hiện có; phương án nào
     mạnh hơn hẳn cảnh 1 thì thay vào lời đọc của cảnh 1 (giữ hình của cảnh 1).
-    is_sourced(text): mọi con số trong câu đều có trong nguồn — phương án bịa số không được chọn.
-    Trả về câu mở đầu cuối cùng."""
+    is_sourced(text): câu đúng với nguồn (mọi con số có trong nguồn, câu so sánh khớp bảng số) —
+    phương án sai không được chọn. Cảnh 1 hiện có mà sai thì phương án đúng nào cũng thay được nó,
+    kể cả điểm thấp hơn (ca thật #46: hook so mốc năm SAI nằm sẵn ở cảnh 1, hai phương án đúng
+    không "mạnh hơn hẳn" nên không thay được). Trả về câu mở đầu cuối cùng."""
     scenes = script.get("scenes") or []
     if not scenes:
         return ""
     current = str(scenes[0].get("voice") or "")
-    best, best_score = current, hook_score(current, recent_openers)
+    best, best_score = current, (hook_score(current, recent_openers) if is_sourced(current)
+                                 else float("-inf"))
     for h in script.get("hooks") or []:
         h = " ".join(str(h or "").split())
         if not h or h == current or not is_sourced(h):

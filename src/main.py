@@ -186,25 +186,33 @@ def source_text_for(idea: dict, fetch) -> str:
 def _script_one(crew, idea: dict, source_text: str, cfg: dict, recent_hooks: list = None) -> tuple:
     """Biên kịch -> Kiểm chứng (sai số liệu thì viết lại 1 lần) -> cổng chuẩn.
     Trả về (kịch bản, hồ sơ kiểm chứng, 'verified' | 'draft')."""
+    from . import claims
     script = crew.write_script(idea, cfg, source_text=source_text, recent_hooks=recent_hooks)
     fc = crew.fact_check(script, idea, source_text, cfg)
-    # Kiểm chứng bằng LLM chỉ soát các "claims" được khai; code tự soát TỪNG con số trong
-    # lời đọc xem có trong bài nguồn không (bắt kiểu hook "99% người..." tự chế)
+    # Hai cổng CODE đứng sau agent Kiểm chứng (LLM): từng con số trong lời đọc phải có trong nguồn
+    # (bắt kiểu hook "99% người..." tự chế), từng câu so sánh phải khớp bảng số (bắt kiểu "Hàn Quốc
+    # 2025 mới đạt mức Việt Nam có từ 1990" — sai mà mọi con số đều có trong nguồn, ca thật #46)
     unsourced = crew.unsourced_numbers(script, idea, source_text)
-    if not fc.get("pass") or unsourced:
+    wrong_cmp = claims.script_comparison_problems(script, idea.get("summary"))
+    if not fc.get("pass") or unsourced or wrong_cmp:
         feedback = "\n".join(
             [f"- SAI: {v.get('claim', '')} -> {v.get('note', '')}"
-             for v in fc.get("verdicts", []) if not v.get("ok")]
+             for v in fc.get("verdicts", []) if not crew._is_true(v.get("ok"))]
+            + [f"- SAI (cảnh {it['scene']}): \"{it['voice']}\" -> {it['note']}"
+               for it in fc.get("sentence_issues", [])]
             + [f"- BỊA SỐ: con số {n} trong lời đọc không có trong bài nguồn — bỏ đi hoặc"
-               f" thay bằng con số có thật trong nguồn" for n in unsourced])
+               f" thay bằng con số có thật trong nguồn" for n in unsourced]
+            + [f"- SO SÁNH SAI: {p}" for p in wrong_cmp])
         log.warning("Kiểm chứng trượt — trả về Biên kịch viết lại:\n%s", feedback)
         script = crew.write_script(idea, cfg, feedback=feedback, source_text=source_text,
                                    recent_hooks=recent_hooks)
         fc = crew.fact_check(script, idea, source_text, cfg)
         unsourced = crew.unsourced_numbers(script, idea, source_text)
+        wrong_cmp = claims.script_comparison_problems(script, idea.get("summary"))
     problems = crew.script_problems(script, cfg)
     if unsourced:
         problems.append("con số không có trong bài nguồn: " + ", ".join(unsourced))
+    problems += [f"so sánh sai — {p}" for p in wrong_cmp]
     if problems:
         # Ghi lý do vào hồ sơ kiểm chứng để về sau tra được vì sao kịch bản bị giữ lại
         fc["standard_problems"] = problems

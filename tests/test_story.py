@@ -55,6 +55,16 @@ class PickHookTest(unittest.TestCase):
         story.pick_hook(s, is_sourced=lambda text: "1987" not in text)
         self.assertEqual(s["scenes"][0]["voice"], "Việt Nam dùng điện ít hơn Hàn Quốc nhiều lần.")
 
+    def test_wrong_scene_one_is_replaced_even_by_a_weaker_correct_option(self):
+        # Ca thật #46: hook sai nằm sẵn ở cảnh 1, các phương án đúng điểm không cao hơn
+        wrong = "Hàn Quốc năm 2025 mới đạt tỷ lệ phụ nữ đi làm mà Việt Nam đã có từ năm 1990."
+        s = {"hooks": ["Vì sao tỷ lệ này ở Việt Nam năm 1990 cao hơn Hàn Quốc nhiều đến vậy?", wrong,
+                       "Tỷ lệ phụ nữ tham gia lao động của Việt Nam năm 1990 từng đạt mức 74,7%."],
+             "scenes": [{"voice": wrong}]}
+        got = story.pick_hook(s, is_sourced=lambda text: text != wrong)
+        self.assertNotEqual(got, wrong)
+        self.assertEqual(s["scenes"][0]["voice"], got)
+
     def test_report_fillers_are_trimmed(self):
         s = {"scenes": [{"voice": "Số liệu cho thấy Việt Nam đạt mức 74,7 tuổi năm 2024."},
                         {"voice": "Cụ thể, Nigeria thấp nhất bảng với 54,6 tuổi."},

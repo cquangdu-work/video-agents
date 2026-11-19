@@ -184,9 +184,11 @@ sources:
          origin: "Ember, Energy Institute"}
 
   # Reddit chặn đường JSON công khai (403) với nhiều IP, nhất là IP đám mây của VM;
-  # src/sources/reddit.py tự chuyển sang đường RSS (vẫn vào được, không cần key).
+  # src/sources/reddit.py tự chuyển sang đường RSS. TẮT từ 19/11/2026: đo cả laptop lẫn VM, RSS
+  # cũng trả 404/429 (old.reddit 403) — và bài Reddit vốn không đọc được nguồn nên luôn bị loại
+  # trước khi chấm điểm. Bật lại: điền lại danh sách, ví dụ ["askscience", "explainlikeimfive"].
   reddit:
-    subreddits: ["askscience", "explainlikeimfive", "dataisbeautiful"]
+    subreddits: []
     listing: "top"
     time: "day"
     limit: 20

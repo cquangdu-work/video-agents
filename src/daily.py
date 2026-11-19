@@ -101,6 +101,16 @@ def opening_problems(body: str) -> list:
         return []
 
 
+def comparison_problems(body: str, summary: str) -> list:
+    """Câu so sánh sai với bảng số (src/claims.py) trong lời đọc của một kịch bản đã lưu."""
+    from .claims import comparison_problems as check
+    try:
+        scenes = yaml.safe_load(body or "") or []
+        return check([s.get("voice", "") for s in scenes if isinstance(s, dict)], summary)
+    except Exception:
+        return []
+
+
 def recent_families(con, n: int = 5) -> list:
     """Mảng chủ đề (datatable.topic_family) của n Shorts gửi duyệt gần nhất, mới trước cũ sau."""
     from .sources.datatable import topic_family
@@ -135,7 +145,8 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     since = ((now or datetime.now(timezone.utc)) - timedelta(days=max_age)).isoformat(timespec="seconds")
     recent = recent_families(con)
     rows = con.execute(
-        "SELECT s.id, s.body, i.scores, i.source_name FROM scripts s JOIN ideas i ON i.id = s.idea_id"
+        "SELECT s.id, s.body, i.scores, i.source_name, i.summary FROM scripts s"
+        " JOIN ideas i ON i.id = s.idea_id"
         " WHERE s.status = 'verified' AND s.created_at >= ?"
         # video gửi Telegram hụt (chưa có tg_message_id) vẫn được thử gửi lại.
         # PHẢI loại script_id rỗng (video dài hằng tuần): trong SQL, `x NOT IN (…, NULL)`
@@ -159,6 +170,11 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
             # Kịch bản viết trước luật kể chuyện (12/11): mở bằng "Đừng…"/"Sai lầm…" = video theo
             # mẫu + câu view, YouTube không cho kiếm tiền -> không đem đi dựng
             log.info("Bỏ qua kịch bản #%d: câu mở đầu %s", r["id"], bad_hook[0])
+            continue
+        wrong = comparison_problems(r["body"], r["summary"])
+        if wrong:
+            # Kịch bản viết trước cổng so sánh (19/11): ca thật #46 "đạt" Kiểm chứng với hook sai
+            log.info("Bỏ qua kịch bản #%d: %s", r["id"], wrong[0])
             continue
         numbers = script_numbers(r["body"])
         if numbers < min_numbers:

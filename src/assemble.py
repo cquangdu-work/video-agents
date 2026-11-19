@@ -21,6 +21,7 @@ import argparse
 import hashlib
 import json
 import logging
+import math
 import shutil
 import subprocess
 import sys
@@ -89,6 +90,43 @@ def scene_weights(spec: list, run: list) -> list:
     Câu trải trên nhiều cảnh (cùng 'voice') thì chia đều phần của câu cho các cảnh đó."""
     voices = [_voice(spec[i]) for i in run]
     return [len(v) / voices.count(v) for v in voices]
+
+
+MAX_TEMPO = 1.12         # đọc nhanh lên tối đa 12%: 3,2 -> 3,6 từ/giây, vẫn chậm hơn video #45
+                         # đọc tự nhiên 3,79 từ/giây — tai người nghe không thấy khác
+
+
+def run_seconds(voice_seconds: float, n_scenes: int, tempo: float = 1.0) -> float:
+    """Thời lượng hình của một run (nhóm cảnh dùng chung một file giọng): dài đúng bằng giọng
+    (đã đọc nhanh theo tempo) + khoảng lặng cuối câu, nhưng mỗi cảnh không ngắn hơn MIN_SCENE."""
+    return max(voice_seconds / tempo + VOICE_TAIL, MIN_SCENE * n_scenes)
+
+
+def fit_tempo(voice_seconds: list, scene_counts: list, fixed: float, target: float,
+              max_tempo: float = MAX_TEMPO) -> float:
+    """Hệ số đọc nhanh NHỎ NHẤT (>= 1) để cả video vừa `target` giây; không cần thì 1.0.
+
+    Vì sao (ca thật 18/11/2026): tốc độ giọng TTS mỗi hôm một khác — 3,20 từ/giây ở #37 và #38,
+    3,79 ở #45 — nên kịch bản đúng ngân sách từ vẫn ra video 95,3 giây, rớt Kiểm định (trần 95)
+    SAU KHI đã tốn quota giọng đọc và 7 phút dựng. `fixed`: các cảnh không lời (intro).
+    Cần nhanh hơn max_tempo mới vừa thì dừng ở max_tempo (để Kiểm định quyết)."""
+    total = lambda t: fixed + sum(run_seconds(d, n, t) for d, n in zip(voice_seconds, scene_counts))
+    if total(1.0) <= target:
+        return 1.0
+    if total(max_tempo) > target:
+        return max_tempo
+    lo, hi = 1.0, max_tempo
+    for _ in range(40):                       # chia đôi: tổng thời lượng giảm dần theo tempo
+        mid = (lo + hi) / 2
+        lo, hi = (lo, mid) if total(mid) <= target else (mid, hi)
+    return math.ceil(hi * 1000) / 1000        # làm tròn LÊN để chắc chắn vừa
+
+
+def speed_up(src: Path, dst: Path, tempo: float) -> Path:
+    """Đọc nhanh lên `tempo` lần mà giữ nguyên cao độ giọng (bộ lọc atempo của ffmpeg)."""
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-filter:a", f"atempo={tempo:.3f}",
+                    "-ar", "24000", "-ac", "1", str(dst)], check=True)
+    return dst
 
 
 def drop_stale_voice(audio_dir: Path, voices: list) -> bool:
@@ -272,8 +310,24 @@ def main():
             if n < len(voiced):
                 time.sleep(30)                    # free tier TTS giới hạn số lần/phút
         wavs[r[0]] = wav
+
+    # ---- 1b. Vừa khung thời lượng (channel.video_seconds_max): giọng hôm nay chậm thì đọc nhanh
+    # lên chút ít (fit_tempo). File giọng gốc giữ nguyên trong cache; bản đọc nhanh là fit_XX.wav
+    from .main import load_config
+    cfg = load_config()
+    fixed = sum(float(spec[i].get("seconds") or 0) for r in runs if not _voice(spec[r[0]]) for i in r)
+    raw_secs = [wav_duration(wavs[r[0]]) for r in voiced]
+    tempo = fit_tempo(raw_secs, [len(r) for r in voiced], fixed,
+                      float(cfg["channel"].get("video_seconds_max", 90)))
+    if tempo > 1.0:
+        log.info("Giọng đọc dài %.1fs — đọc nhanh lên %.3f lần để video vừa %ss", sum(raw_secs) + fixed,
+                 tempo, cfg["channel"].get("video_seconds_max", 90))
+        for r in voiced:
+            wavs[r[0]] = speed_up(wavs[r[0]], audio_dir / f"fit_{r[0]:02d}.wav", tempo)
+
+    for n, r in enumerate(voiced, 1):
         # KHÔNG cắt lời: run dài đúng bằng giọng (trước đây kẹp 9s -> câu dài bị cụt)
-        total = max(wav_duration(wav) + VOICE_TAIL, MIN_SCENE * len(r))
+        total = run_seconds(wav_duration(wavs[r[0]]), len(r))
         for i, secs in zip(r, share_seconds(total, scene_weights(spec, r))):
             spec[i]["seconds"] = round(secs, 3)
         if total / len(r) > LONG_SCENE:
@@ -285,8 +339,6 @@ def main():
     final_spec_path.write_text(yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
     from .audio import music
-    from .main import load_config
-    cfg = load_config()
     rcfg = cfg.get("render") or {}
     engine = args.engine or rcfg.get("engine", "manim")
     OUTPUT.mkdir(exist_ok=True)

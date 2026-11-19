@@ -40,6 +40,33 @@ class FormatTest(unittest.TestCase):
         self.assertEqual(wb.change_phrase(6.27, 1.90), "giảm 69,7%")
         self.assertEqual(wb.change_phrase(0, 5), "")
 
+    def test_change_of_a_percentage_is_told_in_percentage_points(self):
+        # Ca thật kịch bản #46 (19/11): 74,7% -> 68,6% từng được ghi "giảm 8,28%"
+        self.assertEqual(wb.change_phrase(74.73, 68.57, "%"), "giảm 6,1 điểm phần trăm")
+        self.assertEqual(wb.change_phrase(47.2, 56.8, "%"), "tăng 9,6 điểm phần trăm")
+        self.assertEqual(wb.change_phrase(0.3, 78.0, "%"), "tăng 77,7 điểm phần trăm (gấp 260 lần)")
+        self.assertEqual(wb.change_phrase(-2.0, 5.0, "% GDP"), "tăng 7 điểm phần trăm")
+        self.assertEqual(wb.change_phrase(5.0, 5.0, "%"), "giữ nguyên")
+
+    def test_latest_gap_of_two_percentages_is_in_points_when_close(self):
+        self.assertEqual(wb.latest_gap_line("Việt Nam", 68.57, "Hàn Quốc", 56.8, "%"),
+                         "Số mới nhất: Việt Nam hơn Hàn Quốc 11,8 điểm phần trăm.")
+        self.assertEqual(wb.latest_gap_line("Việt Nam", 10.0, "Hàn Quốc", 20.0, "%"),
+                         "Số mới nhất: Hàn Quốc gấp 2 lần Việt Nam.")
+        self.assertEqual(wb.latest_gap_line("Việt Nam", 5066, "Hàn Quốc", 36227, "USD"),
+                         "Số mới nhất: Hàn Quốc gấp 7,15 lần Việt Nam.")
+        self.assertEqual(wb.latest_gap_line("Việt Nam", 0, "Hàn Quốc", 3, "%"), "")
+
+    def test_percentage_indicator_summary_has_no_relative_change(self):
+        ind = {"code": "SL.TLF.CACT.FE.ZS", "name": "Tỷ lệ phụ nữ tham gia lực lượng lao động", "unit": "%"}
+        series = {"VNM": [(1990, 74.73), (1995, 73.8), (2000, 70.0), (2010, 71.7), (2025, 68.57)],
+                  "KOR": [(1990, 47.2), (1995, 48.4), (2000, 49.4), (2010, 49.8), (2025, 56.8)]}
+        s = wb.build_item(ind, COUNTRIES, series)["summary"]
+        self.assertIn("Từ 1990 đến 2025, Việt Nam giảm 6,1 điểm phần trăm.", s)
+        self.assertIn("Từ 1990 đến 2025, Hàn Quốc tăng 9,6 điểm phần trăm.", s)
+        self.assertIn("Số mới nhất: Việt Nam hơn Hàn Quốc 11,8 điểm phần trăm.", s)
+        self.assertNotIn("8,28%", s)
+
     def test_catch_up_year_only_when_values_really_match(self):
         self.assertEqual(wb.catch_up_year(5065.99, SERIES["KOR"]), (1988, 4889.0))
         self.assertIsNone(wb.catch_up_year(98.2, [(2000, 30.0), (2025, 45.8)]))   # chưa bao giờ ngang nhau

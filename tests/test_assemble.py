@@ -72,6 +72,29 @@ class VoiceGroupTest(unittest.TestCase):
         self.assertAlmostEqual(sum(assemble.share_seconds(5.0, [None, 0])), 5.0)   # spec thiếu seconds
 
 
+class FitTempoTest(unittest.TestCase):
+    """Giọng chậm hôm đó làm video vượt trần: đọc nhanh lên VỪA ĐỦ (ca thật #37: 95,3 giây)."""
+
+    def test_no_speed_up_when_the_video_already_fits(self):
+        self.assertEqual(assemble.fit_tempo([30.0, 40.0], [3, 4], 1.2, 90), 1.0)
+
+    def test_speeds_up_just_enough(self):
+        secs = [4.0] * 22                       # 22 câu x (4 + 0,35) + intro 1,2 = 96,9 giây
+        t = assemble.fit_tempo(secs, [1] * 22, 1.2, 90)
+        total = lambda tempo: 1.2 + sum(assemble.run_seconds(d, 1, tempo) for d in secs)
+        self.assertTrue(1.0 < t <= assemble.MAX_TEMPO)
+        self.assertLessEqual(total(t), 90.0)
+        self.assertGreater(total(t - 0.002), 90.0)            # không nhanh hơn mức cần
+
+    def test_never_faster_than_the_cap(self):
+        self.assertEqual(assemble.fit_tempo([200.0], [1], 0.0, 90), assemble.MAX_TEMPO)
+
+    def test_short_scenes_keep_their_minimum_length(self):
+        # 3 cảnh hình cho 1 câu 3 giây: phải giữ 3 x MIN_SCENE dù đọc nhanh cỡ nào
+        self.assertEqual(assemble.run_seconds(3.0, 3, 1.1), 3 * assemble.MIN_SCENE)
+        self.assertAlmostEqual(assemble.run_seconds(8.8, 2, 1.1), 8.0 + assemble.VOICE_TAIL)
+
+
 def resp(status, payload=None, text=""):
     r = mock.Mock(status_code=status, text=text)
     r.json.return_value = payload if payload is not None else {}

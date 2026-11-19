@@ -136,6 +136,19 @@ class PickTest(DailyCase):
         self.assertEqual([c["id"] for c in daily.pick_candidates(self.con, CFG)], [13])
         self.assertEqual(daily.opening_problems(None), [])
 
+    def test_verified_script_with_a_false_comparison_is_not_produced(self):
+        # Ca thật #46 (19/11): "đạt" Kiểm chứng trước khi có cổng so sánh, hook sai sự thật
+        from tests.test_claims import WOMEN
+        self.script(46, 25.5)
+        self.script(47, 20.0)
+        body = json.loads(self.con.execute("SELECT body FROM scripts WHERE id=46").fetchone()["body"])
+        body[0]["voice"] = "Hàn Quốc năm 2025 mới đạt tỷ lệ phụ nữ đi làm mà Việt Nam đã có từ năm 1990."
+        self.con.execute("UPDATE scripts SET body=? WHERE id=46", (json.dumps(body, ensure_ascii=False),))
+        self.con.execute("UPDATE ideas SET summary=? WHERE id=46", (WOMEN,))
+        self.con.commit()
+        self.assertEqual([c["id"] for c in daily.pick_candidates(self.con, CFG)], [47])
+        self.assertEqual(daily.comparison_problems(None, WOMEN), [])
+
     def test_plan_skips_done_work(self):
         names = lambda sid: [s[1] for s in daily.plan_steps(sid)]
         self.assertEqual(names(1), ["produce", "assemble", "review"])

@@ -180,6 +180,8 @@ def _publish_api(con, video: dict, cfg: dict) -> None:
     db.update_video(con, video["id"], youtube_id=res["id"], youtube_url=res["url"],
                     youtube_privacy=res["privacy"])
     db.transition_video(con, video["id"], "publishing", "published")
+    log.info("Đã upload video #%d lên YouTube: %s (%s, hẹn %s)", video["id"], res["url"],
+             res["privacy"], res["publish_at"] or "không")
 
     msg = f"🚀 Đã upload video #{video['id']}:\n{res['url']}\nChế độ hiển thị: {res['privacy']}"
     if res["publish_at"]:
@@ -244,6 +246,7 @@ def push_tiktok(con, video: dict, cfg: dict) -> None:
                         buttons=[[("🔁 Thử lại TikTok", f"tt:{video['id']}")]])
         return
     db.set_state(con, f"tt_publish_{video['id']}", res["publish_id"])
+    log.info("Đã đẩy video #%d vào hộp thư TikTok (%s)", video["id"], res["status"])
     where = ("đã nằm trong hộp thư" if res["status"] == "SEND_TO_USER_INBOX"
              else f"đang xử lý ({res['status']}) — vài phút nữa sẽ vào hộp thư")
     tg.send_message(
@@ -274,6 +277,9 @@ def _handle_callback(con, cq: dict, cfg: dict) -> None:
         tg.answer_callback(cq["id"], "Không tìm thấy video này")
         return
     mid = msg.get("message_id")
+    # Ghi nhật ký mọi nút Du bấm (journalctl --user -u video-agents-review): trước 19/11 bot không
+    # ghi gì nên không tra được video nào được duyệt lúc nào, upload ra sao
+    log.info("Nút %s cho video #%d (đang ở trạng thái %s)", action, video_id, video["status"])
 
     if action == "ok":
         if not db.transition_video(con, video_id, "pending_review", "approved"):

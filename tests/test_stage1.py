@@ -61,7 +61,9 @@ class ScriptStandardTest(unittest.TestCase):
         idea = {"title": "T", "angle": "G", "source_url": "https://x", "summary": "tóm tắt"}
         with mock.patch.object(crew, "_run_single_task", fake_llm), \
                 mock.patch.object(crew, "_formula_block", lambda: ""):
-            got = crew.write_script(idea, CFG, source_text="Bài gốc ghi 8.030 hệ thống. " * 400)
+            # số của bản nháp (1000-1002) có trong nguồn: cảnh 1 đúng nên không bị phương án "a" thay
+            got = crew.write_script(idea, CFG, source_text="Bài gốc ghi 8.030 hệ thống, 1000, 1001,"
+                                                           " 1002. " * 400)
         self.assertEqual(got, drafts[0])                         # giữ bản ít lỗi nhất
         self.assertIn("TRÍCH BÀI NGUỒN", seen[0])
         self.assertIn("8.030 hệ thống", seen[0])
@@ -139,6 +141,41 @@ class ScriptStandardTest(unittest.TestCase):
         self.assertFalse(crew.fact_check.__doc__ is None)
         with mock.patch.object(crew, "_run_single_task", lambda **kw: '["ok"]'):
             self.assertFalse(crew.fact_check(script(), {"source_url": "u"}, "n", CFG)["pass"])
+
+    def test_fact_checker_reads_every_sentence_but_needs_a_second_opinion(self):
+        s = script()
+        s["claims"] = [{"claim": "c1", "source": "u"}]
+        s["scenes"][0]["voice"] = "Hàn Quốc tăng trưởng liên tục suốt 35 năm."
+        first = json.dumps({"verdicts": [{"claim": "c1", "ok": True}], "sentence_issues": [
+            {"scene": 1, "kind": "sai_xu_huong", "note": "năm 2010 có giảm"},
+            {"scene": 3, "kind": "khong_co_trong_nguon", "note": "giải thích"},     # loại không được chặn
+            {"scene": 99, "kind": "sai_so", "note": "cảnh không tồn tại"}, "rác"]})
+        seen = []
+
+        def llm(confirm):
+            def run(**kw):
+                seen.append(kw["description"])
+                return first if len(seen) == 1 else json.dumps({"results": [{"scene": 1, "wrong": confirm}]})
+            return run
+        with mock.patch.object(crew, "_run_single_task", llm(True)):
+            fc = crew.fact_check(s, {"source_url": "u"}, "nguồn", CFG)
+        self.assertFalse(fc["pass"])
+        self.assertEqual([(i["scene"], i["kind"]) for i in fc["sentence_issues"]], [(1, "sai_xu_huong")])
+        self.assertIn("TOÀN BỘ LỜI ĐỌC", seen[0])
+        self.assertIn("Hàn Quốc tăng trưởng liên tục", seen[1])          # lượt 2 chỉ hỏi câu bị nghi
+        seen.clear()
+        with mock.patch.object(crew, "_run_single_task", llm("false")):   # lượt 2 không xác nhận
+            fc = crew.fact_check(s, {"source_url": "u"}, "nguồn", CFG)
+        self.assertTrue(fc["pass"])
+        self.assertEqual(fc["sentence_issues"], [])
+
+    def test_fact_checker_without_verdicts_for_declared_claims_is_not_a_pass(self):
+        s = script()
+        s["claims"] = [{"claim": "c1", "source": "u"}]
+        with mock.patch.object(crew, "_run_single_task", lambda **kw: '{"pass": true, "verdicts": []}'):
+            self.assertFalse(crew.fact_check(s, {"source_url": "u"}, "n", CFG)["pass"])
+        with mock.patch.object(crew, "_run_single_task", lambda **kw: '{"verdicts": []}'):
+            self.assertTrue(crew.fact_check(script(), {"source_url": "u"}, "n", CFG)["pass"])  # không khai claim
 
     def test_hunter_keeps_only_well_formed_picks(self):
         answer = ('[{"id": 1, "angle": "góc", "keyword": "tỷ suất sinh Hàn Quốc"}, "rác",'

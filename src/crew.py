@@ -352,7 +352,7 @@ def write_script(idea: dict, cfg: dict, feedback: str = None, source_text: str =
     vài dòng nên không có số mà dùng — kịch bản ra 1-2 con số, toàn câu chữ.
     recent_hooks: câu mở đầu của các video gần đây — hook mới phải khác (chống "theo mẫu").
     """
-    from . import story
+    from . import claims, story
     ch = cfg["channel"]
     lo_words, hi_words = word_budget(cfg)
     recent = [h for h in (recent_hooks or []) if h]
@@ -426,8 +426,12 @@ AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — 
         # (phương án có số không có trong nguồn thì không được chọn)
         story.strip_fillers(script)
         story.pick_hook(script, recent_openers, is_sourced=lambda text: not unsourced_numbers(
-            {"scenes": [{"voice": text}]}, idea, source_text))
+            {"scenes": [{"voice": text}]}, idea, source_text)
+            and not claims.comparison_problems([text], idea.get("summary")))
         problems = script_problems(script, cfg, recent_openers)
+        # Câu so sánh sai với bảng số ("A năm X mới bằng B năm Y" mà hai mức không ngang nhau)
+        problems += [f"so sánh sai — {p}" for p in
+                     claims.script_comparison_problems(script, idea.get("summary"))]
         if best is None or len(problems) <= len(best_problems):
             best, best_problems = script, problems
         if not problems:
@@ -834,38 +838,139 @@ Yêu cầu:
 
 
 # ---------------------------------------------------------------- Kiểm chứng
-def fact_check(script: dict, idea: dict, source_text: str, cfg: dict) -> dict:
-    """Đối chiếu từng claim với nội dung bài nguồn. Trả về verdict từng claim.
+# Loại lỗi CÂU mà agent Kiểm chứng được phép báo (và chỉ những loại này mới chặn kịch bản).
+# Không có "không có trong nguồn": con số lạ đã có cổng code (unsourced_numbers) lo, còn câu giải
+# thích ý nghĩa thì đúng là không có trong bảng số — cho model báo loại đó là nó chặn oan cả bài.
+SENTENCE_KINDS = {
+    "sai_so": "con số, năm hoặc thứ hạng gán SAI (nguồn ghi khác)",
+    "sai_so_sanh": "so sánh/xếp hạng (bằng, ngang, hơn, kém, vượt, gấp) TRÁI với số trong nguồn",
+    "sai_xu_huong": "mô tả xu hướng (tăng/giảm, liên tục, đều đặn, đỉnh) TRÁI với dãy số trong nguồn",
+}
 
-    Giới hạn v1: mới đối chiếu với 1 nguồn gốc (bài báo/paper đã lấy về).
-    Khi thêm search API sẽ nâng lên luật '2 nguồn độc lập' như thiết kế.
+
+def _is_true(v) -> bool:
+    return v is True or str(v).strip().lower() == "true"
+
+
+def _as_scene_no(v, n: int):
+    try:
+        k = int(v)
+    except (TypeError, ValueError):
+        return None
+    return k if 1 <= k <= n else None
+
+
+def sentence_issues(raw, scenes: list) -> list:
+    """Ép khuôn danh sách lỗi câu model trả về: đúng loại, đúng số cảnh, có ghi chú. Model dự phòng
+    hay trả sai khuôn — cái gì không đúng dạng thì bỏ, không để nó chặn kịch bản."""
+    out = []
+    for it in raw if isinstance(raw, list) else []:
+        if not isinstance(it, dict):
+            continue
+        k = _as_scene_no(it.get("scene"), len(scenes))
+        kind = str(it.get("kind") or "").strip()
+        if k is None or kind not in SENTENCE_KINDS or not str(it.get("note") or "").strip():
+            continue
+        if any(o["scene"] == k for o in out):
+            continue
+        out.append({"scene": k, "kind": kind, "voice": str(scenes[k - 1].get("voice") or ""),
+                    "note": str(it["note"])[:300], "evidence": str(it.get("evidence") or "")[:300]})
+    return out
+
+
+def confirm_issues(issues: list, source_text: str) -> list:
+    """Lượt hỏi THỨ HAI, độc lập: chỉ giữ lỗi câu được xác nhận lại. Model nhỏ làm giám khảo hay
+    báo nhầm (bài học 11/2026) — một nhận xét tự do không đủ quyền chặn kịch bản. Lượt hỏi lỗi thì
+    không chặn (giữ đúng nguyên tắc đó); cổng code (claims, unsourced_numbers) vẫn đứng sau."""
+    listing = "\n".join(f"- Cảnh {it['scene']}: \"{it['voice']}\" — bị nghi: {it['note']}"
+                        for it in issues)
+    try:
+        out = _run_single_task(
+            role="Người kiểm chứng thứ hai",
+            goal="Chỉ xác nhận lỗi có thật, không bắt bẻ câu đúng",
+            description=f"""Người kiểm chứng thứ nhất nghi các câu sau SAI so với nguồn. Đọc kỹ nguồn
+rồi TỰ kết luận cho từng câu, đừng tin người thứ nhất:
+{listing}
+
+Nguồn:
+---
+{source_text[:6000]}
+---
+
+Câu chỉ SAI khi nguồn có số liệu/thông tin TRÁI với câu (số khác, so sánh ngược, xu hướng ngược).
+Câu nói gọn, làm tròn hợp lý, hoặc diễn giải ý nghĩa mà không trái nguồn thì KHÔNG sai.""",
+            expected_output='JSON object: {"results": [{"scene": <số cảnh>, "wrong": true/false, "why": "..."}]}')
+        res = extract_json(out)
+    except Exception as exc:
+        log.warning("Lượt xác nhận lỗi câu lỗi (%s) — không chặn kịch bản vì lỗi câu", exc)
+        return []
+    rows = res.get("results") if isinstance(res, dict) else res
+    wrong = {_as_scene_no(r.get("scene"), 10_000) for r in rows or []
+             if isinstance(r, dict) and _is_true(r.get("wrong"))}
+    return [it for it in issues if it["scene"] in wrong]
+
+
+def fact_check(script: dict, idea: dict, source_text: str, cfg: dict) -> dict:
+    """Đối chiếu kịch bản với bài nguồn. Trả về {"verdicts": [...], "sentence_issues": [...], "pass"}.
+
+    Hai việc trong một lần gọi: (1) từng "claim" Biên kịch khai; (2) TỪNG CÂU lời đọc — trước đây
+    chỉ có (1) nên câu hook so sánh sai của kịch bản #46 (19/11/2026) lọt qua vì không nằm trong
+    danh sách claim. Lỗi câu phải được lượt hỏi thứ hai xác nhận mới tính (confirm_issues).
+    "pass" do CODE tính: mọi claim ok và không còn lỗi câu nào được xác nhận.
+
+    Giới hạn: mới đối chiếu với 1 nguồn gốc (bài báo/bảng số đã lấy về); số liệu World Bank có
+    thêm nguồn thứ hai ở src/second_source.py.
     """
+    claims_list = script.get("claims", [])
+    scenes = [s for s in script.get("scenes") or [] if isinstance(s, dict)]
+    numbered = "\n".join(f"{i}. {s.get('voice', '')}" for i, s in enumerate(scenes, 1))
+    kinds = "\n".join(f"  {k}: {v}" for k, v in SENTENCE_KINDS.items())
     out = _run_single_task(
         role="Người kiểm chứng thông tin",
-        goal="Không để lọt số liệu sai hoặc không có trong nguồn",
+        goal="Không để lọt số liệu sai, so sánh sai hoặc điều không có trong nguồn",
         description=f"""Kịch bản có các khẳng định sau:
-{json.dumps(script.get('claims', []), ensure_ascii=False, indent=2)}
+{json.dumps(claims_list, ensure_ascii=False, indent=2)}
+
+TOÀN BỘ LỜI ĐỌC (đánh số theo cảnh):
+{numbered}
 
 Toàn văn bài nguồn ({idea['source_url']}):
 ---
 {source_text[:6000]}
 ---
 
-Với TỪNG khẳng định, kiểm tra: nguồn có thật sự nói vậy không? Số liệu có khớp
-không? Khẳng định nào không tìm thấy trong nguồn thì đánh dấu unsupported.""",
+Việc 1 — với TỪNG khẳng định ở trên: nguồn có thật sự nói vậy không? Số liệu có khớp không?
+Khẳng định nào không tìm thấy trong nguồn thì ok=false.
+Việc 2 — đọc TỪNG câu lời đọc, chỉ báo câu nói điều TRÁI với nguồn, thuộc một trong các loại:
+{kinds}
+Đặc biệt soát câu so hai mốc thời gian ("A năm X mới bằng B năm Y"): hai giá trị phải gần bằng nhau.
+KHÔNG báo: câu dẫn chuyện, câu hỏi gợi tò mò, câu giải thích ý nghĩa không trái nguồn, câu đúng
+nhưng nói gọn/làm tròn. Không có câu sai thì "sentence_issues" là mảng rỗng.""",
         expected_output="""JSON object:
 {"verdicts": [{"claim": "...", "ok": true/false, "note": "<giải thích ngắn>"}],
- "pass": true/false}""",
+ "sentence_issues": [{"scene": <số cảnh>, "kind": "sai_so|sai_so_sanh|sai_xu_huong",
+                      "evidence": "<đoạn nguồn chứng minh câu sai>", "note": "<sai chỗ nào>"}]}""",
     )
     try:
         fc = extract_json(out)
     except ValueError:
         fc = None
     if not isinstance(fc, dict):                # model trả sai khuôn = CHƯA kiểm chứng được
-        return {"pass": False, "verdicts": [], "note": "Agent Kiểm chứng trả lời sai khuôn"}
+        return {"pass": False, "verdicts": [], "sentence_issues": [],
+                "note": "Agent Kiểm chứng trả lời sai khuôn"}
     if not isinstance(fc.get("verdicts"), list):
         fc["verdicts"] = []
     fc["verdicts"] = [v for v in fc["verdicts"] if isinstance(v, dict)]
+    issues = sentence_issues(fc.get("sentence_issues"), scenes)
+    if issues:
+        found = len(issues)
+        issues = confirm_issues(issues, source_text)
+        log.info("Kiểm chứng câu: model báo %d câu sai, lượt hai xác nhận %d", found, len(issues))
+    fc["sentence_issues"] = issues
+    # Có khai claim mà không nhận được verdict nào = chưa kiểm chứng được (không coi là đạt)
+    claims_ok = (all(_is_true(v.get("ok")) for v in fc["verdicts"])
+                 and (bool(fc["verdicts"]) or not claims_list))
+    fc["pass"] = claims_ok and not issues
     return fc
 
 
