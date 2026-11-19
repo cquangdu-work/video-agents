@@ -23,26 +23,42 @@ def _model_chain() -> list:
     return chain
 
 
+def writer_chain() -> list:
+    """Chuỗi model cho Biên kịch: WRITER_MODEL (+ WRITER_MODEL_FALLBACKS) rồi mới tới chuỗi chung.
+
+    Vì sao (19/11/2026): bản lite không viết nổi khổ 45-60 giây xen kẽ số/ý nghĩa — 0/8 bản nháp
+    thật qua cổng chuẩn, câu nào cũng nhét một con số dù có khuôn cảnh. Chỉ Biên kịch dùng model mạnh
+    hơn (vẫn gói miễn phí), các bước khác giữ bản lite cho đỡ tốn hạn mức ngày."""
+    chain = [m.strip() for m in [os.getenv("WRITER_MODEL", "")]
+             + os.getenv("WRITER_MODEL_FALLBACKS", "").split(",") if m.strip()]
+    return list(dict.fromkeys(chain + _model_chain()))
+
+
 def _is_transient(exc: Exception) -> bool:
     s = str(exc)
-    return any(k in s for k in ("503", "UNAVAILABLE", "overloaded", "429", "RESOURCE_EXHAUSTED"))
+    # "timed out"/Timeout: model mới đông khách có khi treo quá giờ thay vì báo 503 (đo 19/11)
+    return any(k in s for k in ("503", "UNAVAILABLE", "overloaded", "429", "RESOURCE_EXHAUSTED",
+                                "timed out", "Timeout", "timeout"))
 
 
-def _run_single_task(role: str, goal: str, description: str, expected_output: str) -> str:
+def _run_single_task(role: str, goal: str, description: str, expected_output: str,
+                     models: list = None) -> str:
     """Tạo một crew 1-agent-1-task rồi chạy. Đơn giản, dễ debug từng bước.
 
     Quá tải (503/429) thì chờ rồi thử lại, hết kiên nhẫn thì đổi model dự phòng.
+    models: chuỗi model riêng (mặc định chuỗi chung MODEL + MODEL_FALLBACKS).
     """
     import time
 
     from crewai import LLM, Agent, Crew, Task
 
     last_exc = None
-    for model in _model_chain():
+    for model in models or _model_chain():
         for attempt in range(3):
             try:
+                # timeout: model mới đông khách có khi treo hàng phút thay vì báo 503 -> coi là tạm thời
                 agent = Agent(role=role, goal=goal, backstory="",
-                              llm=LLM(model=model, temperature=0.7), verbose=False)
+                              llm=LLM(model=model, temperature=0.7, timeout=150), verbose=False)
                 task = Task(description=description, expected_output=expected_output, agent=agent)
                 return str(Crew(agents=[agent], tasks=[task], verbose=False).kickoff())
             except Exception as exc:
@@ -458,7 +474,7 @@ AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — 
         answer = _run_single_task(
             role="Biên kịch video ngắn tiếng Việt",
             goal="Kịch bản cuốn hút, chính xác, dựng được bằng biểu đồ",
-            description=description, expected_output=expected)
+            description=description, expected_output=expected, models=writer_chain())
         try:
             script = as_script(extract_json(answer))
         except ValueError:                      # không móc được JSON nào ra

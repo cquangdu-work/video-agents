@@ -191,3 +191,19 @@ class QcBoundsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WriterModelTest(unittest.TestCase):
+    def test_writer_gets_its_own_model_first_then_the_shared_chain(self):
+        import os
+        from unittest import mock
+        env = {"WRITER_MODEL": "gemini/manh", "WRITER_MODEL_FALLBACKS": "gemini/vua, gemini/manh",
+               "MODEL": "gemini/lite", "MODEL_FALLBACKS": "gemini/lite2"}
+        with mock.patch.dict(os.environ, env):
+            self.assertEqual(crew.writer_chain(), ["gemini/manh", "gemini/vua", "gemini/lite", "gemini/lite2"])
+        with mock.patch.dict(os.environ, {"MODEL": "gemini/lite", "MODEL_FALLBACKS": "", "WRITER_MODEL": ""}):
+            self.assertEqual(crew.writer_chain(), ["gemini/lite"])          # không cấu hình: như cũ
+
+    def test_a_hanging_model_counts_as_transient(self):
+        self.assertTrue(crew._is_transient(TimeoutError("Request timed out")))
+        self.assertFalse(crew._is_transient(ValueError("bad json")))

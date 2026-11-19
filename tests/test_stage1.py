@@ -57,7 +57,7 @@ class ScriptStandardTest(unittest.TestCase):
         drafts = [script(numbers=3), script(scenes=12, words_each=10, numbers=1)]   # bản 2 tệ hơn
         seen = []
 
-        def fake_llm(role, goal, description, expected_output):
+        def fake_llm(role, goal, description, expected_output, models=None):
             seen.append(description)
             return json.dumps(drafts[len(seen) - 1])
         idea = {"title": "T", "angle": "G", "source_url": "https://x", "summary": "tóm tắt"}
