@@ -37,6 +37,11 @@ if [[ -d "$KO/assets/music" && ! -L "$KO/assets/music" ]] \
     rm -rf "$KO/assets/music"
 fi
 link "$VI/assets/music" "$KO/assets/music"
+# git của bản clone bỏ qua các liên kết (".gitignore" có "venv/" nhưng mẫu có "/" không khớp liên kết)
+for p in venv render-web/node_modules assets/music; do
+    grep -qx "$p" "$KO/.git/info/exclude" 2>/dev/null || echo "$p" >> "$KO/.git/info/exclude"
+done
+git -C "$KO" update-index --skip-worktree assets/music/README.md 2>/dev/null || true
 
 echo "== 3/4 .env của kênh Hàn =="
 if [[ ! -f "$KO/.env" ]]; then
