@@ -209,6 +209,32 @@ class InstagramTest(DbCase):
         self.assertIsNone(db.get_video(self.con, self.vid)["instagram_due"])
 
 
+class SlotCollisionTest(DbCase):
+    """Ca thật 21/11: hai video duyệt cùng lúc -> cùng hẹn 19:00 một ngày. Video sau phải lùi sang ngày kế tiếp."""
+
+    def test_next_free_day(self):
+        from src.publish import youtube
+        cfg = {"publish_time_local": "19:00", "utc_offset_hours": 9}
+        now = datetime(2026, 11, 21, 1, 0, tzinfo=timezone.utc)                 # 10:00 giờ Hàn
+        first = youtube.compute_publish_at(cfg, now)
+        self.assertEqual(first, "2026-11-21T10:00:00Z")
+        self.assertEqual(youtube.compute_publish_at(cfg, now, taken={first}), "2026-11-22T10:00:00Z")
+        self.assertEqual(youtube.compute_publish_at(cfg, now, taken={first, "2026-11-22T10:00:00Z"}),
+                         "2026-11-23T10:00:00Z")
+
+    def test_taken_times_per_platform(self):
+        future = (datetime.now(timezone.utc) + timedelta(days=1)).replace(microsecond=0)
+        past = (datetime.now(timezone.utc) - timedelta(days=1)).replace(microsecond=0)
+        z = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+        db.set_state(self.con, "yt_publish_at_7", z(future))
+        db.set_state(self.con, "yt_publish_at_8", z(past))                      # đã qua: không chiếm khung
+        db.set_state(self.con, "yt_publish_at_9", "")                          # đã soát xong
+        self.assertEqual(review._taken_times(self.con, "youtube"), {z(future)})
+        db.update_video(self.con, self.new_video(), instagram_due=z(future), facebook_at=future.isoformat())
+        self.assertEqual(review._taken_times(self.con, "instagram"), {z(future)})
+        self.assertEqual(review._taken_times(self.con, "facebook"), {z(future)})
+
+
 class FacebookAccessReminderTest(DbCase):
     def test_expiry_is_saved_and_reminded_once_a_day_in_the_last_week(self):
         facebook._save({"id": "123", "name": "Trang", "access_token": "PAGE"})

@@ -208,7 +208,33 @@ def access_token() -> str:
 
 
 # ---------------------------------------------------------------- Hẹn giờ
-def compute_publish_at(yt_cfg: dict, now: datetime = None):
+def compute_publish_at(yt_cfg: dict, now: datetime = None, taken=()):
+    """Như _next_publish_at, nhưng khung giờ đã có video khác hẹn (`taken`: các giờ UTC dạng "…Z") thì lùi sang
+    NGÀY KẾ TIẾP. Ca thật 21/11: Du duyệt hai video kênh Hàn cùng lúc -> cả hai hẹn 19:00 cùng ngày, giành lượt xem
+    của nhau."""
+    at = _next_publish_at(yt_cfg, now)
+    taken = {str(t) for t in taken or () if t}
+    while at and at in taken:
+        at = (datetime.fromisoformat(at.replace("Z", "+00:00")) + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return at
+
+
+def reschedule(video_id: str, publish_at: str) -> dict:
+    """Đổi giờ hẹn công khai của một video đang hẹn (giữ nguyên các thuộc tính trạng thái khác)."""
+    cur = get_status(video_id)
+    if not cur:
+        raise YouTubeUploadError(f"Không thấy video {video_id} trên kênh")
+    keep = {k: cur[k] for k in ("embeddable", "license", "publicStatsViewable",
+                                "selfDeclaredMadeForKids", "containsSyntheticMedia") if k in cur}
+    r = requests.put(f"{API_URL}/videos", timeout=30, params={"part": "status"},
+                     headers={"Authorization": f"Bearer {access_token()}"},
+                     json={"id": video_id, "status": dict(keep, privacyStatus="private", publishAt=publish_at)})
+    if r.status_code != 200:
+        raise YouTubeUploadError(f"Không đổi được giờ hẹn ({r.status_code}): {r.text[:300]}")
+    return r.json().get("status", {})
+
+
+def _next_publish_at(yt_cfg: dict, now: datetime = None):
     """Giờ công khai kế tiếp theo cấu hình (vd "19:00" giờ Việt Nam) -> chuỗi UTC.
 
     Trả về None nếu không cấu hình hẹn giờ. Luôn cách hiện tại ít nhất 15 phút.

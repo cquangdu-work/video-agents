@@ -174,8 +174,10 @@ def _publish_api(con, video: dict, cfg: dict) -> None:
     if not db.transition_video(con, video["id"], "approved", "publishing"):
         return
     try:
+        # mỗi khung giờ một video: khung đã có video khác hẹn thì lùi sang ngày kế tiếp (_taken_times)
         res = youtube.upload(ROOT / video["file"], video["title"], video["description"],
-                             video["tags"], yt)
+                             video["tags"], yt,
+                             publish_at=youtube.compute_publish_at(yt, taken=_taken_times(con, "youtube")))
     except youtube.YouTubeAuthError as exc:
         # Chưa cấp quyền / token hết hạn: thử lại cũng vô ích -> gửi gói để Du tự đăng hôm nay,
         # kèm cách sửa. Video về lại 'approved' nên nút "Đã đăng xong" của gói vẫn dùng được.
@@ -211,6 +213,30 @@ def _publish_api(con, video: dict, cfg: dict) -> None:
     elif res["privacy"] == "private" and not res["publish_at"]:
         msg += "\nVideo đang RIÊNG TƯ — vào YouTube Studio chuyển Công khai khi sẵn sàng."
     tg.send_message(msg)
+
+
+def _taken_times(con, kind: str, now: datetime = None) -> set:
+    """Các giờ (UTC "…Z") đã có video hẹn đăng trong TƯƠNG LAI trên một nền tảng — để video sau không hẹn trùng khung
+    (compute_publish_at lùi sang ngày kế tiếp). Ca thật 21/11: hai video kênh Hàn duyệt cùng lúc, cùng hẹn 19:00."""
+    now = now or datetime.now(timezone.utc)
+    z = lambda v: datetime.fromisoformat(str(v).replace("Z", "+00:00")).astimezone(timezone.utc)
+    if kind == "youtube":
+        vals = [v for (v,) in con.execute("SELECT value FROM state WHERE key LIKE 'yt_publish_at_%'")]
+    elif kind == "fb_post":
+        vals = [v for (v,) in con.execute("SELECT value FROM state WHERE key LIKE 'fbpost_at_%'")]
+    elif kind == "instagram":
+        vals = [v for (v,) in con.execute("SELECT instagram_due FROM videos WHERE instagram_id IS NULL")]
+    else:                                              # facebook (Reel)
+        vals = [v for (v,) in con.execute("SELECT facebook_at FROM videos WHERE facebook_at IS NOT NULL")]
+    out = set()
+    for v in vals:
+        try:
+            t = z(v)
+        except (TypeError, ValueError):
+            continue
+        if t > now:
+            out.add(t.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    return out
 
 
 def _local_times(utc_iso: str, yt: dict) -> str:
@@ -274,7 +300,8 @@ def push_fb_post(con, video: dict, cfg: dict) -> None:
     if not img or not Path(img).exists():
         tg.send_message(f"ℹ️ Bài viết Facebook của video #{video['id']} thiếu ảnh — không đăng.")
         return
-    iso = youtube.compute_publish_at({**pcfg, "publish_time_local": pcfg.get("post_time_local", "11:30")})
+    iso = youtube.compute_publish_at({**pcfg, "publish_time_local": pcfg.get("post_time_local", "11:30")},
+                                     taken=_taken_times(con, "fb_post"))
     at = int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()) if iso else None
     db.set_state(con, key, "posting")
     try:
@@ -286,6 +313,8 @@ def push_fb_post(con, video: dict, cfg: dict) -> None:
                         buttons=[[("🔁 Thử lại bài viết", f"fp:{video['id']}")]])
         return
     db.set_state(con, key, res["id"])
+    if iso and res["scheduled"]:
+        db.set_state(con, f"fbpost_at_{video['id']}", iso)       # giờ đã hẹn (khung khác không dùng trùng)
     db.update_video(con, video["id"], fb_post_id=res["id"])
     when = f"hẹn đăng lúc {_local_times(iso, pcfg)}" if res["scheduled"] else "đã đăng"
     tg.send_message(f"📝 Bài viết Facebook của video #{video['id']} {when}.")
@@ -305,7 +334,8 @@ def schedule_instagram(con, video: dict, cfg: dict) -> None:
             tg.send_message("ℹ️ Chưa đăng được lên Instagram: cần kết nối Trang Facebook liên kết với tài khoản"
                             " Instagram, có quyền instagram_basic + instagram_content_publish — gửi /facebook để xem cách.")
         return
-    due = youtube.compute_publish_at(icfg) or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    due = (youtube.compute_publish_at(icfg, taken=_taken_times(con, "instagram"))
+           or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
     db.update_video(con, video["id"], instagram_due=due)
     tg.send_message(f"📸 Instagram: video #{video['id']} sẽ đăng lúc {_local_times(due, icfg)}"
                     " (bot tự đăng khi tới giờ).")
@@ -379,7 +409,7 @@ def push_facebook(con, video: dict, cfg: dict) -> None:
     if state == "SCHEDULED":
         from . import fb_insights            # agent Facebook: thử nhiều khung giờ đăng, học khung nào tốt
         slot = fb_insights.choose_slot(con, fcfg, video["id"])
-        iso = youtube.compute_publish_at({**fcfg, "publish_time_local": slot})
+        iso = youtube.compute_publish_at({**fcfg, "publish_time_local": slot}, taken=_taken_times(con, "facebook"))
         if iso:
             at = int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
         else:
