@@ -23,6 +23,7 @@ Câu phủ định ("chưa bằng", "không bằng") và câu nói về mức T�
 """
 import re
 
+from . import lang
 from .sources.datatable import parse_series, parse_vn_number, parse_world_table, vn_number
 
 TOLERANCE = 0.05            # "ngang nhau" = lệch không quá 5% (như worldbank.catch_up_year)
@@ -167,6 +168,9 @@ def _check_times(text, between_start, between_end, labels, table, summary) -> st
 def comparison_problems(texts, summary: str) -> list:
     """Các câu so sánh SAI hoặc không kiểm được trong `texts` (danh sách câu) -> danh sách lý do.
     Tóm tắt không có bảng số (ý tưởng bài báo) thì không có gì để soát -> []."""
+    if lang.code() == "ko":                       # kênh Hàn: mẫu riêng (src/claims_ko.py)
+        from . import claims_ko
+        return claims_ko.comparison_problems(texts, summary)
     summary = str(summary or "")
     table = data_table(summary)
     if not table:
@@ -209,6 +213,9 @@ def cause_claims(texts, summary: str) -> list:
     """Câu khẳng định nguyên nhân/bối cảnh trong kịch bản từ BẢNG SỐ mà tóm tắt không nói -> lý do.
     Câu hỏi ("Vì sao…?") không khẳng định gì nên bỏ qua; ý tưởng bài báo (không có bảng) không soát
     ở đây — bài báo có thể nói nguyên nhân, agent Kiểm chứng đối chiếu."""
+    if lang.code() == "ko":                       # kênh Hàn: mẫu riêng (src/claims_ko.py)
+        from . import claims_ko
+        return claims_ko.cause_claims(texts, summary)
     summary = str(summary or "")
     if not data_table(summary):
         return []
@@ -242,6 +249,9 @@ _UP_WORDS = ("tăng", "đi lên", "leo lên", "leo")
 def trend_problems(texts, summary: str) -> list:
     """Câu nói một đối tượng tăng/giảm LIÊN TỤC mà dãy số của nó trong bảng có lúc đi ngược chiều.
     Câu có hai mốc năm thì chỉ xét đoạn giữa hai mốc đó."""
+    if lang.code() == "ko":                       # kênh Hàn: mẫu riêng (src/claims_ko.py)
+        from . import claims_ko
+        return claims_ko.trend_problems(texts, summary)
     table = data_table(str(summary or ""))
     if not table:
         return []
@@ -287,6 +297,9 @@ def wording_problems(texts, summary: str) -> list:
     - "năm 2025 dự kiến đạt", "sẽ vươn lên" — số liệu ĐÃ GHI NHẬN, không phải dự báo;
     - "nhanh nhất lịch sử" — bảng chỉ có từ năm đầu của nó;
     - "A soán ngôi B năm Y" trong khi bảng cho thấy A đã vượt B từ trước năm Y."""
+    if lang.code() == "ko":                       # kênh Hàn: mẫu riêng (src/claims_ko.py)
+        from . import claims_ko
+        return claims_ko.wording_problems(texts, summary)
     summary = str(summary or "")
     table = data_table(summary)
     if not table:
@@ -353,6 +366,9 @@ WHY_HOOK = re.compile(r"^\W*(vì\s+sao|tại\s+sao|lý\s+do\s+(gì|nào))\b", re
 
 
 def why_hook_problem(script: dict, summary: str) -> str:
+    if lang.code() == "ko":
+        from . import claims_ko
+        return claims_ko.why_hook_problem(script, summary)
     scenes = [s for s in script.get("scenes") or [] if isinstance(s, dict)]
     if scenes and data_table(str(summary or "")) and WHY_HOOK.search(str(scenes[0].get("voice") or "")):
         return ("câu mở đầu hỏi “Vì sao…?” mà video từ bảng số không trả lời được nguyên nhân — mở bằng"

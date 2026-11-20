@@ -110,9 +110,9 @@ def build_text(videos: list, starts: list, span: str, cfg: dict) -> tuple:
     sources, music = [], []
     for v in videos:
         for l in str(v["description"] or "").splitlines():
-            if l.startswith("Nguồn:") and l not in sources:
+            if l.startswith(("Nguồn:", "출처:")) and l not in sources:
                 sources.append(l)
-            if l.startswith("Nhạc nền:") and l not in music:
+            if l.startswith(("Nhạc nền:", "배경음악:")) and l not in music:
                 music.append(l)
     pub = cfg.get("publish", {})
     tail = [*sources, "", *music]

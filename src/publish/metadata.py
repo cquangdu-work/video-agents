@@ -9,6 +9,7 @@ LLM chỉ ĐỀ XUẤT; mọi thứ đi qua finalize() là code thuần (không 
 import logging
 import re
 
+from .. import lang
 from ..utils import digit_set, norm_title
 
 log = logging.getLogger(__name__)
@@ -117,13 +118,14 @@ def finalize(raw: dict, idea: dict, scenes: list, cfg: dict, music_credit: str =
     extras = []
     source_bits = [b for b in (idea.get("source_name"), idea.get("source_url")) if b]
     if source_bits:
-        extras.append("Nguồn: " + " — ".join(source_bits))
+        extras.append(lang.pick(vi="Nguồn: ", ko="출처: ") + " — ".join(source_bits))
     else:
         warnings.append("Thiếu nguồn để ghi vào mô tả")
     if music_credit:
         # Ghi công luôn: bài thư viện "không cần ghi công" thì thừa cũng không sao, bài Creative
         # Commons thì BẮT BUỘC — file tải về không mang theo loại giấy phép nên không phân biệt được
-        extras.append(f"Nhạc nền: {music_credit} ({cfg.get('music', {}).get('library', 'YouTube Audio Library')})")
+        library = cfg.get('music', {}).get('library', 'YouTube Audio Library')
+        extras.append(lang.pick(vi="Nhạc nền: ", ko="배경음악: ") + f"{music_credit} ({library})")
     if pub.get("disclosure"):
         extras.append(pub["disclosure"])
     if hashtags:

@@ -324,7 +324,7 @@ def tiktok_caption(video: dict) -> str:
     """Chú thích gợi ý cho TikTok: tiêu đề + dòng nguồn + ghi công nhạc + hashtag (API hộp thư
     không nhận chú thích — Du dán khi hoàn tất bài trong app)."""
     lines = [l.strip() for l in str(video.get("description") or "").splitlines()]
-    keep = [l for l in lines if l.startswith(("Nguồn:", "Nhạc nền:"))]
+    keep = [l for l in lines if l.startswith(("Nguồn:", "Nhạc nền:", "출처:", "배경음악:"))]
     tags = next((l for l in reversed(lines) if l.startswith("#")), "")
     return "\n".join(x for x in [video.get("title") or "", "", *keep, tags] if x is not None).strip()
 

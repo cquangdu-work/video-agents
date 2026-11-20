@@ -16,6 +16,8 @@ import unicodedata
 
 import requests
 
+from .. import lang
+
 log = logging.getLogger(__name__)
 
 SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
@@ -55,7 +57,8 @@ def count_popular_vietnamese_videos(query: str, cfg: dict):
     try:
         r = requests.get(SEARCH_URL, params={
             "key": key, "q": query, "part": "id", "type": "video",
-            "relevanceLanguage": "vi", "regionCode": "VN",
+            # kênh đang chạy (src/lang.py): kênh Việt tìm video tiếng Việt ở VN, kênh Hàn tìm video tiếng Hàn ở KR
+            "relevanceLanguage": lang.code(), "regionCode": {"vi": "VN", "ko": "KR"}[lang.code()],
             "maxResults": cfg.get("max_results", 10),
         }, timeout=15)
         r.raise_for_status()

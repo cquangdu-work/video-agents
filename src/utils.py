@@ -11,9 +11,13 @@ _STOPWORDS = {
 
 def norm_title(title: str) -> str:
     """Bỏ dấu, viết thường, bỏ ký tự lạ — để so sánh trùng lặp."""
-    s = unicodedata.normalize("NFD", title.lower())
+    # "đ" không tách dấu được bằng NFD -> trước 20/11 bị xoá hẳn ("biến đổi" thành hashtag "#bienoi...")
+    s = unicodedata.normalize("NFD", title.lower().replace("đ", "d"))
     s = "".join(c for c in s if unicodedata.category(c) != "Mn")
-    s = re.sub(r"[^a-z0-9\s]", " ", s)
+    # NFD tách chữ Hàn thành từng nét (jamo) — ghép lại rồi GIỮ chữ Hàn (kênh Hàn, 20/11/2026: trước đó
+    # hashtag "#출산율" ra rỗng và tiêu đề tiếng Hàn không bao giờ bị coi là trùng)
+    s = unicodedata.normalize("NFC", s)
+    s = re.sub(r"[^a-z0-9가-힣\s]", " ", s)
     return " ".join(s.split())
 
 

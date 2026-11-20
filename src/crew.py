@@ -96,6 +96,10 @@ def hunt_ideas(raw_items: list, cfg: dict) -> list:
     def numbers_in(i: dict) -> int:     # đếm con số có sẵn trong tiêu đề + tóm tắt
         return len(digit_set(f"{i['title']} {i['summary']}"))
 
+    from . import lang
+    # từ khoá chống trùng YouTube theo ngôn ngữ người xem của kênh (src/sources/youtube_check.py)
+    lang_kw = lang.pick(vi="TIẾNG VIỆT", ko="TIẾNG HÀN")
+    kw_example = lang.pick(vi="'tỷ suất sinh Hàn Quốc'", ko="'한국 출산율'")
     listing = "\n".join(
         f"- [{i['id']}] ({i['source_name']}, {i['lang']}, {numbers_in(i)} con số)"
         f" {i['title']} — {i['summary'][:150]}"
@@ -120,8 +124,8 @@ CẨN THẬN ĐƠN VỊ khi nhắc số liệu từ nguồn tiếng Hàn/Anh: �
 억 = 100 triệu; million = triệu, billion = tỷ. Không chắc thì đừng ghi con số vào góc.""",
         expected_output="""JSON array, mỗi phần tử:
 {"id": <id gốc>, "angle": "<góc cụ thể, 1-2 câu tiếng Việt>",
- "keyword": "<3-6 từ TIẾNG VIỆT nói đúng đề tài, như người Việt gõ tìm trên YouTube,
-             ví dụ 'tỷ suất sinh Hàn Quốc' — dùng để kiểm tra đã có ai làm chưa>",
+ "keyword": "<3-6 từ """ + lang_kw + """ nói đúng đề tài, như người xem gõ tìm trên YouTube,
+             ví dụ """ + kw_example + """ — dùng để kiểm tra đã có ai làm chưa>",
  "reason": "<vì sao chọn>"}""",
     )
     try:
@@ -411,6 +415,42 @@ LUẬT HOOK (cảnh 1 — quyết định người xem có ở lại không):
   thể tin", "sự thật sẽ khiến bạn…"; câu hỏi chung chung kiểu "…đạt bao nhiêu?"."""
 
 
+# ---------------------------------------------------------------- KÊNH TIẾNG HÀN (20/11/2026)
+# Lời nhắc chung vẫn bằng tiếng Việt (đã được tinh chỉnh qua nhiều ca thật); khối dưới đây đổi NGÔN NGỮ ĐẦU RA
+# và đưa ví dụ / khuôn cấm bằng tiếng Hàn. Các cổng code soát kịch bản tiếng Hàn ở src/claims_ko.py, src/story.py.
+KO_WRITER = """
+
+NGÔN NGỮ — KÊNH NÀY DÀNH CHO NGƯỜI HÀN (ưu tiên hơn mọi ví dụ tiếng Việt ở trên):
+- "voice", "hooks", "claims" viết bằng TIẾNG HÀN tự nhiên như YouTuber Hàn kể chuyện (đuôi -요/-습니다/-죠, câu
+  ngắn). Ví dụ tiếng Việt ở trên chỉ để hiểu ý — KHÔNG dịch nguyên văn.
+- "Từ" = cụm cách nhau bởi dấu cách (어절). Mỗi cảnh 6-9 cụm.
+- Tóm tắt nguồn đã viết bằng tiếng Hàn, số theo kiểu Hàn: chép ĐÚNG dạng số trong đó (1,910시간, 0.75명, 36.7%).
+  Chỉ dùng 만/억/조 khi tóm tắt đã ghi sẵn dạng đó (vd "약 5,170만"); không tự quy đổi đơn vị.
+- Hiệu hai tỷ lệ % là "%p" (퍼센트포인트), không phải "%".
+- Tên nước đúng như trong tóm tắt (한국, 일본, 중국...). So sánh bằng con số, giọng trung tính — không khơi gợi đối
+  đầu dân tộc (한일/한중 감정).
+- Ví dụ hook ĐÚNG KIỂU (không chép nguyên): a) "한국 출산율 0.75명, 일본보다 낮습니다." b) "2024년 한국은 1980년 일본
+  수준" — CHỈ khi tóm tắt có dòng "같은 수준" ghi đúng hai năm đó. c) "129개국 중 73위, 한국 근로시간의 의외의 순위".
+- CẤM: mở bằng "왜…?" với ý tưởng bảng số; "충격", "경악", "소름", "하지 마세요", "알고 계셨나요", "안녕하세요",
+  "오늘은"; câu đệm "데이터에 따르면", "통계에 따르면", "수치를 보면", "즉", "다시 말해"; nêu nguyên nhân (때문,
+  정책, 덕분...) mà tóm tắt không nói; "역대 최고/최저" (bảng chỉ có từ năm đầu); "예상/전망/것입니다" cho năm đã
+  có số; "계속/꾸준히 증가" khi dãy số có lúc đi ngược.
+- Mọi con số viết bằng CHỮ SỐ — không viết "칠십삼 퍼센트". Không để sót chữ Việt trong lời đọc."""
+
+KO_PRODUCER = """
+
+NGÔN NGỮ: kênh tiếng Hàn — MỌI chữ hiện trên hình (title, label, caption, tên trục...) viết TIẾNG HÀN, ngắn
+(≤ 12 ký tự cho nhãn). Số viết kiểu Hàn (1,234.5). "voice" chép NGUYÊN VĂN câu tiếng Hàn của kịch bản."""
+
+
+def language_block(kind: str) -> str:
+    """Khối lời nhắc đổi ngôn ngữ đầu ra cho kênh không phải tiếng Việt ("" với kênh Việt)."""
+    from . import lang
+    if lang.code() != "ko":
+        return ""
+    return {"writer": KO_WRITER, "producer": KO_PRODUCER}.get(kind, "")
+
+
 def content_problems(script: dict, summary: str) -> list:
     """Lỗi NỘI DUNG mà code soát được với bảng số của ý tưởng (src/claims.py): so sánh sai, nêu nguyên
     nhân mà bảng không nói, "liên tục tăng" trái dãy số, hook "Vì sao…?" không trả lời được. Dùng chung
@@ -510,7 +550,7 @@ Yêu cầu CỨNG về cấu trúc (video đổi cảnh mỗi 2-4 giây):
 - KHÔNG TỰ TÍNH số mới (hiệu số "tăng thêm 168", tỷ số "gấp 86 lần", số năm "sau 35 năm"): tóm tắt
   đã tính sẵn nhiều dòng "gấp N lần", "Sau N năm" — chỉ dùng đúng những con số đã có.
 - Mọi con số trong lời đọc phải ghi rõ lấy từ nguồn nào.
-{HOOK_GUIDE}{recent_block}""" + data_story + (lessons or "")
+{HOOK_GUIDE}{recent_block}""" + data_story + (lessons or "") + language_block("writer")
     if feedback:
         base_description += f"""
 
@@ -524,8 +564,9 @@ AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — 
     description, best, best_problems = base_description, None, None
     tries = 2
     for attempt in range(tries):
+        from . import lang
         answer = _run_single_task(
-            role="Biên kịch video ngắn tiếng Việt",
+            role=f"Biên kịch video ngắn {lang.locale()['name']}",
             goal="Kịch bản cuốn hút, chính xác, dựng được bằng biểu đồ",
             description=description, expected_output=expected, models=writer_chain())
         try:
@@ -539,7 +580,7 @@ AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — 
         story.pick_hook(script, recent_openers, is_sourced=lambda text: not unsourced_numbers(
             {"scenes": [{"voice": text}]}, idea, source_text)
             and not claims.comparison_problems([text], summary)
-            and not (claims.data_table(str(summary or "")) and claims.WHY_HOOK.search(text)),
+            and not claims.why_hook_problem({"scenes": [{"voice": text}]}, summary),
             bonus=hook_bonus, subject=story.subject_words(summary) if data_story else set())
         problems = script_problems(script, cfg, recent_openers)
         problems += content_problems(script, summary)
@@ -839,7 +880,8 @@ Yêu cầu:
   đồ họa LIỀN NHAU, mỗi cảnh minh họa một ý của câu theo đúng thứ tự ý đó được đọc.
   Các cảnh ấy ghi CÙNG một "voice" nguyên văn cả câu: máy chỉ đọc câu đó MỘT lần
   rồi chia thời lượng cho các cảnh. Không chép "voice" của câu này sang cảnh của câu khác.
-- KHÔNG thêm template "intro" (video không còn thẻ intro: cảnh 1 là câu hook).""" + (lessons or "")
+- KHÔNG thêm template "intro" (video không còn thẻ intro: cảnh 1 là câu hook).""" + (lessons or "") \
+        + language_block("producer")
     expected = """JSON array, mỗi phần tử:
 {"template": "<tên template>", "seconds": <số>, "voice": "<lời đọc nguyên văn>", "params": {...}}"""
 
@@ -1116,8 +1158,12 @@ def write_metadata(idea: dict, scenes: list, hooks: list, cfg: dict,
     """
     from .analysis.formula import load_formula
     from .story import safe_patterns
+    from . import lang
     f = load_formula() or {}
     voice = " ".join(str(s.get("voice", "")) for s in scenes)
+    lang_name = lang.locale()["name"]
+    hashtag_hint = lang.pick(vi='không dấu, vd "#khihau"', ko='chữ Hàn, vd "#출산율"')
+    tag_hint = lang.pick(vi='có dấu, vd "biến đổi khí hậu"', ko='vd "합계출산율", "한국 일본 비교"')
     description = f"""Viết thông tin đăng bài cho một video ngắn dọc (YouTube Shorts + TikTok)
 của kênh "{cfg['channel']['name']}" — {cfg['channel']['description']}
 
@@ -1131,16 +1177,16 @@ Khuôn tiêu đề hay thắng ở kênh cùng mảng (tham khảo, không bắt
 Luật chính sách (ƯU TIÊN CAO HƠN khuôn tiêu đề): {cfg['policy_rules']}
 
 Yêu cầu:
-- "title": tiếng Việt, <= 70 ký tự, gây tò mò nhưng TRUNG THỰC với nội dung.
+- "title": {lang_name}, <= 70 ký tự, gây tò mò nhưng TRUNG THỰC với nội dung.
   Không viết hoa cả câu, không doạ dẫm. Nếu dùng con số thì phải là con số có
   NGUYÊN VĂN trong lời đọc ở trên, viết bằng chữ số. Không tự thêm hashtag vào title.
   Số liệu là TỶ LỆ hoặc BÌNH QUÂN (ý tưởng: "{idea.get('title', '')}") thì title PHẢI giữ
   đơn vị đó ("% GDP", "trên 100 dân", "bình quân đầu người", "tỷ lệ"): "FDI Việt Nam gấp 5 lần
   Hàn Quốc" khi số là FDI tính theo % GDP là SAI NGHĨA (người xem hiểu thành lượng vốn).
-- "description": 1-2 câu tiếng Việt tóm tắt video nói gì, có 1 con số đắt nhất.
+- "description": 1-2 câu {lang_name} tóm tắt video nói gì, có 1 con số đắt nhất.
   KHÔNG ghi nguồn, KHÔNG ghi hashtag (hệ thống tự thêm).
-- "hashtags": 3 hashtag chủ đề, không dấu, viết liền (vd "#khihau").
-- "tags": 8-12 từ khoá tìm kiếm tiếng Việt có dấu (vd "biến đổi khí hậu")."""
+- "hashtags": 3 hashtag chủ đề, viết liền ({hashtag_hint}).
+- "tags": 8-12 từ khoá tìm kiếm {lang_name} ({tag_hint})."""
     try:
         from .yt_insights import metadata_block    # từ khoá người xem thật sự gõ (agent Hiểu YouTube)
         description += metadata_block()

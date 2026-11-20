@@ -19,6 +19,8 @@ Các hàm:
 """
 import re
 
+from . import lang
+
 # (mẫu, lý do) — so trên chữ thường. Câu mở đầu phạm một mẫu là hỏng.
 BANNED_HOOKS = [
     (r"^\W*đừng\b", "khuôn “Đừng … nữa!” — câu view theo mẫu"),
@@ -42,6 +44,7 @@ FILLER = re.compile(r"^(số liệu (cho thấy|chỉ ra)|tính toán cho thấy
                     r"đáng chú ý( là)?|có thể thấy( rằng)?|thống kê cho thấy)\s*,?\s*", re.I)
 
 HOOK_MIN_WORDS, HOOK_MAX_WORDS = 6, 16
+HOOK_MIN_WORDS_KO, HOOK_MAX_WORDS_KO = 4, 12      # tiếng Hàn đếm theo cụm cách nhau bởi dấu cách (어절)
 
 # Số VIẾT BẰNG CHỮ ("bảy mươi ba phần trăm", "năm hai nghìn không trăm mười tám"): lọt qua mọi
 # cổng đối chiếu số (code chỉ nhận ra chữ số) — ca thật 12/11 khi thử dàn bài mới. Giọng đọc tự
@@ -53,14 +56,34 @@ SPELLED_NUMBER = re.compile(
     rf"|\b{_DIGIT_WORD}\s+phần\s+trăm\b", re.I)                                     # ba phần trăm
 FOREIGN_SCRIPT = re.compile(r"[ᄀ-ᇿ぀-ヿ㄰-㆏一-鿿가-힯]")
 
+# ------------------------------------------------ KÊNH TIẾNG HÀN (20/11/2026) — cùng luật, mẫu tiếng Hàn
+BANNED_HOOKS_KO = [
+    (r"(하지\s*마세요|하지\s*마라|절대\s*하지)", "khuôn “đừng…” (하지 마세요) — câu view theo mẫu"),
+    (r"(충격|경악|소름|믿을\s*수\s*없|말도\s*안\s*되|역대급\s*반전|실화)", "từ giật gân — câu view thao túng cảm xúc"),
+    (r"^\W*(안녕하세요|오늘은|이번\s*영상|함께\s*알아)", "mở đầu kiểu dẫn chương trình"),
+    (r"(알고\s*계셨나요|알고\s*있었나요|아시나요)", "“Bạn có biết…” (알고 계셨나요) — mở đầu nhạt"),
+    (r"(99%|모르는\s*사실|아무도\s*모르)", "khuôn “99% không biết” — câu view theo mẫu"),
+]
+CONTRAST_KO = re.compile(r"(하지만|그런데|불과|겨우|배|앞지|추월|넘어|제쳤|위\b|만에|보다|역전|꼴찌|1위|절반|수준)")
+FILLER_KO = re.compile(r"^(데이터에\s*따르면|자료에\s*따르면|통계에\s*따르면|수치를\s*보면|살펴보면|"
+                       r"즉|다시\s*말해|구체적으로)\s*,?\s*")
+# số viết bằng chữ Hán–Hàn ("칠십삼 퍼센트", "이십 배"): code không đối chiếu được -> phải viết chữ số
+SPELLED_NUMBER_KO = re.compile(r"(?<![가-힣])[일이삼사오육칠팔구]?[십백천][일이삼사오육칠팔구십백천]*\s*"
+                               r"(?:퍼센트|프로|명|배|년|세|위|달러|시간)|퍼센트")
+# kênh Hàn: lời đọc còn chữ VIỆT có dấu (model lẫn ngôn ngữ) — chữ Latin trần (GDP, OECD) thì được
+VIETNAMESE_LETTERS = re.compile(r"[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]", re.I)
+
 
 def spelled_numbers(text: str) -> list:
-    return [m.group(0) for m in SPELLED_NUMBER.finditer(str(text or ""))]
+    pat = SPELLED_NUMBER_KO if lang.code() == "ko" else SPELLED_NUMBER
+    return [m.group(0) for m in pat.finditer(str(text or ""))]
 
 
 def foreign_script(text: str) -> bool:
-    """Lời đọc còn chữ Hàn/Hán/Nhật chưa dịch (giọng đọc tiếng Việt sẽ đọc lạ hoặc bỏ qua)."""
-    return bool(FOREIGN_SCRIPT.search(str(text or "")))
+    """Lời đọc còn chữ nước ngoài chưa dịch: kênh Việt — chữ Hàn/Hán/Nhật; kênh Hàn — chữ Việt có dấu
+    (giọng đọc sẽ đọc lạ hoặc bỏ qua)."""
+    pat = VIETNAMESE_LETTERS if lang.code() == "ko" else FOREIGN_SCRIPT
+    return bool(pat.search(str(text or "")))
 
 
 def _words(text: str) -> list:
@@ -77,7 +100,7 @@ def opener(text: str) -> str:
 
 def hook_problems(text: str) -> list:
     low = " ".join(str(text or "").lower().split())
-    out = [why for pat, why in BANNED_HOOKS if re.search(pat, low)]
+    out = [why for pat, why in (BANNED_HOOKS_KO if lang.code() == "ko" else BANNED_HOOKS) if re.search(pat, low)]
     if spelled_numbers(text):
         out.append("số viết bằng chữ — phải viết chữ số để máy đối chiếu nguồn")
     if foreign_script(text):
@@ -91,10 +114,12 @@ def hook_score(text: str, recent_openers=()) -> float:
     if hook_problems(text):
         return -10.0
     n = len(_words(text))
+    ko = lang.code() == "ko"
+    lo, hi = (HOOK_MIN_WORDS_KO, HOOK_MAX_WORDS_KO) if ko else (HOOK_MIN_WORDS, HOOK_MAX_WORDS)
     score = 0.0
     score += 2 if re.search(r"\d", text or "") else 0
-    score += 1 if CONTRAST.search(str(text).lower()) else 0
-    score += 1 if HOOK_MIN_WORDS <= n <= HOOK_MAX_WORDS else (-1 if n > HOOK_MAX_WORDS + 4 else 0)
+    score += 1 if (CONTRAST_KO if ko else CONTRAST).search(str(text).lower()) else 0
+    score += 1 if lo <= n <= hi else (-1 if n > hi + 4 else 0)
     score -= 2 if opener(text) in set(recent_openers) else 0
     return score
 
@@ -108,11 +133,22 @@ _GENERIC = {"tỷ", "lệ", "người", "dân", "số", "năm", "trên", "so", "
             "kinh", "tế", "chỉ", "việt", "nam", "hàn", "quốc", "thế", "giới", "bản", "đồ", "cuộc", "đua", "bán"}
 
 
+_GENERIC_KO = {"비율", "인구", "1인당", "대비", "연간", "국가", "세계", "지도", "순위", "경쟁", "한국", "일본", "주요",
+               "경제", "수", "및", "의", "등", "전체", "평균"}
+
+
 def subject_words(text: str) -> set:
     """Từ ĐẶC TRƯNG của chỉ số mà video nói tới, đọc từ tóm tắt ("Chỉ số: X (đơn vị)…") hoặc tiêu đề ý
     tưởng ("Cuộc đua X: …", "Bản đồ thế giới: X năm …", "X: Việt Nam và Hàn Quốc…"). Rỗng = không phải
     ý tưởng bảng số (bài báo)."""
     t = " ".join(str(text or "").split())
+    if lang.code() == "ko":                       # "지표: X(단위)", "X 순위 경쟁: …", "세계 지도: 2024년 X — …"
+        m = (re.search(r"지표:\s*([^(.]+)", t) or re.match(r"(.+?)\s+순위 경쟁", t)
+             or re.match(r"세계 지도:\s*\d{4}년\s+(.+?)(?:\s+—|$)", t) or re.match(r"([^:<>/]{2,80}):\s", t))
+        if not m:
+            return set()
+        return {w for w in re.findall(r"[\w%]+", m.group(1)) if w not in _GENERIC_KO and not w.isdigit()
+                and len(w) >= 2}
     m = (re.search(r"Chỉ số:\s*([^(.]+)", t) or re.match(r"Cuộc đua\s+([^:(]+)", t)
          or re.match(r"Bản đồ thế giới:\s*(.+?)\s+năm\s+\d{4}", t)
          or re.match(r"([^:<>/]{4,80}):\s", t))        # "X: Việt Nam và Hàn Quốc…" (không phải HTML / link)
@@ -126,6 +162,9 @@ def names_subject(text: str, words: set) -> bool:
     """Câu có nhắc tới chỉ số không (ít nhất 2 từ đặc trưng, hoặc đủ cả khi chỉ có 1 từ như "GDP")."""
     if not words:
         return True
+    if lang.code() == "ko":                       # trợ từ dính liền danh từ ("출산율은"): so chuỗi con
+        t = str(text or "")
+        return sum(1 for w in words if w in t) >= min(2, len(words))
     have = set(re.findall(r"\w+", str(text or "").lower()))
     return len(words & have) >= min(2, len(words))
 
@@ -163,9 +202,10 @@ def pick_hook(script: dict, recent_openers=(), is_sourced=lambda text: True, bon
 def strip_fillers(script: dict) -> int:
     """Gọt câu đệm ở đầu mỗi câu ("Số liệu cho thấy Việt Nam…" -> "Việt Nam…"). Trả về số câu đã gọt."""
     n = 0
+    filler = FILLER_KO if lang.code() == "ko" else FILLER
     for s in script.get("scenes") or []:
         v = str(s.get("voice") or "")
-        cut = FILLER.sub("", v, count=1)
+        cut = filler.sub("", v, count=1)
         if cut != v and len(cut.split()) >= 4:          # gọt xong còn quá ngắn thì giữ nguyên
             s["voice"] = cut[:1].upper() + cut[1:]
             n += 1
@@ -186,6 +226,10 @@ def data_numbers(text: str) -> set:
         if re.fullmatch(r"(?:19|20)\d{2}", raw):
             continue
         if re.search(r"(gấp|thứ|hạng|vị trí|top|cứ|trên)\s*$", before) or re.match(r"\s*lần\b", after):
+            continue
+        # kênh Hàn: "3배", "5위", "10명 중 4명", "129개국 중 73위"
+        if re.match(r"\s*(배|위|번째|등)", after) or re.match(r"\s*(명|대|개국|분의)?\s*중(?![가-힣])", after) \
+                or re.search(r"(중|상위|하위)\s*$", before):
             continue
         if raw.isdigit() and int(raw) <= 10 and not after.startswith("%"):
             continue
@@ -222,7 +266,11 @@ BACKTRACK = re.compile(r"^\W*(hãy\s+)?(cùng\s+)?(nhìn lại|quay (ngược|l�
                        re.I)
 GENERIC = re.compile(r"\b(trong tay bạn|cuộc sống (hằng|hàng) ngày|thay đổi hoàn toàn cách|"
                      r"mỗi ngày chúng ta|ai trong chúng ta cũng)\b", re.I)
-_YEARS = re.compile(r"\b(?:19|20)\d{2}\b")
+_YEARS = re.compile(r"\b(?:19|20)\d{2}(?=\b|년)")
+DEFINITION_KO = re.compile(r"(이\s*지표는|라는\s*지표|(으)?로\s*계산|(을|를)\s*뜻합니다|(을|를)\s*의미합니다|"
+                           r"측정하는\s*지표|나타내는\s*지표)")
+BACKTRACK_KO = re.compile(r"^\W*(시간을\s*)?(되돌아|거슬러\s*올라|돌아가\s*보|과거로)")
+GENERIC_KO = re.compile(r"(우리\s*삶|일상생활|우리\s*모두|여러분의\s*손|완전히\s*바꾼)")
 
 
 def opening_problems(script: dict) -> tuple:
@@ -237,14 +285,17 @@ def opening_problems(script: dict) -> tuple:
         return [], []
     hook_years = set(_YEARS.findall(voices[0]))
     hard, soft = [], []
+    ko = lang.code() == "ko"
+    definition, backtrack, generic = ((DEFINITION_KO, BACKTRACK_KO, GENERIC_KO) if ko
+                                      else (DEFINITION, BACKTRACK, GENERIC))
     for k, v in enumerate(voices[1:], 2):
         # câu định nghĩa thật không có con số; "Năm 2025, chỉ số này là 68,6%" là nêu giá trị — được
-        if DEFINITION.search(v) and not re.search(r"\d", v):
+        if definition.search(v) and not re.search(r"\d", v):
             hard.append(f"cảnh {k} định nghĩa chỉ số (“{v[:60]}”) — định nghĩa để trên chữ của biểu"
                         " đồ, lời đọc 15 giây đầu phải chứng minh hook bằng con số")
-        elif BACKTRACK.search(v) and not (set(_YEARS.findall(v)) & hook_years):
+        elif backtrack.search(v) and not (set(_YEARS.findall(v)) & hook_years):
             soft.append(f"cảnh {k} lùi về quá khứ ngay đầu video (“{v[:60]}”) — chứng minh hook trước")
-        elif GENERIC.search(v):
+        elif generic.search(v):
             soft.append(f"cảnh {k} là câu đệm chung chung (“{v[:60]}”)")
     empty = [not re.search(r"\d", v) for v in voices[1:]]
     if any(a and b for a, b in zip(empty, empty[1:])):
@@ -278,5 +329,6 @@ def ending_problem(script: dict) -> str:
 
 def safe_patterns(items) -> list:
     """Bỏ khỏi "công thức đối thủ" những khuôn/luật câu view mà kênh không được dùng."""
-    bad = re.compile(r"đừng|sai lầm|phủ định mạnh|cấm đoán|sốc|giật mình|chết lặng|khiến bạn", re.I)
+    bad = re.compile(r"đừng|sai lầm|phủ định mạnh|cấm đoán|sốc|giật mình|chết lặng|khiến bạn|"
+                     r"하지\s*마|충격|경악|소름|99%", re.I)
     return [x for x in items or [] if not bad.search(str(x))]
