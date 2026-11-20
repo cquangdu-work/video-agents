@@ -129,6 +129,17 @@ audiences (Facebook at half weight). Posting time is a Thompson-sampling experim
 seeded per video so a retry never moves a Reel to another slot. Facebook comments flow through the same
 approve-before-posting community cards as YouTube.
 
+**One codebase, two language channels** (`src/lang.py`, `src/claims_ko.py`, `config/channel_ko.yaml`). A
+Korean-language channel runs from the same code with its own config, data, tokens and schedule. Everything the
+code writes for the model (data summaries, computed "story beats") has paired Vietnamese/Korean text, number
+formats follow the audience (Vietnamese `1.234,5` vs Korean `1,234.5` — a Korean reader would take a
+Vietnamese-formatted "2.462" as two-point-four, a 1000× error the digit-matching gate cannot see), large-number
+gates also try Korean 10,000-based units (만/억), and Korean particles are chosen by the final consonant. The
+fact gates were rewritten for Korean's subject–object–verb order ("A는 B보다 높다", "A는 B의 N배") rather than
+translated pattern-for-pattern, with the error messages kept identical so the learning memory still classifies
+them. Measured before tuning: Korean narration runs ~1 word-phrase per second because numbers are read out in
+full, so the word budget is per-language config, not a constant.
+
 **Designed around free-tier limits, measured in production.** Gemini TTS allows ~15 calls/day,
 so the whole script is voiced in one call and split per sentence with forced alignment
 (`audio/batch.py`); Whisper only supplies timestamps while subtitles use the script's own words

@@ -354,6 +354,26 @@ bấm, chạy suốt). Xem lịch: `systemctl --user list-timers`.
 
 DB chính thức nằm trên VM (`~/video-agents/data/pipeline.db`); DB trên laptop chỉ để thử.
 
+### Kênh thứ hai: tiếng Hàn (từ 20/11/2026)
+
+Cùng bộ code, mỗi kênh một file cấu hình (`config/channel.yaml` = kênh Việt, `config/channel_ko.yaml` = kênh
+Hàn "숫자로 보는 세계"), chọn bằng biến `CHANNEL_CONFIG` trong `.env` (không đặt = kênh Việt). `src/lang.py`
+quyết định ngôn ngữ: kiểu viết số (1.234,5 / 1,234.5), số lớn (triệu / 만·억), trợ từ tiếng Hàn, tên nước
+(`assets/geo/names_ko.json`), cổng kiểm tra câu chữ (`src/claims_ko.py`), phông chữ và chữ trên hình (Remotion
+đọc `props.lang`). Tin duyệt của kênh Hàn kèm bản dịch tiếng Việt.
+
+```bash
+# trên VM, trong thư mục kênh Việt
+bash deploy/setup_ko.sh     # tạo ~/video-agents-ko (clone, .env riêng, dùng chung venv/node_modules/nhạc), cài unit -ko
+# điền TELEGRAM_BOT_TOKEN của bot MỚI vào ~/video-agents-ko/.env, rồi:
+systemctl --user enable --now video-agents-ko-review.service      # gửi /capquyen cho bot mới, chọn kênh Hàn
+systemctl --user enable --now video-agents-ko-daily.timer video-agents-ko-daily-retry.timer video-agents-ko-weekly.timer
+# sau mỗi lần đẩy code:
+git -C ~/video-agents-ko pull --ff-only && systemctl --user restart video-agents-ko-review
+```
+
+Chạy thử một lệnh như kênh Hàn trên laptop: `CHANNEL_CONFIG=config/channel_ko.yaml python -m src.main ...`.
+
 ## Agent Phân tích (hằng tuần)
 
 ```bash
