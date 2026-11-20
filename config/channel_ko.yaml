@@ -154,7 +154,7 @@ daily:
   utc_offset_hours: 9
   max_attempts: 2
   max_script_age_days: 3
-  min_script_words: 45       # tiếng Hàn: "từ" = cụm cách nhau bởi dấu cách (어절), ít hơn tiếng Việt
+  min_script_words: 24       # tiếng Hàn: "từ" = cụm (어절), ~1,1 cụm/giây -> 24 cụm ≈ 22 giây
   min_script_numbers: 4
 
 music:
@@ -168,9 +168,11 @@ music:
 pacing:
   scene_seconds_min: 2
   scene_seconds_max: 4
-  # CHƯA ĐO: tiếng Hàn đếm theo cụm cách nhau bởi dấu cách (어절), mỗi cụm dài hơn một tiếng Việt. Số tạm
-  # 2,6 cụm/giây — đo lại sau video đầu tiên (giọng TTS_VOICE trong .env của thư mục kênh Hàn).
-  words_per_second: 2.6
+  # ĐO THẬT 20/11/2026 (giọng Kore, Gemini TTS, kịch bản 11 câu nhiều số): 75 cụm (어절) trong 73,7 giây =
+  # 1,02 cụm/giây. Tiếng Hàn đọc số rất dài ("2024년" = 이천이십사년, "0.75명" = 영점칠오명): tính cả phần đọc số
+  # thì ≈4,7 âm tiết/giây — tốc độ nói bình thường. Kịch bản ít số hơn đọc nhanh hơn chút -> lấy 1,1.
+  words_per_second: 1.1
+  words_per_scene: 4.5       # mỗi cảnh 3-5 cụm ≈ 3-5 giây (tiếng Việt: ~12 từ ≈ 3,5 giây)
 
 style:
   experiments: true

@@ -69,7 +69,7 @@ FILLER_KO = re.compile(r"^(데이터에\s*따르면|자료에\s*따르면|통계
                        r"즉|다시\s*말해|구체적으로)\s*,?\s*")
 # số viết bằng chữ Hán–Hàn ("칠십삼 퍼센트", "이십 배"): code không đối chiếu được -> phải viết chữ số
 SPELLED_NUMBER_KO = re.compile(r"(?<![가-힣])[일이삼사오육칠팔구]?[십백천][일이삼사오육칠팔구십백천]*\s*"
-                               r"(?:퍼센트|프로|명|배|년|세|위|달러|시간)|퍼센트")
+                               r"(?:퍼센트|프로|명|배|년|세|위|달러|시간)")   # "87.5퍼센트" (chữ số + 퍼센트) thì được
 # kênh Hàn: lời đọc còn chữ VIỆT có dấu (model lẫn ngôn ngữ) — chữ Latin trần (GDP, OECD) thì được
 VIETNAMESE_LETTERS = re.compile(r"[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]", re.I)
 

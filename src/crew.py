@@ -215,9 +215,11 @@ def scene_budget(cfg: dict) -> tuple:
     """(ít nhất, nhiều nhất) số cảnh để Biên kịch nhắm tới: mỗi cảnh một câu ~12 từ. Trần tính
     sát trần số từ — đo 19/11: cho khoảng cảnh rộng (12-19) thì model viết 15 cảnh x 15 từ = 222 từ."""
     lo_words, hi_words = word_budget(cfg)
+    # số từ mỗi cảnh: tiếng Việt ~12 từ (≈3,5 giây); tiếng Hàn đọc chậm theo cụm vì số đọc rất dài -> 4,5 cụm
+    per = float(cfg.get("pacing", {}).get("words_per_scene", 12))
     # video ngắn (thử nghiệm độ dài 30 giây, 20/11) cần ít cảnh hơn: sàn 6 thay vì 10
-    lo = max(6, -(-lo_words // 12))
-    return lo, max(lo, min(SCRIPT_MAX_SCENES, hi_words // 12))
+    lo = max(6, int(-(-lo_words // per)))
+    return lo, max(lo, min(SCRIPT_MAX_SCENES, int(hi_words // per)))
 
 
 SCRIPT_MIN_NUMBERS = 4   # kênh "Thế giới qua con số" — lời đọc ít số là hỏng từ gốc
@@ -423,7 +425,8 @@ KO_WRITER = """
 NGÔN NGỮ — KÊNH NÀY DÀNH CHO NGƯỜI HÀN (ưu tiên hơn mọi ví dụ tiếng Việt ở trên):
 - "voice", "hooks", "claims" viết bằng TIẾNG HÀN tự nhiên như YouTuber Hàn kể chuyện (đuôi -요/-습니다/-죠, câu
   ngắn). Ví dụ tiếng Việt ở trên chỉ để hiểu ý — KHÔNG dịch nguyên văn.
-- "Từ" = cụm cách nhau bởi dấu cách (어절). Mỗi cảnh 6-9 cụm.
+- "Từ" = cụm cách nhau bởi dấu cách (어절). Mỗi cảnh CHỈ 3-5 cụm (tiếng Hàn đọc số rất dài: "2024년" =
+  이천이십사년 — đo thật 1 cụm/giây, nên câu 5 cụm đã dài 5 giây). Ít năm, ít số lẻ trong một câu.
 - Tóm tắt nguồn đã viết bằng tiếng Hàn, số theo kiểu Hàn: chép ĐÚNG dạng số trong đó (1,910시간, 0.75명, 36.7%).
   Chỉ dùng 만/억/조 khi tóm tắt đã ghi sẵn dạng đó (vd "약 5,170만"); không tự quy đổi đơn vị.
 - Hiệu hai tỷ lệ % là "%p" (퍼센트포인트), không phải "%".
