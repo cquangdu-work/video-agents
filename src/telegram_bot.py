@@ -110,6 +110,12 @@ def clear_buttons(message_id: int) -> None:
           reply_markup={"inline_keyboard": []})
 
 
+def delete_message(message_id) -> None:
+    """Xoá một tin trong cuộc trò chuyện (vd tin Du gửi có chứa token). Lỗi thì bỏ qua."""
+    if message_id:
+        _call("deleteMessage", chat_id=chat_id(), message_id=message_id)
+
+
 def code(text: str) -> str:
     """Bọc chữ trong <code> (chế độ HTML): trên điện thoại chạm một cái là copy."""
     return f"<code>{html.escape(str(text))}</code>"

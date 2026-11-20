@@ -34,7 +34,7 @@ OUTPUT = ROOT / "output"
 CONFIG_PATH = ROOT / "config" / "channel.yaml"
 
 _YT_LINK = re.compile(r"(?:youtu\.be/|youtube\.com/(?:shorts/|watch\?v=|live/))([\w-]{11})")
-_CALLBACK = re.compile(r"^(ok|no|done|retry|tt):(\d+)$")
+_CALLBACK = re.compile(r"^(ok|no|done|retry|tt|fb):(\d+)$")
 
 
 def load_config() -> dict:
@@ -212,8 +212,98 @@ def publish(con, video: dict, cfg: dict) -> None:
         raise ValueError(f"Video #{video['id']} chưa được duyệt (status={video['status']})")
     mode = cfg["publish"]["youtube"].get("mode", "manual")
     (_publish_api if mode == "api" else _publish_manual)(con, video, cfg)
-    if video.get("script_id"):              # video dài 16:9 không hợp TikTok
+    if video.get("script_id"):              # video dài 16:9 không hợp TikTok / Reels
         push_tiktok(con, video, cfg)
+        push_facebook(con, video, cfg)
+
+
+# --------------------------------------------------------------- Facebook Reels
+def push_facebook(con, video: dict, cfg: dict) -> None:
+    """Đăng video đã duyệt lên Trang Facebook dạng Reel (src/publish/facebook.py), hẹn cùng giờ YouTube.
+    Mỗi video một lần (chốt bằng trạng thái fb_publish_<id>, đặt TRƯỚC khi tải lên để hai lượt bấm
+    không đăng đôi); lỗi thì gỡ chốt và đưa nút thử lại. Chưa có app Facebook thì bỏ qua im lặng."""
+    from .publish import facebook, youtube
+    import os
+    fcfg = cfg["publish"].get("facebook") or {}
+    key = f"fb_publish_{video['id']}"
+    if not fcfg.get("enabled") or not os.getenv("FACEBOOK_APP_ID") or db.get_state(con, key):
+        return
+    if not facebook.connected():
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if db.get_state(con, "fb_auth_nagged") != today:       # nhắc tối đa mỗi ngày một lần
+            db.set_state(con, "fb_auth_nagged", today)
+            tg.send_message("ℹ️ Chưa đăng được lên Facebook: chưa kết nối Trang — gửi /facebook để xem cách.")
+        return
+    try:
+        from .assemble import ffprobe_duration
+        secs = ffprobe_duration(ROOT / video["file"])
+    except Exception:
+        secs = 0.0
+    if secs > facebook.MAX_SECONDS:
+        tg.send_message(f"ℹ️ Video #{video['id']} dài {secs:.0f} giây — Reels qua API tối đa"
+                        f" {facebook.MAX_SECONDS} giây nên không đăng lên Facebook.")
+        return
+    state, at = str(fcfg.get("video_state") or "SCHEDULED").upper(), None
+    if state == "SCHEDULED":
+        iso = youtube.compute_publish_at(fcfg)
+        if iso:
+            at = int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
+        else:
+            state = "PUBLISHED"
+    db.set_state(con, key, "uploading")
+    try:
+        res = facebook.upload_reel(ROOT / video["file"], facebook.caption(video), state, at,
+                                   bool(fcfg.get("ai_generated", True)))
+    except facebook.FacebookAuthError as exc:
+        db.set_state(con, key, "")
+        tg.send_message(f"⚠️ Chưa đăng được video #{video['id']} lên Facebook: {exc}\nKết nối lại: /facebook",
+                        buttons=[[("🔁 Thử lại Facebook", f"fb:{video['id']}")]])
+        return
+    except Exception as exc:
+        log.exception("Đăng Facebook lỗi")
+        db.set_state(con, key, "")
+        tg.send_message(f"⚠️ Đăng video #{video['id']} lên Facebook lỗi:\n{exc}",
+                        buttons=[[("🔁 Thử lại Facebook", f"fb:{video['id']}")]])
+        return
+    db.set_state(con, key, res["video_id"])
+    log.info("Đã đăng video #%d lên Facebook: %s (%s, %s)", video["id"], res["url"], res["state"], res["status"])
+    when = (f"hẹn công khai lúc {_local_times(datetime.fromtimestamp(at, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'), fcfg)}"
+            if res["state"] == "SCHEDULED" else
+            "lưu NHÁP trên Trang (vào Meta Business Suite để đăng)" if res["state"] == "DRAFT" else "đã công khai")
+    tg.send_message(f"📘 Facebook Reels: video #{video['id']} {when}.\n{res['url']}")
+
+
+def _connect_facebook(con, msg: dict, text: str) -> None:
+    """/facebook: hướng dẫn kết nối. /facebook <token>: đổi token -> page token, lưu trên VM, xoá tin có token."""
+    from .publish import facebook
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2:
+        status = ""
+        if facebook.connected():
+            try:
+                who = facebook.whoami()
+                status = f"✅ Đang kết nối Trang: {who.get('name')} ({who.get('followers_count', '?')} người theo dõi)\n\n"
+            except Exception as exc:
+                status = f"⚠️ Token Trang không dùng được nữa: {exc}\n\n"
+        tg.send_message(
+            status + "📘 Kết nối Trang Facebook (một lần, ~5 phút):\n"
+            "1. developers.facebook.com → Tạo ứng dụng (loại Business / “Khác”), để chế độ Development.\n"
+            "2. Cài đặt → Thông tin cơ bản: chép App ID và App Secret vào .env trên VM (FACEBOOK_APP_ID,"
+            " FACEBOOK_APP_SECRET) rồi khởi động lại bot.\n"
+            "3. Công cụ → Graph API Explorer: chọn app đó, “Get User Access Token”, tích pages_show_list,"
+            " pages_read_engagement, pages_manage_posts, chọn Trang của kênh.\n"
+            "4. Gửi vào đây: /facebook <token vừa chép>. Bot đổi sang token Trang không hết hạn và xoá tin"
+            " chứa token.")
+        return
+    tg.delete_message(msg.get("message_id"))         # tin chứa token: không để lại trong lịch sử chat
+    try:
+        page_id = ((load_config()["publish"].get("facebook") or {}).get("page_id"))
+        who = facebook.connect(parts[1], page_id)
+    except Exception as exc:
+        tg.send_message(f"⚠️ Kết nối Facebook chưa được: {exc}")
+        return
+    tg.send_message(f"✅ Đã kết nối Trang Facebook: {who['page_name']}. Từ giờ video được duyệt (✅) sẽ được"
+                    " đăng lên Trang dạng Reel, hẹn cùng giờ với YouTube.")
 
 
 # --------------------------------------------------------------- TikTok (bản nháp)
@@ -329,7 +419,14 @@ def _handle_callback(con, cq: dict, cfg: dict) -> None:
         if video["status"] in ("approved", "publishing", "published"):
             push_tiktok(con, video, cfg)
 
-    elif action == "retry":         # mode api: thử upload lại sau lỗi
+    elif action == "fb":            # thử đăng Facebook lại sau lỗi
+        tg.answer_callback(cq["id"], "Đang thử lại Facebook…")
+        if mid:
+            tg.clear_buttons(mid)
+        if video["status"] in ("approved", "publishing", "published"):
+            push_facebook(con, video, cfg)
+
+    elif action == "retry":        # mode api: thử upload lại sau lỗi
         tg.answer_callback(cq["id"], "Đang thử lại…")
         if mid:
             tg.clear_buttons(mid)
@@ -627,6 +724,9 @@ def _handle_message(con, msg: dict) -> None:
     if not text:
         return
     if _handle_teaching(text) or _handle_growth(con, text) or _handle_style(con, text):
+        return
+    if _fold(text).split()[0] == "/facebook":
+        _connect_facebook(con, msg, text)
         return
     if text.lower() in ("/tiktok", "tiktok"):
         _start_tiktok(con)

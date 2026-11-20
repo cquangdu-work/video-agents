@@ -21,7 +21,7 @@ flowchart LR
   Spec --> TTS[Gemini TTS<br/>whole script, 1 call] --> Whisper[Whisper<br/>word timestamps]
   Whisper --> Render[Remotion render<br/>React, headless Chrome]
   Render --> QC[QC agent<br/>loudness, black frames,<br/>vision check] --> TG[Telegram review<br/>approve / reject]
-  TG -->|approve| YT[YouTube API<br/>scheduled 19:00] & TT[TikTok inbox]
+  TG -->|approve| YT[YouTube API<br/>scheduled 19:00] & TT[TikTok inbox] & FB[Facebook Reels<br/>scheduled 19:00]
   YT --> Analytics[Weekly analyst<br/>retention -> scoring weights]
   Analytics -.-> Editor
   Check & Spec & TG & Analytics -.-> Memory[(Learning memory<br/>gate errors, owner rules,<br/>viewer preferences)]
@@ -150,7 +150,7 @@ transitions to prevent double uploads, and tools to replace a scheduled upload s
 
 ## Stack
 Python 3.13 (uv, universal lock file) · CrewAI · Gemini (text, TTS, vision; free tier) · faster-whisper · Remotion
-(React/TypeScript) · Manim · FFmpeg · SQLite · YouTube Data & Analytics APIs · TikTok Content
+(React/TypeScript) · Manim · FFmpeg · SQLite · YouTube Data & Analytics APIs · Facebook Reels Publishing API · TikTok Content
 Posting API · Telegram Bot API · systemd · Oracle Cloud ARM64.
 
 ## Where to look

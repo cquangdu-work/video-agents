@@ -348,6 +348,15 @@ publish:
     # bật "Nội dung do AI tạo" rồi đăng. Cần TIKTOK_CLIENT_KEY/SECRET trong .env + gửi /tiktok cho bot
     # để kết nối; chưa có khoá thì bỏ qua trong im lặng.
     enabled: true
+  facebook:
+    # Đăng Reels lên Trang Facebook của kênh (src/publish/facebook.py), chỉ sau khi Du bấm ✅. Cần
+    # FACEBOOK_APP_ID/SECRET trong .env + gửi "/facebook <token>" cho bot; chưa có khoá thì bỏ qua im lặng.
+    enabled: true
+    page_id: null               # chỉ cần khi tài khoản quản lý nhiều Trang
+    video_state: SCHEDULED      # SCHEDULED = hẹn giờ dưới đây · PUBLISHED = đăng ngay · DRAFT = nháp để Du tự đăng
+    publish_time_local: "19:00" # cùng giờ với YouTube (giờ Việt Nam)
+    utc_offset_hours: 7
+    ai_generated: true          # nhãn "AI info" của Meta (giọng đọc AI) — cùng khai báo như YouTube
   hashtags_fixed: ["#thegioiquaconso", "#Shorts"]   # luôn có ở mọi video
   max_hashtags: 5               # YouTube bỏ qua toàn bộ hashtag nếu nhét quá nhiều
   disclosure: "Giọng đọc được tạo bằng AI. Số liệu được đối chiếu với nguồn trước khi đăng."

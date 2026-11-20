@@ -222,6 +222,30 @@ Production chỉ cần cho Direct Post. Đoạn mô tả app (đúng sự thật
 
 > Thế giới qua con số uploader is a private tool used only by the owner of the Thế giới qua con số channel (a Vietnamese data-explainer channel) to send the channel's own videos to its own TikTok account. Login Kit (user.info.basic): the owner opens the authorization link sent by the channel's private Telegram bot, logs in with the channel's TikTok account and grants access. TikTok redirects to https://cquangdu-work.github.io/thegioiquaconso/tiktok-callback.html, which only displays the code for the owner to paste back to the bot; our server exchanges it for tokens. user.info.basic only shows which account is connected. Content Posting API (video.upload): after the owner approves a finished video in Telegram, the server uploads it (FILE_UPLOAD) to the owner's TikTok inbox as a draft. The owner opens TikTok, adds the caption, turns on the AI-generated content label and publishes manually. No Direct Post, no other users.
 
+### Đăng lên Facebook Reels (từ 20/11/2026)
+
+Sau khi Du bấm ✅, bot còn đăng video lên **Trang Facebook của kênh** dạng Reel (`src/publish/facebook.py`,
+Reels Publishing API: khởi tạo → tải file lên `rupload.facebook.com` → đăng), hẹn **cùng giờ với
+YouTube** (19:00 giờ Việt Nam), bật nhãn AI của Meta (`is_ai_generated`, vì giọng đọc là AI), chú thích
+= tiêu đề + mô tả YouTube bỏ `#Shorts`. Mỗi video một lần; lỗi thì có nút 🔁 Thử lại Facebook; video
+dài hơn 90 giây (giới hạn Reels qua API) và video dài 16:9 hằng tuần không đăng. Cấu hình:
+`publish.facebook` trong `config/channel.yaml` (`video_state`: SCHEDULED / PUBLISHED / DRAFT).
+
+Vì sao Facebook: là mạng xã hội lớn nhất Việt Nam; chương trình Kiếm tiền từ nội dung của Facebook
+tính cả Reels, có Hàn Quốc (nơi Du cư trú) trong danh sách nước, theo lời mời, cần ~15 Reels/tháng
+trên ≥ 10 ngày — dây chuyền hằng ngày đủ.
+
+Kết nối (một lần, Du làm):
+1. Tạo **Trang Facebook** cho kênh (từ tài khoản Facebook cá nhân).
+2. developers.facebook.com → tạo app, để chế độ **Development** (app chỉ đăng lên Trang của chính
+   người tạo app nên không cần Meta duyệt). Chép App ID / App Secret vào `.env` trên VM:
+   `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`, rồi khởi động lại `video-agents-review.service`.
+3. Graph API Explorer → chọn app → Get User Access Token với `pages_show_list`,
+   `pages_read_engagement`, `pages_manage_posts` → chọn Trang của kênh.
+4. Gửi bot `/facebook <token>`: bot đổi sang token dài hạn, lấy **page token không hết hạn**, lưu ở
+   `.secrets/facebook_token.json` (chỉ trên VM) và xoá tin chứa token. `/facebook` (không kèm token)
+   xem Trang đang kết nối + hướng dẫn. Kiểm tra: `python -m src.publish.facebook whoami`.
+
 ## Chạy hằng ngày
 
 ```bash
