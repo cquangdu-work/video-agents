@@ -209,6 +209,27 @@ class InstagramTest(DbCase):
         self.assertIsNone(db.get_video(self.con, self.vid)["instagram_due"])
 
 
+class FacebookAccessReminderTest(DbCase):
+    def test_expiry_is_saved_and_reminded_once_a_day_in_the_last_week(self):
+        facebook._save({"id": "123", "name": "Trang", "access_token": "PAGE"})
+        expires = int(time.time()) + 5 * 86400
+
+        def get(url, params=None, **kw):
+            if url.endswith("/oauth/access_token"):
+                return resp({"access_token": "APP"})
+            return resp({"data": {"type": "PAGE", "expires_at": 0, "data_access_expires_at": expires}})
+        with mock.patch.dict(os.environ, {"FACEBOOK_APP_ID": "a", "FACEBOOK_APP_SECRET": "s"}):
+            facebook.remember_data_access_expiry(get)
+        self.assertAlmostEqual(facebook.data_access_days_left(), 5, delta=0.1)
+        sent = []
+        with mock.patch.object(tg, "send_message", side_effect=lambda t, **k: sent.append(t) or 1):
+            self.assertTrue(review.remind_facebook_access(self.con))
+            self.assertFalse(review.remind_facebook_access(self.con))          # cùng ngày: không nhắc lại
+            later = datetime.now(timezone.utc) - timedelta(days=30)            # còn 35 ngày: chưa nhắc
+            self.assertFalse(review.remind_facebook_access(self.con, later))
+        self.assertIn("/facebook", sent[0])
+
+
 class InstagramAgentTest(DbCase):
     def setUp(self):
         super().setUp()

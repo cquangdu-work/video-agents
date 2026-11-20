@@ -141,8 +141,41 @@ def connect(user_token: str, page_id: str = None, prefer_name: str = None) -> di
     pages = _check(requests.get(f"{GRAPH}/me/accounts", timeout=30, params={
         "access_token": long_lived, "fields": "id,name,access_token,tasks"})).get("data", [])
     tok = _save(pick_page(pages, page_id or os.getenv("FACEBOOK_PAGE_ID"), prefer_name), permissions=have)
+    try:
+        remember_data_access_expiry()
+    except Exception as exc:                      # chỉ để nhắc gia hạn — lỗi không làm hỏng việc kết nối
+        log.info("Không đọc được hạn quyền đọc dữ liệu: %s", exc)
     return {"page_id": tok["page_id"], "page_name": tok["page_name"],
             "missing_optional": [p for p in OPTIONAL if p not in have]}
+
+
+def remember_data_access_expiry(get=None):
+    """Token Trang lấy từ user token dài hạn KHÔNG hết hạn, nhưng QUYỀN ĐỌC DỮ LIỆU của nó hết sau 90 ngày (đo 21/11:
+    debug_token trả data_access_expires_at) -> lưu ngày đó vào file token để bot nhắc Du kết nối lại trước hạn.
+    -> datetime hoặc None."""
+    app_id, secret = _app()
+    get = get or requests.get
+    app_tok = _check(get(f"{GRAPH}/oauth/access_token", timeout=30, params={
+        "client_id": app_id, "client_secret": secret, "grant_type": "client_credentials"}))["access_token"]
+    tok = _token()
+    data = _check(get(f"{GRAPH}/debug_token", timeout=30, params={
+        "input_token": tok["page_token"], "access_token": app_tok})).get("data") or {}
+    ts = data.get("data_access_expires_at")
+    if not ts:
+        return None
+    when = datetime.fromtimestamp(int(ts), timezone.utc)
+    tok["data_access_expires_at"] = when.isoformat(timespec="seconds")
+    TOKEN_PATH.write_text(json.dumps(tok, indent=2, ensure_ascii=False), encoding="utf-8")
+    return when
+
+
+def data_access_days_left(now: datetime = None):
+    """Số ngày còn lại của quyền đọc dữ liệu (đã lưu lúc kết nối), None nếu chưa biết."""
+    try:
+        when = datetime.fromisoformat(_token()["data_access_expires_at"])
+    except (FacebookAuthError, KeyError, ValueError):
+        return None
+    return (when - (now or datetime.now(timezone.utc))).total_seconds() / 86400
 
 
 def _token() -> dict:

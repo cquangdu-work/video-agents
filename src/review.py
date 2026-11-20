@@ -979,6 +979,27 @@ def remind_token(con, yt: dict, now: datetime = None) -> bool:
     return True
 
 
+FB_REMIND_DAYS = 7
+
+
+def remind_facebook_access(con, now: datetime = None) -> bool:
+    """Quyền đọc dữ liệu của token Trang (Facebook / Instagram) hết sau 90 ngày: từ 7 ngày trước hạn, mỗi ngày nhắc Du
+    một lần gửi lại /facebook <token mới>. Trả về True nếu vừa nhắc."""
+    from .publish import facebook
+    left = facebook.data_access_days_left(now)
+    if left is None or left > FB_REMIND_DAYS:
+        return False
+    today = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%d")
+    if db.get_state(con, "fb_access_reminded") == today:
+        return False
+    db.set_state(con, "fb_access_reminded", today)
+    when = f"còn khoảng {max(left, 0):.0f} ngày" if left > 0 else "đã HẾT"
+    tg.send_message(f"🔑 Quyền đọc dữ liệu Facebook/Instagram {when} (Meta cho 90 ngày mỗi lần cấp). Quá hạn thì số"
+                    " liệu, bình luận — và có thể cả đăng bài — sẽ dừng. Gia hạn: Graph API Explorer → lấy token mới (cùng"
+                    " app, tích đủ quyền như lần trước) → gửi /facebook <token> cho bot này.")
+    return True
+
+
 def check_scheduled(con, now: datetime = None) -> list:
     """Video đã qua giờ hẹn công khai: hỏi YouTube chế độ hiển thị thật. Vẫn riêng tư thì báo Du
     (project API chưa qua audit thì YouTube khoá video ở riêng tư — giờ hẹn không có tác dụng).
@@ -1013,7 +1034,7 @@ def housekeeping(con, cfg: dict, now: datetime = None) -> None:
     """Các việc chạy định kỳ trong vòng lặp listen; lỗi ở đây không được làm sập bot."""
     yt = cfg["publish"]["youtube"]
     for job in (lambda: remind_token(con, yt, now), lambda: check_scheduled(con, now),
-                lambda: publish_instagram_due(con, cfg, now)):
+                lambda: publish_instagram_due(con, cfg, now), lambda: remind_facebook_access(con, now)):
         try:
             job()
         except Exception:
