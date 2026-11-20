@@ -62,6 +62,9 @@ Kho chất liệu gồm: bộ nhận diện (màu, font, khung phụ đề, logo
 
 14. **Facebook** (thêm 20/11/2026, `src/fb_insights.py`) — mỗi Chủ nhật đo Reels + Trang Facebook, tiến độ nhịp đăng cho Kiếm tiền từ nội dung, học sở thích người xem Facebook, thử và học giờ đăng; bình luận Facebook đi qua agent Cộng đồng, tin Meta qua agent Tin YouTube.
 
+15. **Bài viết Facebook** (thêm 20/11/2026, `src/fb_post.py`, kênh Việt) — mỗi video kèm một bài ảnh + chữ trên Trang, qua cùng các cổng code của kịch bản, Du duyệt chung với video.
+16. **Instagram** (thêm 20/11/2026, `src/publish/instagram.py` + `src/ig_insights.py`, kênh Hàn) — đăng Reels sau ✅ (bot tự đăng 19:00 giờ Hàn), Chủ nhật đo Reels (lướt qua 3 giây đầu, thời gian xem, tương tác), học sở thích người xem Instagram.
+
 Trước khi sản xuất hàng loạt: chạy phân tích đối thủ — tìm **video đột biến** (lượt xem gấp nhiều lần trung bình của chính kênh đó) trên 20–30 kênh giải thích ngắn (Việt, Hàn, Anh; ưu tiên kênh nhỏ lớn nhanh 6 tháng gần đây) qua YouTube Data API. Ghi lại câu mở đầu, kiểu tiêu đề, độ dài, nhịp cảnh, loại giọng, loại hình. Kết quả là file "công thức" mà các agent đọc.
 
 ## Luật chính sách bắt buộc (YouTube, cập nhật 7/2026)
