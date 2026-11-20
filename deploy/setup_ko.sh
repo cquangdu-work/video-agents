@@ -31,6 +31,11 @@ link() {  # link <đích trong kênh Việt> <đường dẫn trong kênh Hàn>
 }
 link "$VI/venv" "$KO/venv"
 link "$VI/render-web/node_modules" "$KO/render-web/node_modules"
+# assets/music có sẵn trong git (chỉ README.md, nhạc không vào git) -> thay thư mục gần rỗng đó bằng liên kết
+if [[ -d "$KO/assets/music" && ! -L "$KO/assets/music" ]] \
+        && [[ -z "$(find "$KO/assets/music" -type f ! -name README.md -print -quit)" ]]; then
+    rm -rf "$KO/assets/music"
+fi
 link "$VI/assets/music" "$KO/assets/music"
 
 echo "== 3/4 .env của kênh Hàn =="
