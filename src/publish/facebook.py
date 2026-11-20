@@ -43,7 +43,10 @@ NEEDED = ("pages_show_list", "pages_read_engagement", "pages_manage_posts")     
 # không bắt buộc — thiếu thì agent tương ứng tự nghỉ (agent Facebook, agent Cộng đồng):
 OPTIONAL = {"read_insights": "đọc số liệu Reels + Trang",
             "pages_read_user_content": "đọc bình luận",
-            "pages_manage_engagement": "đọc số liệu Reels + đăng trả lời bình luận (chỉ khi Du bấm ✅)"}
+            "pages_manage_engagement": "đọc số liệu Reels + đăng trả lời bình luận (chỉ khi Du bấm ✅)",
+            # kênh tiếng Hàn: đăng Reels lên tài khoản Instagram LIÊN KẾT với Trang (src/publish/instagram.py)
+            "instagram_basic": "đọc tài khoản Instagram liên kết với Trang",
+            "instagram_content_publish": "đăng Reels lên Instagram (chỉ sau khi Du bấm ✅)"}
 MAX_SECONDS = 90                        # Reels qua API: 3-90 giây
 AUTH_CODES = {102, 190, 200, 10, 3}     # mã lỗi Graph API = thiếu quyền / token hỏng
 
@@ -240,6 +243,41 @@ def wait_processed(video_id: str, token: str, wait_seconds: int = 120) -> str:
         if status == "ready" or time.time() >= deadline:
             return status
         time.sleep(6)
+
+
+# ------------------------------------------------------------------ bài viết ảnh (src/fb_post.py)
+def post_photo(image: Path, message: str, publish_at: int = None, post=None) -> dict:
+    """Đăng một bài ẢNH + chữ lên Trang. Có publish_at (Unix, cách hiện tại 10 phút - 30 ngày) thì HẸN GIỜ theo đúng
+    quy trình tài liệu Meta: tải ảnh lên dạng tạm (published=false, temporary=true), rồi tạo bài trên /feed gắn ảnh đó
+    (attached_media) với scheduled_publish_time. -> {"id": id bài, "scheduled": bool}."""
+    post = post or requests.post
+    tok = _token()
+    page, token = tok["page_id"], tok["page_token"]
+    if publish_at:
+        now = time.time()
+        if not (now + 600 < publish_at < now + 30 * 86400):
+            raise ValueError("Giờ hẹn bài viết Facebook phải cách hiện tại hơn 10 phút và trong 30 ngày")
+    with open(image, "rb") as fh:
+        data = ({"published": "false", "temporary": "true"} if publish_at
+                else {"caption": message, "published": "true"})
+        photo = _check(post(f"{GRAPH}/{page}/photos", timeout=120, files={"source": (Path(image).name, fh)},
+                            data={**data, "access_token": token}))
+    if not publish_at:
+        return {"id": str(photo.get("post_id") or photo.get("id")), "scheduled": False}
+    body = _check(post(f"{GRAPH}/{page}/feed", timeout=60, data={
+        "message": message, "attached_media": json.dumps([{"media_fbid": str(photo["id"])}]),
+        "published": "false", "scheduled_publish_time": int(publish_at), "unpublished_content_type": "SCHEDULED",
+        "access_token": token}))
+    return {"id": str(body.get("id")), "scheduled": True}
+
+
+def post_engagement(post_id: str, get=None) -> dict:
+    """Cảm xúc / bình luận / chia sẻ của một bài viết (agent Facebook, báo cáo tuần). Thiếu trường nào -> 0."""
+    body = graph_get(post_id, get, fields="shares,reactions.summary(total_count).limit(0),"
+                                          "comments.summary(total_count).limit(0)")
+    total = lambda k: int(((body.get(k) or {}).get("summary") or {}).get("total_count") or 0)
+    return {"reactions": total("reactions"), "comments": total("comments"),
+            "shares": int((body.get("shares") or {}).get("count") or 0)}
 
 
 # ------------------------------------------------------------------ đọc số liệu / bình luận

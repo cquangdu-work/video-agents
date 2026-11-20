@@ -46,7 +46,8 @@ git -C "$KO" update-index --skip-worktree assets/music/README.md 2>/dev/null || 
 echo "== 3/4 .env của kênh Hàn =="
 if [[ ! -f "$KO/.env" ]]; then
     # chép khoá dùng chung (Gemini, YouTube API/OAuth client, KOSIS...), bỏ thứ phải RIÊNG
-    grep -v -E '^(TELEGRAM_BOT_TOKEN|TIKTOK_|FACEBOOK_|CHANNEL_CONFIG)=' "$VI/.env" > "$KO/.env"
+    # (giữ FACEBOOK_APP_ID/SECRET: cùng app Meta, kênh Hàn dùng để kết nối Trang liên kết Instagram)
+    grep -v -E '^(TELEGRAM_BOT_TOKEN|TIKTOK_|CHANNEL_CONFIG)=' "$VI/.env" > "$KO/.env"
     {
         echo ""
         echo "# --- kênh tiếng Hàn (deploy/setup_ko.sh) ---"

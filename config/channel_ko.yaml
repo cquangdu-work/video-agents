@@ -252,7 +252,14 @@ publish:
   tiktok:
     enabled: false              # bật khi có tài khoản TikTok tiếng Hàn
   facebook:
-    enabled: false              # người Hàn ít dùng Facebook — để kênh Việt dùng Trang Facebook
+    enabled: false              # không đăng lên Trang: Trang chỉ để LIÊN KẾT tài khoản Instagram (src/publish/instagram.py)
+  instagram:
+    # Reels lên Instagram (Du xin 20/11/2026), chỉ sau ✅. Kết nối: "/facebook <token>" cho bot kênh Hàn với Trang đã
+    # liên kết tài khoản Instagram chuyên nghiệp, tích instagram_basic + instagram_content_publish.
+    enabled: true
+    publish_time_local: "19:00" # giờ Hàn — API không hẹn giờ được, bot tự đăng khi tới giờ
+    utc_offset_hours: 9
+    ai_generated: true          # nhãn AI của Meta (giọng đọc AI)
   hashtags_fixed: ["#숫자세계", "#Shorts"]
   max_hashtags: 5
   disclosure: "AI 음성으로 제작했습니다. 모든 수치는 게시 전에 출처와 대조했습니다."

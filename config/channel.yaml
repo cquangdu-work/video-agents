@@ -360,6 +360,11 @@ publish:
     slots: ["12:00", "19:00", "21:00"]
     utc_offset_hours: 7
     ai_generated: true          # nhãn "AI info" của Meta (giọng đọc AI) — cùng khai báo như YouTube
+    # BÀI VIẾT (ảnh biểu đồ + chữ) kèm mỗi video (src/fb_post.py, Du xin 20/11/2026): soạn lúc gửi duyệt, xem trước
+    # dưới video, ✅ ở video là duyệt cả bài; Kiếm tiền từ nội dung của Facebook tính cả bài viết.
+    posts:
+      enabled: true
+      post_time_local: "11:30"  # giờ VN — giờ nghỉ trưa, lệch giờ Reel để Trang có hai lần xuất hiện mỗi ngày
   hashtags_fixed: ["#thegioiquaconso", "#Shorts"]   # luôn có ở mọi video
   max_hashtags: 5               # YouTube bỏ qua toàn bộ hashtag nếu nhét quá nhiều
   disclosure: "Giọng đọc được tạo bằng AI. Số liệu được đối chiếu với nguồn trước khi đăng."

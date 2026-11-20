@@ -56,7 +56,8 @@ class ApiTest(FbCase):
         with mock.patch.dict("os.environ", {"FACEBOOK_APP_ID": "a", "FACEBOOK_APP_SECRET": "s"}), \
                 mock.patch.object(facebook.requests, "get", side_effect=get):
             who = facebook.connect("x" * 40)
-        self.assertEqual(who["missing_optional"], ["pages_read_user_content", "pages_manage_engagement"])
+        self.assertEqual(who["missing_optional"], ["pages_read_user_content", "pages_manage_engagement",
+                                                "instagram_basic", "instagram_content_publish"])
         self.assertTrue(facebook.can("read_insights"))
         self.assertFalse(facebook.can("pages_manage_engagement"))
 

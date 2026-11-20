@@ -34,7 +34,7 @@ OUTPUT = ROOT / "output"
 CONFIG_PATH = lang.config_path()          # kênh đang chạy (CHANNEL_CONFIG; mặc định kênh Việt)
 
 _YT_LINK = re.compile(r"(?:youtu\.be/|youtube\.com/(?:shorts/|watch\?v=|live/))([\w-]{11})")
-_CALLBACK = re.compile(r"^(ok|no|done|retry|tt|fb):(\d+)$")
+_CALLBACK = re.compile(r"^(ok|no|done|retry|tt|fb|fp|ig):(\d+)$")
 
 
 def load_config() -> dict:
@@ -143,6 +143,10 @@ def _send_for_review(cfg, con, script_id, force, skip_qc):
         if tr:
             tg.send_message("🇻🇳 Bản dịch để duyệt (máy dịch — chỉ để hiểu nội dung; số liệu đã được code đối chiếu"
                             " với nguồn):\n\n" + tr[:3500], reply_to=mid)
+    try:
+        prepare_fb_post(con, video_id, script_id, row, scenes, cfg, mid)
+    except Exception:                           # bài viết là phần thêm: lỗi không được chặn video
+        log.exception("Không soạn được bài viết Facebook cho video #%s", video_id)
     print(f"Đã gửi video #{video_id} vào Telegram, chờ Du duyệt.")
     return video_id
 
@@ -224,6 +228,125 @@ def publish(con, video: dict, cfg: dict) -> None:
     if video.get("script_id"):              # video dài 16:9 không hợp TikTok / Reels
         push_tiktok(con, video, cfg)
         push_facebook(con, video, cfg)
+        push_fb_post(con, video, cfg)
+        schedule_instagram(con, video, cfg)
+
+
+# --------------------------------------------------------- bài viết Facebook (src/fb_post.py)
+def _fb_post_cfg(cfg: dict) -> dict:
+    fcfg = cfg["publish"].get("facebook") or {}
+    return {**fcfg, **(fcfg.get("posts") or {})} if (fcfg.get("enabled") and (fcfg.get("posts") or {}).get("enabled")) \
+        else {}
+
+
+def prepare_fb_post(con, video_id: int, script_id: int, row: dict, scenes: list, cfg: dict, reply_to) -> None:
+    """Lúc gửi video duyệt: soạn bài viết Facebook (chữ + ảnh) và gửi xem trước ngay dưới video. ✅ ở video là duyệt cả
+    bài; Du trả lời tin xem trước bằng câu khác -> thành nội dung bài. Chưa bật / chưa kết nối Trang -> bỏ qua."""
+    from . import fb_post
+    from .publish import facebook
+    pcfg = _fb_post_cfg(cfg)
+    if not pcfg or not facebook.connected():
+        return
+    voices = [str(s.get("voice") or "") for s in scenes if isinstance(s, dict) and s.get("voice")]
+    idea = {k: row.get(k) for k in ("title", "summary", "source_url", "source_name")}
+    text = fb_post.draft(idea, voices, cfg)
+    if not text:
+        tg.send_message("ℹ️ Bài viết Facebook kèm video này không qua được cổng kiểm số liệu sau 2 lần viết — chỉ"
+                        " đăng Reel.", reply_to=reply_to)
+        return
+    text = fb_post.with_hashtags(text, cfg)
+    img = fb_post.image(script_id)
+    if img:
+        tg.send_photo(img, caption="📝 Ảnh của bài viết Facebook (đăng kèm video khi bấm ✅)", reply_to=reply_to)
+    msg = tg.send_message("📝 Bài viết Facebook sẽ đăng kèm (bấm ✅ ở video là duyệt cả bài này; TRẢ LỜI tin này bằng"
+                          " nội dung khác để sửa):\n\n" + text, reply_to=reply_to)
+    db.update_video(con, video_id, fb_post=text, fb_post_image=str(img) if img else None, fb_post_msg=msg)
+
+
+def push_fb_post(con, video: dict, cfg: dict) -> None:
+    """Sau ✅: đăng bài viết đã duyệt lên Trang, hẹn giờ publish.facebook.posts.post_time_local. Mỗi video một lần."""
+    from .publish import facebook, youtube
+    pcfg = _fb_post_cfg(cfg)
+    key = f"fbpost_{video['id']}"
+    if not pcfg or not video.get("fb_post") or db.get_state(con, key) or not facebook.connected():
+        return
+    img = video.get("fb_post_image")
+    if not img or not Path(img).exists():
+        tg.send_message(f"ℹ️ Bài viết Facebook của video #{video['id']} thiếu ảnh — không đăng.")
+        return
+    iso = youtube.compute_publish_at({**pcfg, "publish_time_local": pcfg.get("post_time_local", "11:30")})
+    at = int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()) if iso else None
+    db.set_state(con, key, "posting")
+    try:
+        res = facebook.post_photo(Path(img), video["fb_post"], at)
+    except Exception as exc:
+        log.exception("Đăng bài viết Facebook lỗi")
+        db.set_state(con, key, "")
+        tg.send_message(f"⚠️ Bài viết Facebook của video #{video['id']} lỗi:\n{exc}",
+                        buttons=[[("🔁 Thử lại bài viết", f"fp:{video['id']}")]])
+        return
+    db.set_state(con, key, res["id"])
+    db.update_video(con, video["id"], fb_post_id=res["id"])
+    when = f"hẹn đăng lúc {_local_times(iso, pcfg)}" if res["scheduled"] else "đã đăng"
+    tg.send_message(f"📝 Bài viết Facebook của video #{video['id']} {when}.")
+
+
+# --------------------------------------------------------- Instagram Reels (src/publish/instagram.py, kênh Hàn)
+def schedule_instagram(con, video: dict, cfg: dict) -> None:
+    """Sau ✅: ghi giờ đăng Instagram (API không hẹn giờ được — vòng lặp của bot đăng khi tới giờ)."""
+    from .publish import instagram, youtube
+    icfg = cfg["publish"].get("instagram") or {}
+    if not icfg.get("enabled") or video.get("instagram_id") or video.get("instagram_due"):
+        return
+    if not instagram.ready():
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        if db.get_state(con, "ig_auth_nagged") != today:
+            db.set_state(con, "ig_auth_nagged", today)
+            tg.send_message("ℹ️ Chưa đăng được lên Instagram: cần kết nối Trang Facebook liên kết với tài khoản"
+                            " Instagram, có quyền instagram_basic + instagram_content_publish — gửi /facebook để xem cách.")
+        return
+    due = youtube.compute_publish_at(icfg) or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    db.update_video(con, video["id"], instagram_due=due)
+    tg.send_message(f"📸 Instagram: video #{video['id']} sẽ đăng lúc {_local_times(due, icfg)}"
+                    " (bot tự đăng khi tới giờ).")
+
+
+def publish_instagram_due(con, cfg: dict, now: datetime = None) -> list:
+    """Đăng các Reel Instagram đã tới giờ (gọi từ housekeeping của bot). Mỗi video một lần (chốt ig_<id>)."""
+    from .publish import facebook, instagram
+    icfg = cfg["publish"].get("instagram") or {}
+    if not icfg.get("enabled"):
+        return []
+    now = now or datetime.now(timezone.utc)
+    done = []
+    rows = con.execute("SELECT * FROM videos WHERE instagram_due IS NOT NULL AND instagram_id IS NULL"
+                       " AND status IN ('approved', 'publishing', 'published')").fetchall()
+    for r in rows:
+        if datetime.fromisoformat(r["instagram_due"].replace("Z", "+00:00")) > now:
+            continue
+        key = f"ig_{r['id']}"
+        if db.get_state(con, key):
+            continue
+        db.set_state(con, key, "uploading")
+        video = db.get_video(con, r["id"])
+        try:
+            res = instagram.upload_reel(ROOT / video["file"], instagram.caption(video, cfg),
+                                        bool(icfg.get("ai_generated", True)))
+        except Exception as exc:
+            log.exception("Đăng Instagram lỗi")
+            db.set_state(con, key, "")
+            auth = isinstance(exc, facebook.FacebookAuthError)
+            tg.send_message(f"⚠️ Đăng video #{r['id']} lên Instagram lỗi:\n{exc}"
+                            + ("\nKết nối lại: /facebook" if auth else ""),
+                            buttons=[[("🔁 Thử lại Instagram", f"ig:{r['id']}")]])
+            # thử lại thì đăng ngay: bỏ giờ hẹn cũ khỏi vòng lặp tự động cho tới khi Du bấm
+            db.update_video(con, r["id"], instagram_due=None)
+            continue
+        db.set_state(con, key, res["id"])
+        db.update_video(con, r["id"], instagram_id=res["id"])
+        tg.send_message(f"📸 Đã đăng video #{r['id']} lên Instagram: {res['url']}")
+        done.append(r["id"])
+    return done
 
 
 # --------------------------------------------------------------- Facebook Reels
@@ -312,7 +435,10 @@ def _connect_facebook(con, msg: dict, text: str) -> None:
             " Du bấm ✅; pages_manage_engagement cũng cho phép ẩn/xoá bình luận trên Trang nhưng code không"
             " dùng), chọn Trang của kênh.\n"
             "4. Gửi vào đây: /facebook <token vừa chép>. Bot đổi sang token Trang không hết hạn và xoá tin"
-            " chứa token.")
+            " chứa token."
+            + ("\n\n📸 Kênh này đăng Reels lên INSTAGRAM qua Trang: tài khoản Instagram phải là tài khoản Chuyên"
+               " nghiệp và LIÊN KẾT với Trang; ở bước 3 tích thêm instagram_basic, instagram_content_publish."
+               if (load_config()["publish"].get("instagram") or {}).get("enabled") else ""))
         return
     tg.delete_message(msg.get("message_id"))         # tin chứa token: không để lại trong lịch sử chat
     try:
@@ -447,6 +573,21 @@ def _handle_callback(con, cq: dict, cfg: dict) -> None:
             tg.clear_buttons(mid)
         if video["status"] in ("approved", "publishing", "published"):
             push_facebook(con, video, cfg)
+
+    elif action == "fp":            # thử đăng lại bài viết Facebook
+        tg.answer_callback(cq["id"], "Đang thử lại bài viết…")
+        if mid:
+            tg.clear_buttons(mid)
+        if video["status"] in ("approved", "publishing", "published"):
+            push_fb_post(con, video, cfg)
+
+    elif action == "ig":            # thử đăng lại Instagram: đăng ngay
+        tg.answer_callback(cq["id"], "Đang đăng lại Instagram…")
+        if mid:
+            tg.clear_buttons(mid)
+        if video["status"] in ("approved", "publishing", "published") and not video.get("instagram_id"):
+            db.update_video(con, video_id, instagram_due=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+            publish_instagram_due(con, cfg)
 
     elif action == "retry":        # mode api: thử upload lại sau lỗi
         tg.answer_callback(cq["id"], "Đang thử lại…")
@@ -767,6 +908,17 @@ def _handle_message(con, msg: dict) -> None:
     if reply_mid:
         # trả lời TIN CỦA MỘT BÌNH LUẬN (agent Cộng đồng) = câu Du muốn kênh đăng — xét TRƯỚC link YouTube:
         # câu trả lời có thể chứa link video mà không được hiểu thành "gắn link cho video"
+        post_of = con.execute("SELECT id, status FROM videos WHERE fb_post_msg=?", (reply_mid,)).fetchone()
+        if post_of:                          # Du sửa bài viết Facebook đi kèm video (src/fb_post.py)
+            if post_of["status"] not in ("pending_review", "approved"):
+                tg.send_message("Bài viết này đã đăng hoặc video đã bị loại — không sửa được nữa.")
+                return
+            from . import fb_post
+            new = fb_post.with_hashtags(text.strip(), load_config())
+            db.update_video(con, post_of["id"], fb_post=new)
+            tg.send_message(f"✏️ Đã thay nội dung bài viết Facebook của video #{post_of['id']} bằng câu của Du"
+                            " (đăng khi video được ✅).")
+            return
         card = con.execute("SELECT id, status FROM comments WHERE tg_message_id=?", (reply_mid,)).fetchone()
         if card:
             _redraft_comment(con, card, text, reply_mid)
@@ -858,7 +1010,8 @@ def check_scheduled(con, now: datetime = None) -> list:
 def housekeeping(con, cfg: dict, now: datetime = None) -> None:
     """Các việc chạy định kỳ trong vòng lặp listen; lỗi ở đây không được làm sập bot."""
     yt = cfg["publish"]["youtube"]
-    for job in (lambda: remind_token(con, yt, now), lambda: check_scheduled(con, now)):
+    for job in (lambda: remind_token(con, yt, now), lambda: check_scheduled(con, now),
+                lambda: publish_instagram_due(con, cfg, now)):
         try:
             job()
         except Exception:

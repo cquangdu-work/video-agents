@@ -161,7 +161,12 @@ _ADDED_COLUMNS = [("video_stats", "engaged_views", "INTEGER"),       # 19/11/202
                   # Facebook Reels (20/11/2026): id Reel + giờ đăng + khung giờ đang thử; bình luận Facebook
                   ("videos", "facebook_id", "TEXT"), ("videos", "facebook_at", "TEXT"),
                   ("videos", "facebook_slot", "TEXT"),
-                  ("comments", "platform", "TEXT"), ("comments", "link", "TEXT")]
+                  ("comments", "platform", "TEXT"), ("comments", "link", "TEXT"),
+                  # bài viết Facebook kèm video (src/fb_post.py, 20/11/2026): chữ, ảnh, tin Telegram xem trước, id bài
+                  ("videos", "fb_post", "TEXT"), ("videos", "fb_post_image", "TEXT"),
+                  ("videos", "fb_post_msg", "INTEGER"), ("videos", "fb_post_id", "TEXT"),
+                  # Instagram Reels (kênh Hàn): id bài + giờ hẹn đăng
+                  ("videos", "instagram_id", "TEXT"), ("videos", "instagram_due", "TEXT")]
 
 
 def connect() -> sqlite3.Connection:
@@ -268,6 +273,7 @@ _VIDEO_FIELDS = {
     "file", "title", "description", "tags", "qc", "status", "review_note",
     "tg_message_id", "youtube_id", "youtube_url", "youtube_privacy",
     "decided_at", "published_at", "facebook_id", "facebook_at", "facebook_slot",
+    "fb_post", "fb_post_image", "fb_post_msg", "fb_post_id", "instagram_id", "instagram_due",
 }
 
 

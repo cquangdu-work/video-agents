@@ -87,6 +87,11 @@ def send_video(path: Path, caption: str = "", buttons: list = None):
     return _send_file("sendVideo", "video", path, caption, buttons, supports_streaming=True)
 
 
+def send_photo(path: Path, caption: str = "", buttons: list = None, reply_to: int = None):
+    """Gửi ẢNH (xem trước bài viết Facebook). Trả về message_id."""
+    return _send_file("sendPhoto", "photo", path, caption, buttons, reply_to_message_id=reply_to)
+
+
 def send_document(path: Path, caption: str = "", buttons: list = None):
     """Gửi FILE GỐC (Telegram không nén lại) — dùng khi Du cần tải về để tự đăng."""
     return _send_file("sendDocument", "document", path, caption, buttons)
