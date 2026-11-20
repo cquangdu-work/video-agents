@@ -134,7 +134,9 @@ class CommunityTest(Case):
 
     def test_one_run_end_to_end(self):
         self.sent = []
-        got = community.run(CFG, self.con, fetch=self.fetch, llm=self.llm, send=self.send)
+        from src.publish import youtube
+        with mock.patch.object(youtube, "has_scope", return_value=False):     # token thật trên VM đã có quyền
+            got = community.run(CFG, self.con, fetch=self.fetch, llm=self.llm, send=self.send)
         self.assertEqual([c["kind"] for c in got], ["bao_loi", "cau_hoi", "de_xuat", "khen", "de_xuat"])
         self.assertEqual(got[4]["match"], None)                          # khoá không có thật -> bỏ
         self.assertEqual(got[1]["reply"], "Năm 2024 Hàn Quốc là 2,8%, cao hơn Việt Nam 1,6% nhé.")
@@ -195,9 +197,9 @@ class CommunityTest(Case):
 
     def test_without_an_api_key_the_agent_skips_quietly(self):
         with mock.patch.dict(os.environ, {"YOUTUBE_API_KEY": ""}):
-            self.assertEqual(community.run(CFG, self.con, llm=self.llm, send=self.fail), [])
+            self.assertEqual(community.run(CFG, self.con, llm=self.llm, send=self.never), [])
 
-    def fail(self, *a, **k):
+    def never(self, *a, **k):
         raise AssertionError("không được gửi gì")
 
 
