@@ -84,9 +84,29 @@ def has_map(name: str) -> bool:
     return MAPS.get(name) is not None and MAPS[name].exists()
 
 
+NAMES_KO = GEO_DIR / "names_ko.json"       # tên nước tiếng Hàn (tools/build_names_ko.py, Natural Earth NAME_KO)
+
+
+@lru_cache(maxsize=1)
+def names_ko() -> dict:
+    try:
+        return json.loads(NAMES_KO.read_text(encoding="utf-8"))["names"]
+    except (OSError, ValueError, KeyError):
+        return {}
+
+
+def country_names() -> dict:
+    """{mã nước: tên} theo ngôn ngữ của kênh (src/lang.py): kênh Việt = tên trong world.json (góc nhìn Việt
+    Nam), kênh Hàn = names_ko.json."""
+    from .. import lang
+    if lang.code() == "ko":
+        return dict(names_ko())
+    return {c: w["name"] for c, w in load_map("world")["countries"].items()} if has_map("world") else {}
+
+
 @lru_cache(maxsize=1)
 def name_index() -> dict:
-    """tên thường (mọi cách gọi có trong file bản đồ) -> mã nước. VI_TO_CODE thắng cuối cùng."""
+    """tên thường (mọi cách gọi có trong file bản đồ, cả tên tiếng Hàn) -> mã nước. VI_TO_CODE thắng cuối cùng."""
     idx = {}
     for name in ("world", "asia"):
         if not has_map(name):
@@ -95,17 +115,22 @@ def name_index() -> dict:
             for n in [c.get("name"), *c.get("aliases", [])]:
                 if n:
                     idx.setdefault(str(n).strip().lower(), code)
+    for code, n in names_ko().items():
+        idx.setdefault(n.strip().lower(), code)
     idx.update(VI_TO_CODE)
     return idx
 
 
 def code_of(label) -> str:
-    """'Việt Nam' -> 'VNM', 'Na Uy' -> 'NOR'; không biết thì None."""
+    """'Việt Nam' -> 'VNM', 'Na Uy' -> 'NOR', '한국' -> 'KOR'; không biết thì None."""
     return name_index().get(str(label or "").strip().lower())
 
 
 def display_name(code: str) -> str:
-    """Tên tiếng Việt để hiện trên hình."""
+    """Tên để hiện trên hình, theo ngôn ngữ của kênh."""
+    from .. import lang
+    if lang.code() == "ko" and code in names_ko():
+        return names_ko()[code]
     for name in ("world", "asia"):
         if has_map(name) and code in load_map(name)["countries"]:
             return load_map(name)["countries"][code]["name"]

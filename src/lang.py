@@ -125,6 +125,48 @@ def parse(s: str) -> float:
     return float(str(s).strip().replace(loc["thou"], "").replace(loc["dec"], "."))
 
 
+# ------------------------------------------------------------------ câu chữ do code viết
+def pick(**variants) -> str:
+    """Câu theo ngôn ngữ của kênh: pick(vi=f"...", ko=f"..."). Đặt hai bản cạnh nhau ngay chỗ dùng để
+    bản Việt giữ nguyên từng chữ (test cũ, cổng đọc lại tóm tắt) và bản Hàn dễ soát. Thiếu bản -> bản Việt."""
+    return variants.get(code(), variants["vi"])
+
+
+_DIGIT_BATCHIM = set("013678")      # 영/일/삼/육/칠/팔 có phụ âm cuối; 이/사/오/구 không
+
+
+def _batchim(word: str):
+    """(có phụ âm cuối?, phụ âm cuối là ㄹ?) của chữ cuối — để chọn trợ từ tiếng Hàn."""
+    w = str(word).rstrip(" )]%").strip()
+    if not w:
+        return False, False
+    ch = w[-1]
+    if "가" <= ch <= "힣":
+        final = (ord(ch) - 0xAC00) % 28
+        return final != 0, final == 8
+    if ch.isdigit():
+        return ch in _DIGIT_BATCHIM, ch in "178"            # 일/칠/팔 kết thúc bằng ㄹ
+    return False, False
+
+
+def josa(word: str, pair: str) -> str:
+    """Gắn trợ từ đúng âm: josa("한국", "이/가") -> "한국이"; josa("일본", "은/는") -> "일본은";
+    josa("미국", "을/를") -> "미국을"; josa("베트남", "으로/로") -> "베트남으로"."""
+    has, rieul = _batchim(word)
+    with_final, without = pair.split("/")
+    if pair == "으로/로":
+        return f"{word}{'로' if (not has or rieul) else '으로'}"
+    return f"{word}{with_final if has else without}"
+
+
+def with_unit(value: str, unit: str) -> str:
+    """Số + đơn vị: tiếng Việt cách một dấu cách ("83,7 tuổi"); tiếng Hàn viết liền ("83.7세", "5,170만 명")."""
+    unit = (unit or "").strip()
+    if not unit:
+        return value
+    return f"{value}{unit}" if code() == "ko" else f"{value} {unit}"
+
+
 def scale_divisors() -> tuple:
     return SCALE_DIVISORS[code()]
 

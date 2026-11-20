@@ -18,6 +18,7 @@ from datetime import date
 
 import requests
 
+from .. import lang
 from .datatable import KOSIS_SOURCE, race_lines, race_years, vn_number
 
 log = logging.getLogger(__name__)
@@ -139,7 +140,9 @@ def build_nationality_race(t: dict, today: date = None):
         return None
     rows = fetch_table(t["org"], t["tbl"], dims, {nat: "ALL"}, int(t.get("start", 2010)), end)
     raw = by_dimension(rows, dims, nat)
-    named = {KO_VI[k]: v for k, v in raw.items() if not is_aggregate(k) and k in KO_VI}
+    # kênh Việt: tên tiếng Việt (KO_VI); kênh Hàn: giữ tên gốc của KOSIS. Chỉ nhận quốc tịch có trong KO_VI.
+    label = (lambda k: k) if lang.code() == "ko" else (lambda k: KO_VI[k])
+    named = {label(k): v for k, v in raw.items() if not is_aggregate(k) and k in KO_VI}
     if not named:
         return None
     latest = max(y for s in named.values() for y, _ in s)
@@ -149,21 +152,30 @@ def build_nationality_race(t: dict, today: date = None):
     if len(series) < 3 or len(years) < 2:
         return None
     y0, y1 = years[0], years[-1]
-    lines = [f"Chỉ số: {t['name']} ({t.get('unit', 'người')}). Nguồn: KOSIS — {t.get('org_name', 'Hàn Quốc')},"
-             f" bảng {t['org']}/{t['tbl']}. Cuộc đua giữa {len(series)} quốc tịch, từ {y0} đến {y1}."]
+    unit = t.get("unit", lang.pick(vi="người", ko="명"))
+    lines = [lang.pick(
+        vi=f"Chỉ số: {t['name']} ({unit}). Nguồn: KOSIS — {t.get('org_name', 'Hàn Quốc')},"
+           f" bảng {t['org']}/{t['tbl']}. Cuộc đua giữa {len(series)} quốc tịch, từ {y0} đến {y1}.",
+        ko=f"지표: {t['name']}({unit}). 출처: KOSIS — {t.get('org_name', '통계청')},"
+           f" 표 {t['org']}/{t['tbl']}. {len(series)}개 국적의 순위 경쟁, {y0}–{y1}년.")]
     lines += race_lines(series, years, [n for n in t.get("focus", ["Việt Nam"]) if n in series])
     # Cách đếm của KOSIS dễ làm kể sai: Trung Quốc và Trung Quốc gốc Hàn là HAI dòng riêng
-    cn, cn_kr = dict(series.get("Trung Quốc", [])), dict(series.get("Trung Quốc gốc Hàn", []))
+    cn_name, cn_kr_name = lang.pick(vi="Trung Quốc", ko="중국"), lang.pick(vi="Trung Quốc gốc Hàn", ko="한국계중국인")
+    cn, cn_kr = dict(series.get(cn_name, [])), dict(series.get(cn_kr_name, []))
     if y1 in cn and y1 in cn_kr:
-        lines.insert(1, f"Lưu ý cách đếm: KOSIS tách \"Trung Quốc\" và \"Trung Quốc gốc Hàn\" thành hai"
-                        f" dòng; gộp lại năm {y1} là {vn_number(cn[y1] + cn_kr[y1])} người. Khi so sánh"
-                        f" phải nói rõ đang tách hay gộp.")
+        total = vn_number(cn[y1] + cn_kr[y1])
+        lines.insert(1, lang.pick(
+            vi=f"Lưu ý cách đếm: KOSIS tách \"Trung Quốc\" và \"Trung Quốc gốc Hàn\" thành hai"
+               f" dòng; gộp lại năm {y1} là {total} người. Khi so sánh phải nói rõ đang tách hay gộp.",
+            ko=f"집계 주의: KOSIS는 '중국'과 '한국계중국인'을 따로 집계함; {y1}년 합치면 {total}명."
+               f" 비교할 때 나눈 수치인지 합친 수치인지 밝혀야 함."))
     return {
-        "title": f"{t['name']}: cuộc đua theo quốc tịch từ {y0} đến {y1}",
+        "title": lang.pick(vi=f"{t['name']}: cuộc đua theo quốc tịch từ {y0} đến {y1}",
+                           ko=f"{t['name']}: 국적별 순위 경쟁, {y0}–{y1}년"),
         "summary": "\n".join(lines),
         "url": PAGE.format(org=t["org"], tbl=t["tbl"], end=y1),
         "source": SOURCE_NAME,
-        "lang": "vi",
+        "lang": lang.code(),
     }
 
 

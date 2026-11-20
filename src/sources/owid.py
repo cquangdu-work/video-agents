@@ -17,6 +17,7 @@ Việt Nam vẫn là "điểm neo" cho người xem Việt, nhưng chủ đề l
 import logging
 from datetime import date
 
+from .. import lang
 from .datatable import OWID_SOURCE, lower_first, race_lines, race_years
 from .worldbank import MIN_WORLD_COUNTRIES, build_world_item, pick_world_year, todays_indicators
 
@@ -37,8 +38,10 @@ def load_table(slug: str, fetch=None) -> dict:
 
 
 def source_line(chart: dict) -> str:
-    origin = f" (số liệu gốc: {chart['origin']})" if chart.get("origin") else ""
-    return f"Nguồn: Our World in Data, biểu đồ “{chart['slug']}”{origin}."
+    origin = lang.pick(vi=f" (số liệu gốc: {chart['origin']})", ko=f" (원자료: {chart['origin']})") \
+        if chart.get("origin") else ""
+    return lang.pick(vi=f"Nguồn: Our World in Data, biểu đồ “{chart['slug']}”{origin}.",
+                     ko=f"출처: Our World in Data, 차트 “{chart['slug']}”{origin}.")
 
 
 def by_year(table: dict, codes: set, scale: float, first: int, last: int) -> dict:
@@ -70,7 +73,7 @@ def build_map(chart: dict, table: dict, names: dict, focus: list, this_year: int
     # Chuỗi "Thế giới" chỉ khi nó là số BÌNH QUÂN (nằm trong khoảng của các nước). Số TỔNG cả thế
     # giới (CO2 cả năm) lớn hơn mọi nước -> vẽ chung trục thì đường các nước dẹp lép dưới đáy.
     if world and world[-1][1] <= max(years[year].values()):
-        extra[WORLD_LABEL] = world
+        extra[lang.pick(vi=WORLD_LABEL, ko="세계")] = world
     ind = {"code": chart["slug"], "name": chart["name"], "unit": chart.get("unit", ""),
            "per": chart.get("per"), "period": chart.get("period")}     # cách nói dễ hình dung
     return build_world_item(ind, year, years[year], names, focus, hist,
@@ -110,16 +113,23 @@ def build_race(chart: dict, table: dict, names: dict, groups: dict, focus: list,
         return None
     y0, y1 = years[0], years[-1]
     in_focus = [names[c] for c in focus if c in series]
+    n = len(series)
     if chart.get("group", "top") == "top":
-        who = (f"{len(series) - 1} nước dẫn đầu thế giới và {in_focus[0]}" if added and in_focus
-               else f"{len(series)} nước dẫn đầu thế giới")
+        who = (lang.pick(vi=f"{n - 1} nước dẫn đầu thế giới và {in_focus[0]}",
+                         ko=f"세계 상위 {n - 1}개국과 {in_focus[0]}") if added and in_focus
+               else lang.pick(vi=f"{n} nước dẫn đầu thế giới", ko=f"세계 상위 {n}개국"))
     else:
-        who = (f"{in_focus[0]} và {len(series) - 1} nền kinh tế lớn" if in_focus
-               else f"{len(series)} nền kinh tế lớn")
+        who = (lang.pick(vi=f"{in_focus[0]} và {n - 1} nền kinh tế lớn",
+                         ko=f"{lang.josa(in_focus[0], '과/와')} 주요 경제 {n - 1}개국") if in_focus
+               else lang.pick(vi=f"{n} nền kinh tế lớn", ko=f"주요 경제 {n}개국"))
     unit = chart.get("unit", "")
-    lines = [f"Chỉ số: {chart['name']} ({unit}). {source_line(chart)}"
-             f" Cuộc đua giữa {who}, từ {y0} đến {y1}. Mọi thứ hạng trong cuộc đua là hạng GIỮA"
-             f" {len(series)} nước này, không phải hạng thế giới."]
+    lines = [lang.pick(
+        vi=f"Chỉ số: {chart['name']} ({unit}). {source_line(chart)}"
+           f" Cuộc đua giữa {who}, từ {y0} đến {y1}. Mọi thứ hạng trong cuộc đua là hạng GIỮA"
+           f" {n} nước này, không phải hạng thế giới.",
+        ko=f"지표: {chart['name']}({unit}). {source_line(chart)}"
+           f" {who}의 순위 경쟁, {y0}–{y1}년. 이 경쟁의 모든 순위는 이 {n}개국 '안에서의' 순위이며,"
+           f" 세계 순위가 아님.")]
     world_line = world_rank_line(table, names, series, focus, y1)
     if world_line:
         lines.append(world_line)
@@ -130,12 +140,13 @@ def build_race(chart: dict, table: dict, names: dict, groups: dict, focus: list,
         lines.append(relate)
     lines += race_lines({names[c]: s for c, s in series.items()}, years, in_focus, unit)
     return {
-        "title": f"Cuộc đua {lower_first(chart['name'])}: {who} từ {y0} đến {y1}",
+        "title": lang.pick(vi=f"Cuộc đua {lower_first(chart['name'])}: {who} từ {y0} đến {y1}",
+                           ko=f"{chart['name']} 순위 경쟁: {who}, {y0}–{y1}년"),
         "summary": "\n".join(lines),
         "url": GRAPHER.format(slug=chart["slug"]) + "?tab=chart&time={}..{}&country={}".format(
             y0, y1, "~".join(series)),
         "source": OWID_SOURCE,
-        "lang": "vi",
+        "lang": lang.code(),
     }
 
 
@@ -152,11 +163,15 @@ def world_rank_line(table: dict, names: dict, series: dict, focus: list, year: i
     at = {c: dict(s).get(year) for c, s in series.items()}
     race_rank = ranks_desc({c: v for c, v in at.items() if v is not None})[anchor]
     world_rank = ranks_desc(world)[anchor]
-    line = (f"Hạng thế giới thật năm {year}: {names[anchor]} thứ {world_rank} trong {len(world)}"
-            f" nước và vùng lãnh thổ có số liệu.")
+    line = lang.pick(vi=f"Hạng thế giới thật năm {year}: {names[anchor]} thứ {world_rank} trong {len(world)}"
+                        f" nước và vùng lãnh thổ có số liệu.",
+                     ko=f"{year}년 실제 세계 순위: {lang.josa(names[anchor], '은/는')} 수치가 있는 {len(world)}개"
+                        f" 국가·지역 중 {world_rank}위.")
     if world_rank != race_rank:
-        line += (f" Hạng {race_rank} của {names[anchor]} trong cuộc đua chỉ là hạng trong nhóm, KHÔNG"
-                 f" được gọi là hạng thế giới hay toàn cầu.")
+        line += lang.pick(vi=f" Hạng {race_rank} của {names[anchor]} trong cuộc đua chỉ là hạng trong nhóm, KHÔNG"
+                             f" được gọi là hạng thế giới hay toàn cầu.",
+                          ko=f" 순위 경쟁에서의 {names[anchor]} {race_rank}위는 그룹 안 순위일 뿐이며, 세계 순위나"
+                             f" 글로벌 순위라고 부르면 안 됨.")
     return line
 
 
@@ -169,7 +184,8 @@ def fetch_owid(cfg: dict, today: date = None, fetch=None) -> list:
     from ..render.geo import has_map, load_map
     if not has_map("world"):
         return []
-    names = {c: w["name"] for c, w in load_map("world")["countries"].items()}
+    from ..render.geo import country_names
+    names = country_names()                    # tên theo ngôn ngữ kênh (Việt / Hàn)
     focus = cfg.get("focus") or ["VNM"]
     groups = cfg.get("groups") or {}
     this_year = (today or date.today()).year

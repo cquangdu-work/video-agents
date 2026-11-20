@@ -75,5 +75,59 @@ class NumberTest(unittest.TestCase):
             self.assertNotIn("5170", digits_of(51700000))                 # kênh Việt không nói 만
 
 
+class KoreanSummaryTest(unittest.TestCase):
+    """Bảng số cho kênh Hàn: câu tiếng Hàn, số kiểu Hàn, code vẫn đọc ngược lại được."""
+    KOR = [(1960, 5.99), (1970, 4.53), (1980, 2.82), (1990, 1.57), (2000, 1.48), (2010, 1.23), (2024, 0.75)]
+    JPN = [(1960, 2.0), (1970, 2.13), (1980, 1.75), (1990, 1.54), (2000, 1.36), (2010, 1.39), (2024, 1.15)]
+
+    def test_josa(self):
+        self.assertEqual([lang.josa(w, "이/가") for w in ("한국", "일본", "베트남", "미국", "중국", "프랑스")],
+                         ["한국이", "일본이", "베트남이", "미국이", "중국이", "프랑스가"])
+        self.assertEqual(lang.josa("한국", "과/와"), "한국과")
+        self.assertEqual(lang.josa("인도", "과/와"), "인도와")
+        self.assertEqual(lang.josa("서울", "으로/로"), "서울로")
+        self.assertEqual(lang.josa("한국", "으로/로"), "한국으로")
+
+    def test_two_country_item_in_korean(self):
+        from src.sources import worldbank
+        ind = {"code": "SP.DYN.TFRT.IN", "name": "합계출산율", "unit": "명"}
+        countries = [{"iso3": "KOR", "iso2": "KR", "name": "한국"}, {"iso3": "JPN", "iso2": "JP", "name": "일본"}]
+        with lang.using("ko"):
+            item = worldbank.build_item(ind, countries, {"KOR": self.KOR, "JPN": self.JPN})
+            s = item["summary"]
+            self.assertEqual(item["lang"], "ko")
+            self.assertEqual(item["title"], "합계출산율: 한국과 일본, 1960–2024년")
+            self.assertIn("한국: 1960년 5.99명; 2024년 0.75명.", s)
+            self.assertIn("최신 수치: 일본은 한국의 1.53배.", s)
+            self.assertIn("핵심 포인트", s)
+            self.assertIn("일본이 한국을 앞지름", s)
+            self.assertNotRegex(s, r"\d,\d{1,2}\b")                    # không còn số kiểu Việt (0,75)
+            got = dt.parse_series(s)                                    # máy đọc lại để vẽ biểu đồ
+            self.assertEqual([g["label"] for g in got], ["한국", "일본"])
+            self.assertEqual(got[0]["ys"][-1], 0.75)
+        with lang.using("vi"):                                         # kênh Việt vẫn đọc dòng "theo năm"
+            self.assertEqual(dt.parse_series("Việt Nam theo năm: 2020: 1,5; 2024: 2.462.")[0]["ys"], [1.5, 2462])
+
+    def test_fraction_and_period_lines(self):
+        with lang.using("ko"):
+            self.assertEqual(dt.fraction_phrase(68.6, "phụ nữ"), "여성 3명 중 2명")
+            self.assertEqual(dt.fraction_phrase(56.8, "người"), "10명 중 거의 6명")
+            self.assertEqual(dt.fraction_phrase(62.0, "xe mới bán"), "신차 5대 중 3대")
+            line = dt.relatable_line([("한국", 1910.0)], "시간", {"period": "tuần"})
+            self.assertEqual(line, "쉽게 와닿는 표현(기계가 미리 계산): 한국 연간 1,910시간 ≈ 일주일에 약 36.7시간.")
+        with lang.using("vi"):
+            self.assertEqual(dt.fraction_phrase(68.6, "phụ nữ"), "cứ 3 phụ nữ thì 2")
+
+    def test_korean_country_names(self):
+        from src.render import geo
+        with lang.using("ko"):
+            names = geo.country_names()
+            self.assertEqual((names["KOR"], names["CHN"], names["PRK"], names["VNM"]), ("한국", "중국", "북한", "베트남"))
+            self.assertEqual(geo.display_name("JPN"), "일본")
+        self.assertEqual(geo.code_of("한국"), "KOR")
+        with lang.using("vi"):
+            self.assertEqual(geo.display_name("KOR"), "Hàn Quốc")
+
+
 if __name__ == "__main__":
     unittest.main()

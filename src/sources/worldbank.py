@@ -19,7 +19,9 @@ import requests
 
 from .datatable import (WB_SOURCE, beats_lines, lower_first, parse_series,  # noqa: F401
                         parse_vn_number, race_lines, race_years, ranking, ratio_phrase,
-                        relatable_line, spoken_scale, story_beats, trim_leading, vn_number)
+                        relatable_line, series_line, spoken_scale, story_beats, trim_leading,
+                        vn_number)
+from .. import lang
 
 log = logging.getLogger(__name__)
 
@@ -103,19 +105,21 @@ def change_phrase(first: float, last: float, unit: str = "") -> str:
     if unit.startswith("%"):
         gap = round(shown(last) - shown(first), 6)
         if gap == 0:
-            return "giữ nguyên"
-        phrase = f"{'tăng' if gap > 0 else 'giảm'} {vn_number(abs(gap))} điểm phần trăm"
+            return lang.pick(vi="giữ nguyên", ko="변동 없음")
+        d = vn_number(abs(gap))
+        phrase = lang.pick(vi=f"{'tăng' if gap > 0 else 'giảm'} {d} điểm phần trăm",
+                           ko=f"{d}%p {'증가' if gap > 0 else '감소'}")
         if first > 0 and last / first >= 2:
-            phrase += f" (gấp {vn_number(last / first)} lần)"
+            phrase += lang.pick(vi=f" (gấp {vn_number(last / first)} lần)", ko=f" ({vn_number(last / first)}배)")
         return phrase
     if first <= 0 or last < 0:
         return ""
     ratio = last / first
     if ratio >= 2:
-        return f"tăng gấp {vn_number(ratio)} lần"
+        return lang.pick(vi=f"tăng gấp {vn_number(ratio)} lần", ko=f"{vn_number(ratio)}배로 증가")
     if ratio >= 1:
-        return f"tăng {vn_number((ratio - 1) * 100)}%"
-    return f"giảm {vn_number((1 - ratio) * 100)}%"
+        return lang.pick(vi=f"tăng {vn_number((ratio - 1) * 100)}%", ko=f"{vn_number((ratio - 1) * 100)}% 증가")
+    return lang.pick(vi=f"giảm {vn_number((1 - ratio) * 100)}%", ko=f"{vn_number((1 - ratio) * 100)}% 감소")
 
 
 def latest_gap_line(name_a: str, va: float, name_b: str, vb: float, unit: str) -> str:
@@ -124,10 +128,13 @@ def latest_gap_line(name_a: str, va: float, name_b: str, vb: float, unit: str) -
     if not va or not vb or min(va, vb) <= 0:
         return ""
     (hi, v_hi), (lo, v_lo) = sorted(((name_a, va), (name_b, vb)), key=lambda p: -p[1])
+    k = lang.josa
     if unit.startswith("%") and v_hi / v_lo < 1.5:
         gap = round(shown(v_hi) - shown(v_lo), 6)
-        return f"Số mới nhất: {hi} hơn {lo} {vn_number(gap)} điểm phần trăm." if gap else ""
-    return f"Số mới nhất: {hi} gấp {vn_number(v_hi / v_lo)} lần {lo}."
+        return lang.pick(vi=f"Số mới nhất: {hi} hơn {lo} {vn_number(gap)} điểm phần trăm.",
+                         ko=f"최신 수치: {k(hi, '이/가')} {lo}보다 {vn_number(gap)}%p 높음.") if gap else ""
+    return lang.pick(vi=f"Số mới nhất: {hi} gấp {vn_number(v_hi / v_lo)} lần {lo}.",
+                     ko=f"최신 수치: {k(hi, '은/는')} {lo}의 {vn_number(v_hi / v_lo)}배.")
 
 
 def build_item(ind: dict, countries: list, series: dict):
@@ -140,25 +147,29 @@ def build_item(ind: dict, countries: list, series: dict):
     if len(sa) < 5 or len(sb) < 5:
         return None
     unit = ind.get("unit", "")
-    val = lambda v: f"{vn_number(v)} {unit}".strip() + spoken_scale(v)
+    val = lambda v: lang.with_unit(vn_number(v), unit) + spoken_scale(v)
     (ya0, va0), (ya1, va1) = sa[0], sa[-1]
     (yb0, vb0), (yb1, vb1) = sb[0], sb[-1]
-    lines = [
-        f"Chỉ số: {ind['name']} ({unit}). Nguồn: World Bank Open Data, mã {ind['code']}.",
-        f"{name_a}: năm {ya0} là {val(va0)}; năm {ya1} là {val(va1)}.",
-        f"{name_b}: năm {yb0} là {val(vb0)}; năm {yb1} là {val(vb1)}.",
-    ]
+    lines = [lang.pick(vi=f"Chỉ số: {ind['name']} ({unit}). Nguồn: World Bank Open Data, mã {ind['code']}.",
+                       ko=f"지표: {ind['name']}({unit}). 출처: World Bank Open Data, 코드 {ind['code']}.")]
+    for name, (y0, v0), (y1, v1) in ((name_a, sa[0], sa[-1]), (name_b, sb[0], sb[-1])):
+        lines.append(lang.pick(vi=f"{name}: năm {y0} là {val(v0)}; năm {y1} là {val(v1)}.",
+                               ko=f"{name}: {y0}년 {val(v0)}; {y1}년 {val(v1)}."))
     for name, (y0, v0), (y1, v1) in ((name_a, sa[0], sa[-1]), (name_b, sb[0], sb[-1])):
         phrase = change_phrase(v0, v1, unit)
         if phrase:
-            lines.append(f"Từ {y0} đến {y1}, {name} {phrase}.")
+            lines.append(lang.pick(vi=f"Từ {y0} đến {y1}, {name} {phrase}.",
+                                   ko=f"{y0}년부터 {y1}년까지 {name} {phrase}."))
     gap_line = latest_gap_line(name_a, va1, name_b, vb1, unit)
     if gap_line:
         lines.append(gap_line)
     match = catch_up_year(va1, sb)
     if match:
-        lines.append(f"{name_a} năm {ya1} ({val(va1)}) tương đương {name_b} năm {match[0]}"
-                     f" ({val(match[1])}) — cách nhau {ya1 - match[0]} năm.")
+        lines.append(lang.pick(
+            vi=f"{name_a} năm {ya1} ({val(va1)}) tương đương {name_b} năm {match[0]}"
+               f" ({val(match[1])}) — cách nhau {ya1 - match[0]} năm.",
+            ko=f"{ya1}년 {name_a} 수치({val(va1)})는 {match[0]}년 {name_b} 수치({val(match[1])})와 같은 수준"
+               f" — {ya1 - match[0]}년 차이."))
     relate = relatable_line([(name_a, va1), (name_b, vb1)], unit, ind)
     if relate:
         lines.append(relate)
@@ -166,14 +177,16 @@ def build_item(ind: dict, countries: list, series: dict):
     # Bảng theo mốc 5 năm (kèm năm đầu và năm cuối) — đủ điểm để vẽ biểu đồ đường
     for name, s in ((name_a, sa), (name_b, sb)):
         picks = [p for i, p in enumerate(s) if p[0] % 5 == 0 or i in (0, len(s) - 1)]
-        lines.append(f"{name} theo năm: " + "; ".join(f"{y}: {vn_number(v)}" for y, v in picks) + ".")
+        lines.append(series_line(name, picks))
+    y_from, y_to = min(ya0, yb0), max(ya1, yb1)
     return {
-        "title": f"{ind['name']}: {name_a} và {name_b} từ {min(ya0, yb0)} đến {max(ya1, yb1)}",
+        "title": lang.pick(vi=f"{ind['name']}: {name_a} và {name_b} từ {y_from} đến {y_to}",
+                           ko=f"{ind['name']}: {lang.josa(name_a, '과/와')} {name_b}, {y_from}–{y_to}년"),
         "summary": "\n".join(lines),
         # trang xem của World Bank dùng mã nước 2 chữ; &end= đổi khi có số liệu năm mới
         "url": PAGE.format(code=ind["code"], locs=f"{ca['iso2']}-{cb['iso2']}", end=max(ya1, yb1)),
         "source": SOURCE_NAME,
-        "lang": "vi",
+        "lang": lang.code(),
     }
 
 
@@ -189,8 +202,10 @@ def build_race_item(ind: dict, countries: list, series: dict, focus: list, step:
     y0, y1 = years[0], years[-1]
     unit = ind.get("unit", "")
     named = {names[c]: series[c] for c in series}
-    lines = [f"Chỉ số: {ind['name']} ({unit}). Nguồn: World Bank Open Data, mã {ind['code']}."
-             f" Cuộc đua giữa {len(series)} nền kinh tế châu Á, từ {y0} đến {y1}."]
+    lines = [lang.pick(vi=f"Chỉ số: {ind['name']} ({unit}). Nguồn: World Bank Open Data, mã {ind['code']}."
+                          f" Cuộc đua giữa {len(series)} nền kinh tế châu Á, từ {y0} đến {y1}.",
+                       ko=f"지표: {ind['name']}({unit}). 출처: World Bank Open Data, 코드 {ind['code']}."
+                          f" 아시아 {len(series)}개 경제의 순위 경쟁, {y0}–{y1}년.")]
     focus_names = [names[c] for c in focus if c in series]
     relate = relatable_line([(n, dict(named[n]).get(y1)) for n in focus_names], unit, ind)
     if relate:
@@ -198,18 +213,23 @@ def build_race_item(ind: dict, countries: list, series: dict, focus: list, step:
     lines += race_lines(named, years, focus_names, unit)
     locs = "-".join(c["iso2"] for c in countries if c["iso3"] in series)
     return {
-        "title": f"Cuộc đua {lower_first(ind['name'])}: {len(series)} nền kinh tế châu Á"
-                 f" từ {y0} đến {y1}",
+        "title": lang.pick(vi=f"Cuộc đua {lower_first(ind['name'])}: {len(series)} nền kinh tế châu Á"
+                              f" từ {y0} đến {y1}",
+                           ko=f"{ind['name']} 순위 경쟁: 아시아 {len(series)}개 경제, {y0}–{y1}년"),
         "summary": "\n".join(lines),
         "url": PAGE.format(code=ind["code"], locs=locs, end=y1),
         "source": SOURCE_NAME,
-        "lang": "vi",
+        "lang": lang.code(),
     }
 
 
 # ---------------------------------------------------------------- bản đồ thế giới
 WORLD_PAGE = "https://data.worldbank.org/indicator/{code}?view=map&year={year}"
 SOUTHEAST_ASIA = ("BRN", "KHM", "IDN", "LAO", "MYS", "MMR", "PHL", "SGP", "THA", "VNM", "TLS")
+# Kênh Hàn so trong OECD (38 nước) — báo chí Hàn Quốc hay nói "OECD 38개국 중 몇 위"
+OECD = ("AUS", "AUT", "BEL", "CAN", "CHL", "COL", "CRI", "CZE", "DNK", "EST", "FIN", "FRA", "DEU", "GRC",
+        "HUN", "ISL", "IRL", "ISR", "ITA", "JPN", "KOR", "LVA", "LTU", "LUX", "MEX", "NLD", "NZL", "NOR",
+        "POL", "PRT", "SVK", "SVN", "ESP", "SWE", "CHE", "TUR", "GBR", "USA")
 MIN_WORLD_COUNTRIES = 100       # ít hơn thì "bản đồ thế giới" toàn ô trống, không đáng làm
 # Đo 12/11: truy vấn "mọi nước x 11 năm" chưa có trong bộ đệm thì máy chủ tính mất vài phút
 # (treo, rồi 502), tính xong thì trả trong 0,2 giây. Lịch chờ dài hơn (tối đa ~9 phút) — bước
@@ -261,46 +281,68 @@ def build_world_item(ind: dict, year: int, table: dict, names: dict, focus: list
     if n < MIN_WORLD_COUNTRIES or (focus and focus[0] not in table):
         return None
     unit = ind.get("unit", "")
-    val = lambda v: f"{vn_number(v)} {unit}".strip()
+    val = lambda v: lang.with_unit(vn_number(v), unit)
+    k = lang.josa
     rank = ranks_desc(table)
     order = sorted(table, key=lambda c: -table[c])
-    where = f"{n} nước và vùng lãnh thổ"
-    source_line = source_line or f"Nguồn: World Bank Open Data, mã {ind['code']}."
-    lines = [f"Chỉ số: {ind['name']} ({unit}). {source_line} Năm {year}: có số của {where}."]
+    where = lang.pick(vi=f"{n} nước và vùng lãnh thổ", ko=f"{n}개 국가·지역")
+    source_line = source_line or lang.pick(vi=f"Nguồn: World Bank Open Data, mã {ind['code']}.",
+                                           ko=f"출처: World Bank Open Data, 코드 {ind['code']}.")
+    lines = [lang.pick(vi=f"Chỉ số: {ind['name']} ({unit}). {source_line} Năm {year}: có số của {where}.",
+                       ko=f"지표: {ind['name']}({unit}). {source_line} {year}년: {where} 수치 있음.")]
     for c in focus:
         if c in table:
             below = sum(1 for v in table.values() if v < table[c])
             if rank[c] <= n / 2:
-                lines.append(f"{names[c]}: {val(table[c])} — cao thứ {rank[c]} trên {where}"
-                             f" (cao hơn {round(100 * below / n)}% số nơi có số liệu).")
+                lines.append(lang.pick(
+                    vi=f"{names[c]}: {val(table[c])} — cao thứ {rank[c]} trên {where}"
+                       f" (cao hơn {round(100 * below / n)}% số nơi có số liệu).",
+                    ko=f"{names[c]}: {val(table[c])} — {where} 중 높은 순으로 {rank[c]}위"
+                       f" (수치가 있는 곳의 {round(100 * below / n)}%보다 높음)."))
             else:          # nửa dưới bảng: "thấp thứ 2" thay vì "cao thứ 213, cao hơn 0%"
-                lines.append(f"{names[c]}: {val(table[c])} — thấp thứ {below + 1} trên {where}"
-                             f" (tức cao thứ {rank[c]}).")
-    lines.append("5 nơi cao nhất: " + "; ".join(
+                lines.append(lang.pick(
+                    vi=f"{names[c]}: {val(table[c])} — thấp thứ {below + 1} trên {where} (tức cao thứ {rank[c]}).",
+                    ko=f"{names[c]}: {val(table[c])} — {where} 중 낮은 순으로 {below + 1}위"
+                       f" (높은 순으로 {rank[c]}위)."))
+    lines.append(lang.pick(vi="5 nơi cao nhất: ", ko="상위 5곳: ") + "; ".join(
         f"{rank[c]}. {names[c]} — {val(table[c])}" for c in order[:5]) + ".")
-    lines.append("3 nơi thấp nhất: " + "; ".join(
+    lines.append(lang.pick(vi="3 nơi thấp nhất: ", ko="하위 3곳: ") + "; ".join(
         f"{names[c]} — {val(table[c])}" for c in order[-3:]) + ".")
-    lines.append(f"Trung vị thế giới: {val(statistics.median(table.values()))}.")
-    sea = {c: table[c] for c in SOUTHEAST_ASIA if c in table}
-    if focus and focus[0] in sea and len(sea) >= 5:
-        top = max(sea, key=sea.get)
-        lines.append(f"Trong {len(sea)} nước Đông Nam Á có số liệu, {names[focus[0]]} đứng thứ"
-                     f" {ranks_desc(sea)[focus[0]]}; cao nhất là {names[top]} — {val(sea[top])}.")
+    lines.append(lang.pick(vi="Trung vị thế giới: ", ko="세계 중앙값: ")
+                 + f"{val(statistics.median(table.values()))}.")
+    region, region_name = lang.pick(vi="sea", ko="oecd"), lang.pick(vi="Đông Nam Á", ko="OECD")
+    group = {c: table[c] for c in (SOUTHEAST_ASIA if region == "sea" else OECD) if c in table}
+    if focus and focus[0] in group and len(group) >= 5:
+        top = max(group, key=group.get)
+        lines.append(lang.pick(
+            vi=f"Trong {len(group)} nước {region_name} có số liệu, {names[focus[0]]} đứng thứ"
+               f" {ranks_desc(group)[focus[0]]}; cao nhất là {names[top]} — {val(group[top])}.",
+            ko=f"수치가 있는 {region_name} {len(group)}개국 중 {k(names[focus[0]], '은/는')}"
+               f" {ranks_desc(group)[focus[0]]}위; 가장 높은 곳은 {names[top]} — {val(group[top])}."))
     a, b = (focus + [None, None])[:2]
     if a in table and b in table and table[a] != table[b]:
         hi, lo = (b, a) if table[b] > table[a] else (a, b)
         if table[lo] > 0 and table[hi] / table[lo] >= 1.5:    # "gấp 1,12 lần" nghe gượng
-            lines.append(f"Năm {year}: {names[hi]} gấp {vn_number(table[hi] / table[lo])} lần {names[lo]}.")
+            r = vn_number(table[hi] / table[lo])
+            lines.append(lang.pick(vi=f"Năm {year}: {names[hi]} gấp {r} lần {names[lo]}.",
+                                   ko=f"{year}년: {k(names[hi], '은/는')} {names[lo]}의 {r}배."))
         else:                    # hiệu của hai tỷ lệ % là "điểm phần trăm", không phải %
             # trừ trên số ĐÃ LÀM TRÒN như được đọc lên (83,6 - 74,7 = 8,9, không phải 8,89)
             gap = round(shown(table[hi]) - shown(table[lo]), 6)
-            gap_text = (f"{vn_number(gap)} điểm phần trăm" if unit.startswith("%") else val(gap))
-            lines.append(f"Năm {year}: {names[hi]} hơn {names[lo]} {gap_text}.")
+            pct = unit.startswith("%")
+            lines.append(lang.pick(
+                vi=f"Năm {year}: {names[hi]} hơn {names[lo]} "
+                   + (f"{vn_number(gap)} điểm phần trăm" if pct else val(gap)) + ".",
+                ko=f"{year}년: {k(names[hi], '이/가')} {names[lo]}보다 "
+                   + (f"{vn_number(gap)}%p" if pct else val(gap)) + " 높음."))
     # Góc kể chuyện mạnh nhất của kênh: "Việt Nam hôm nay bằng Hàn Quốc năm nào"
     match = catch_up_year(table[a], history.get(b) or []) if a in table and b else None
     if match and match[0] < year:
-        lines.append(f"{names[a]} năm {year} ({val(table[a])}) tương đương {names[b]} năm {match[0]}"
-                     f" ({val(match[1])}) — cách nhau {year - match[0]} năm.")
+        lines.append(lang.pick(
+            vi=f"{names[a]} năm {year} ({val(table[a])}) tương đương {names[b]} năm {match[0]}"
+               f" ({val(match[1])}) — cách nhau {year - match[0]} năm.",
+            ko=f"{year}년 {names[a]} 수치({val(table[a])})는 {match[0]}년 {names[b]} 수치({val(match[1])})와"
+               f" 같은 수준 — {year - match[0]}년 차이."))
     relate = relatable_line([(names[c], table[c]) for c in focus if c in table], unit, ind)
     if relate:
         lines.append(relate)
@@ -308,25 +350,29 @@ def build_world_item(ind: dict, year: int, table: dict, names: dict, focus: list
     beats = story_beats(hist_named, [names[c] for c in focus if names.get(c) in hist_named], unit)
     if a in table:                         # so với nơi cao nhất / thấp nhất / trung vị — tính sẵn
         top, bottom, med = order[0], order[-1], statistics.median(table.values())
+        top_l, low_l = lang.pick(vi="(cao nhất)", ko="(1위)"), lang.pick(vi="(thấp nhất)", ko="(최하위)")
+        world_med = lang.pick(vi="trung vị thế giới", ko="세계 중앙값")
         beats += [r for r in (
-            ratio_phrase(f"{names[top]} (cao nhất)", table[top], names[a], table[a]) if top != a else "",
-            ratio_phrase(names[a], table[a], f"{names[bottom]} (thấp nhất)", table[bottom]) if bottom != a else "",
-            ratio_phrase(names[a], table[a], "trung vị thế giới", med, 1.2),
-            ratio_phrase("Trung vị thế giới", med, names[a], table[a], 1.2)) if r]
+            ratio_phrase(f"{names[top]} {top_l}", table[top], names[a], table[a]) if top != a else "",
+            ratio_phrase(names[a], table[a], f"{names[bottom]} {low_l}", table[bottom]) if bottom != a else "",
+            ratio_phrase(names[a], table[a], world_med, med, 1.2),
+            ratio_phrase(lang.pick(vi="Trung vị thế giới", ko="세계 중앙값"), med, names[a], table[a], 1.2)) if r]
     lines += beats_lines(beats)
     # chuỗi theo năm -> biểu đồ đường (các nước focus, rồi chuỗi thêm như "Thế giới")
     series = [(names[c], history.get(c) or []) for c in focus] + list((extra_series or {}).items())
     for label, s in series:
         picks = [p for i, p in enumerate(s) if p[0] % 5 == 0 or i in (0, len(s) - 1)]
         if len(picks) >= 2:
-            lines.append(f"{label} theo năm: " + "; ".join(f"{y}: {vn_number(v)}" for y, v in picks) + ".")
+            lines.append(series_line(label, picks))
     lines.append(world_table_line(year, {names[c]: v for c, v in table.items()}))
-    title = f"Bản đồ thế giới: {lower_first(ind['name'])} năm {year}"
+    title = lang.pick(vi=f"Bản đồ thế giới: {lower_first(ind['name'])} năm {year}",
+                      ko=f"세계 지도: {year}년 {ind['name']}")
     if focus and focus[0] in table:
-        title += f" — {names[focus[0]]} thứ {rank[focus[0]]}/{n}"
+        title += lang.pick(vi=f" — {names[focus[0]]} thứ {rank[focus[0]]}/{n}",
+                           ko=f" — {names[focus[0]]} {n}개국 중 {rank[focus[0]]}위")
     return {"title": title, "summary": "\n".join(lines),
             "url": url or WORLD_PAGE.format(code=ind["code"], year=year),
-            "source": source, "lang": "vi"}
+            "source": source, "lang": lang.code()}
 
 
 def fetch_world_maps(cfg: dict, indicators: list, today: date = None) -> list:
@@ -339,7 +385,8 @@ def fetch_world_maps(cfg: dict, indicators: list, today: date = None) -> list:
     lookup = {i["code"]: i for i in indicators or []}
     pool = [lookup[c] for c in codes if c in lookup]
     world = load_map("world")["countries"]
-    names = {c: w["name"] for c, w in world.items()}
+    from ..render.geo import country_names
+    names = {c: n for c, n in country_names().items() if c in world}    # tên theo ngôn ngữ kênh
     focus = cfg.get("focus") or ["VNM", "KOR"]
     items = []
     for ind in todays_indicators(pool, int(cfg.get("per_day", 1)), today, cfg.get("priority")):

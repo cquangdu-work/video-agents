@@ -51,6 +51,15 @@ def parse_vn_number(s: str) -> float:
     return lang.parse(s)
 
 
+SERIES_MARK = r"(?:theo năm|연도별):"        # dòng chuỗi theo năm: kênh Việt "theo năm:", kênh Hàn "연도별:"
+
+
+def series_line(name: str, pairs) -> str:
+    """'<Tên> theo năm: 2020: 1,5; 2024: 2,1.' (kênh Hàn: '<이름> 연도별: 2020: 1.5; 2024: 2.1.')."""
+    body = "; ".join(f"{y}: {vn_number(v)}" for y, v in pairs)
+    return lang.pick(vi=f"{name} theo năm: {body}.", ko=f"{name} 연도별: {body}.")
+
+
 def parse_series(summary: str) -> list:
     """Đọc lại các dòng "<Tên> theo năm: 1990: 98,9; 1995: 159; ..." trong tóm tắt
     -> [{"label": "Việt Nam", "xs": [1990, 1995, ...], "ys": [98.9, 159, ...]}, ...].
@@ -60,7 +69,7 @@ def parse_series(summary: str) -> list:
     """
     out = []
     for line in str(summary or "").splitlines():
-        m = re.match(r"\s*(.+?) theo năm:\s*(.+?)\.?\s*$", line)
+        m = re.match(rf"\s*(.+?) {SERIES_MARK}\s*(.+?)\.?\s*$", line)
         if not m:
             continue
         xs, ys = [], []
@@ -102,23 +111,32 @@ def ranks_desc(values: dict) -> dict:
 # Dòng bảng đủ mọi nước của ý tưởng "bản đồ thế giới" — máy đọc lại để tô bản đồ (quá dài
 # để model chép, và model không được dùng số ở đây cho lời đọc).
 WORLD_TABLE = "Số liệu từng nước năm"
+WORLD_TABLE_KO = "국가별 수치"
+_WORLD_MARK = rf"(?:{WORLD_TABLE}|{WORLD_TABLE_KO})"
 
 
 def world_table_line(year: int, named: dict) -> str:
-    """{tên tiếng Việt: giá trị} -> 'Số liệu từng nước năm 2024 (...): Afghanistan 66,0; ...'"""
+    """{tên nước: giá trị} -> 'Số liệu từng nước năm 2024 (...): Afghanistan 66,0; ...'"""
     body = "; ".join(f"{n} {vn_number(v)}" for n, v in sorted(named.items()))
-    return (f"{WORLD_TABLE} {year} (máy dùng để tô bản đồ; lời đọc chỉ dùng các số đã nêu ở"
-            f" trên): {body}.")
+    return lang.pick(
+        vi=f"{WORLD_TABLE} {year} (máy dùng để tô bản đồ; lời đọc chỉ dùng các số đã nêu ở trên): {body}.",
+        ko=f"{WORLD_TABLE_KO} {year} (지도 색칠용 — 내레이션에는 위에 나온 수치만 사용): {body}.")
+
+
+def before_world_table(summary: str) -> str:
+    """Phần tóm tắt TRƯỚC dòng bảng mọi nước (model không được dùng số trong dòng đó)."""
+    return re.split(_WORLD_MARK, str(summary or ""), maxsplit=1)[0]
 
 
 def parse_world_table(summary: str):
     """Ngược lại world_table_line -> {"year": 2024, "items": [{"label", "value"}]} hoặc None."""
-    m = re.search(rf"^{WORLD_TABLE} ((?:19|20)\d{{2}})[^:]*:\s*(.+?)\.?\s*$", str(summary or ""), re.M)
+    m = re.search(rf"^{_WORLD_MARK} ((?:19|20)\d{{2}})[^:]*:\s*(.+?)\.?\s*$", str(summary or ""), re.M)
     if not m:
         return None
     items = []
+    num = (r"-?[\d,]*\d(?:\.\d+)?" if lang.code() == "ko" else r"-?[\d.]*\d(?:,\d+)?")
     for part in m.group(2).split(";"):
-        pm = re.match(r"\s*(.+?)\s+(-?[\d.]*\d(?:,\d+)?)\s*$", part)
+        pm = re.match(rf"\s*(.+?)\s+({num})\s*$", part)
         if pm:
             items.append({"label": pm.group(1), "value": parse_vn_number(pm.group(2))})
     return {"year": int(m.group(1)), "items": items} if items else None
@@ -126,6 +144,8 @@ def parse_world_table(summary: str):
 
 def lower_first(name: str) -> str:
     """Viết thường chữ đầu để ghép vào câu, trừ khi từ đầu là chữ viết tắt ("GDP ...")."""
+    if lang.code() == "ko":                           # chữ Hàn không có hoa/thường
+        return name
     first_word = name.split()[0] if name.split() else ""
     if len(first_word) > 1 and first_word.isupper():
         return name
@@ -139,7 +159,21 @@ def lower_first(name: str) -> str:
 # 1960, cả hai nước đều có 0 thuê bao"). Code tính sẵn những điều ĐÁNG KỂ có thật trong bảng.
 BEATS_HEADER = "Điểm nhấn (máy tính sẵn từ bảng số — dựng câu chuyện từ đây):"
 RELATE_HEADER = "Cách nói dễ hình dung (máy tính sẵn):"
+BEATS_HEADER_KO = "핵심 포인트(표에서 기계가 미리 계산 — 여기서 이야기를 구성):"
+RELATE_HEADER_KO = "쉽게 와닿는 표현(기계가 미리 계산):"
 PERIODS = {"ngày": 365, "tuần": 52, "tháng": 12}
+PERIODS_KO = {"ngày": "하루", "tuần": "일주일", "tháng": "한 달"}
+# `per` trong cấu hình là MÃ (chữ Việt); kênh Hàn đọc ra (danh từ, đơn vị đếm)
+PER_KO = {"người": ("", "명"), "phụ nữ": ("여성 ", "명"), "người lao động": ("근로자 ", "명"),
+          "người trưởng thành": ("성인 ", "명"), "xe mới bán": ("신차 ", "대"), "số điện": ("전력 ", "")}
+
+
+def beats_header() -> str:
+    return lang.pick(vi=BEATS_HEADER, ko=BEATS_HEADER_KO)
+
+
+def relate_header() -> str:
+    return lang.pick(vi=RELATE_HEADER, ko=RELATE_HEADER_KO)
 
 
 def shown_value(v: float) -> float:
@@ -153,19 +187,27 @@ def fraction_phrase(p: float, per: str) -> str:
     import math
     if not 0 < p < 100:
         return ""
+    noun, counter = PER_KO.get(per, ("", "명"))
+
+    def say(n, k, qual=""):                          # kênh Hàn: "여성 3명 중 2명", "10명 중 거의 6명"
+        ko_qual = {"gần ": "거의 ", "hơn ": "", "": ""}[qual]
+        more = " 이상" if qual == "hơn " else ""
+        ko = (f"{noun}{n}{counter} 중 {ko_qual}{k}{counter}{more}" if counter
+              else f"{noun}{n}분의 {ko_qual}{k}{more}")
+        return lang.pick(vi=f"cứ {n} {per} thì {qual}{k}", ko=ko)
     if 10 <= p < 90:
         for n in (2, 3, 4, 5):                       # phân số nhỏ, lệch không quá 2 điểm phần trăm
             k = round(p / 100 * n)
             if 1 <= k < n and math.gcd(k, n) == 1 and abs(100 * k / n - p) <= 2.0:
-                return f"cứ {n} {per} thì {k}"
+                return say(n, k)
         n, k = 10, round(p / 10)
     else:                                            # tỷ lệ rất nhỏ / rất lớn: trên 100
         n, k = 100, round(p)
     if k < 1:
-        return f"chưa tới 1 trong 100 {per}"
+        return lang.pick(vi=f"chưa tới 1 trong 100 {per}", ko=f"{noun}100{counter or '분의'} 중 1{counter} 미만")
     step = 100 / n
     qual = "gần " if k * step > p + step / 10 else ("hơn " if k * step < p - step / 10 else "")
-    return f"cứ {n} {per} thì {qual}{k}"
+    return say(n, k, qual)
 
 
 def relatable_line(pairs: list, unit: str, ind: dict) -> str:
@@ -182,9 +224,12 @@ def relatable_line(pairs: list, unit: str, ind: dict) -> str:
             if f:
                 bits.append(f"{name} {vn_number(v)}% ≈ {f}")
         elif period in PERIODS and v > 0:
-            bits.append(f"{name} {vn_number(v)} {unit} mỗi năm ≈ khoảng {vn_number(v / PERIODS[period])}"
-                        f" {unit} mỗi {period}")
-    return f"{RELATE_HEADER} " + "; ".join(bits) + "." if bits else ""
+            per_period = vn_number(v / PERIODS[period])
+            bits.append(lang.pick(
+                vi=f"{name} {vn_number(v)} {unit} mỗi năm ≈ khoảng {per_period} {unit} mỗi {period}",
+                ko=f"{name} 연간 {lang.with_unit(vn_number(v), unit)} ≈ {PERIODS_KO[period]}에 약"
+                   f" {lang.with_unit(per_period, unit)}"))
+    return f"{relate_header()} " + "; ".join(bits) + "." if bits else ""
 
 
 def _milestones(lo: float, hi: float, pct: bool) -> list:
@@ -198,7 +243,12 @@ def _milestones(lo: float, hi: float, pct: bool) -> list:
 
 
 def _fmt(v: float, unit: str) -> str:
-    return (f"{vn_number(v)}%" if unit.startswith("%") else f"{vn_number(v)} {unit}".strip())
+    return (f"{vn_number(v)}%" if unit.startswith("%") else lang.with_unit(vn_number(v), unit))
+
+
+def _k(word: str, pair: str) -> str:
+    """Trợ từ tiếng Hàn (src/lang.josa) — chỉ dùng trong bản ko của lang.pick."""
+    return lang.josa(word, pair)
 
 
 def story_beats(named: dict, focus: list, unit: str, step: int = 5) -> list:
@@ -223,8 +273,9 @@ def story_beats(named: dict, focus: list, unit: str, step: int = 5) -> list:
             s0, s1 = da[y0] - db[y0], da[y1] - db[y1]
             if s0 and s1 and (s0 > 0) != (s1 > 0):
                 lead, other = (a, b) if s1 > 0 else (b, a)
-                crosses.append(f"Năm {y1}: {lead} vượt {other} ({lead} {_fmt(dict(named[lead])[y1], unit)},"
-                               f" {other} {_fmt(dict(named[other])[y1], unit)})")
+                vals = f"{lead} {_fmt(dict(named[lead])[y1], unit)}, {other} {_fmt(dict(named[other])[y1], unit)}"
+                crosses.append(lang.pick(vi=f"Năm {y1}: {lead} vượt {other} ({vals})",
+                                         ko=f"{y1}년: {_k(lead, '이/가')} {_k(other, '을/를')} 앞지름 ({vals})"))
         out += crosses[:1] + crosses[-1:] if len(crosses) > 1 else crosses
         if len(common) >= 2:
             y0, y1 = common[0], common[-1]
@@ -232,28 +283,38 @@ def story_beats(named: dict, focus: list, unit: str, step: int = 5) -> list:
                 g0 = round(shown_value(da[y0]) - shown_value(db[y0]), 6)
                 g1 = round(shown_value(da[y1]) - shown_value(db[y1]), 6)
                 if abs(abs(g1) - abs(g0)) >= 3:
-                    side = lambda g: f"{a} {'hơn' if g > 0 else 'kém'} {b} {vn_number(abs(g))} điểm phần trăm"
-                    out.append(f"Khoảng cách: năm {y0} {side(g0)}; năm {y1} {side(g1)}")
+                    side = lambda g: lang.pick(
+                        vi=f"{a} {'hơn' if g > 0 else 'kém'} {b} {vn_number(abs(g))} điểm phần trăm",
+                        ko=f"{_k(a, '이/가')} {b}보다 {vn_number(abs(g))}%p {'높음' if g > 0 else '낮음'}")
+                    out.append(lang.pick(vi=f"Khoảng cách: năm {y0} {side(g0)}; năm {y1} {side(g1)}",
+                                         ko=f"격차: {y0}년 {side(g0)}; {y1}년 {side(g1)}"))
             elif min(da[y0], db[y0], da[y1], db[y1]) > 0:
                 r = lambda y: (max(da[y], db[y]) / min(da[y], db[y]), a if da[y] >= db[y] else b,
                                b if da[y] >= db[y] else a)
                 (r0, h0, l0), (r1, h1, l1) = r(y0), r(y1)
                 if r0 >= 1.2 or r1 >= 1.2:
                     if h0 != h1 or abs(r1 - r0) / max(r0, r1) >= 0.2:
-                        out.append(f"Khoảng cách: năm {y0} {h0} gấp {vn_number(r0)} lần {l0};"
-                                   f" năm {y1} {h1} gấp {vn_number(r1)} lần {l1}")
+                        out.append(lang.pick(
+                            vi=f"Khoảng cách: năm {y0} {h0} gấp {vn_number(r0)} lần {l0};"
+                               f" năm {y1} {h1} gấp {vn_number(r1)} lần {l1}",
+                            ko=f"격차: {y0}년 {_k(h0, '은/는')} {l0}의 {vn_number(r0)}배;"
+                               f" {y1}년 {_k(h1, '은/는')} {l1}의 {vn_number(r1)}배"))
     for n in names[:2]:
         s = named[n]
         ys = [v for _, v in s]
         top = max(range(len(s)), key=lambda i: ys[i])
         low = min(range(len(s)), key=lambda i: ys[i])
         if 0 < top < len(s) - 1 and ys[top] > 0 and ys[-1] < 0.95 * ys[top]:
-            out.append(f"Đỉnh của {n}: năm {s[top][0]} ({_fmt(ys[top], unit)}); năm {s[-1][0]} còn"
-                       f" {_fmt(ys[-1], unit)}")
+            out.append(lang.pick(
+                vi=f"Đỉnh của {n}: năm {s[top][0]} ({_fmt(ys[top], unit)}); năm {s[-1][0]} còn {_fmt(ys[-1], unit)}",
+                ko=f"{n} 최고치: {s[top][0]}년({_fmt(ys[top], unit)}); {s[-1][0]}년에는 {_fmt(ys[-1], unit)}"))
         if 0 < low < len(s) - 1 and ys[low] >= 0 and ys[-1] > 1.05 * ys[low] and ys[0] > 1.05 * ys[low]:
             # "tăng lên", không "hồi lên": với bụi mịn, tử vong... tăng là XẤU — câu chữ phải trung tính
-            out.append(f"Đáy của {n}: năm {s[low][0]} ({_fmt(ys[low], unit)}), rồi tăng lên"
-                       f" {_fmt(ys[-1], unit)} năm {s[-1][0]}")
+            out.append(lang.pick(
+                vi=f"Đáy của {n}: năm {s[low][0]} ({_fmt(ys[low], unit)}), rồi tăng lên"
+                   f" {_fmt(ys[-1], unit)} năm {s[-1][0]}",
+                ko=f"{n} 최저치: {s[low][0]}년({_fmt(ys[low], unit)}), 이후 {s[-1][0]}년"
+                   f" {_fmt(ys[-1], unit)}까지 증가"))
     s = named[a]
     first, last = s[0][1], s[-1][1]
     up = last > first
@@ -267,9 +328,12 @@ def story_beats(named: dict, focus: list, unit: str, step: int = 5) -> list:
     windows = [w for w in windows if (speed(w) > (0 if pct else 1)) == up and speed(w) != (0 if pct else 1)]
     if windows and len(s) >= 3 and s[-1][0] - s[0][0] >= 2 * step:
         y, v, w = (max if up else min)(windows, key=speed)
-        times = f" (gấp {vn_number(w / v)} lần)" if not pct and up and w / v >= 1.5 else ""
-        out.append(f"Giai đoạn {a} {'tăng' if up else 'giảm'} nhanh nhất: {y}–{y + step}, từ {_fmt(v, unit)}"
-                   f" {'lên' if up else 'xuống'} {_fmt(w, unit)}{times}")
+        many = not pct and up and w / v >= 1.5
+        out.append(lang.pick(
+            vi=f"Giai đoạn {a} {'tăng' if up else 'giảm'} nhanh nhất: {y}–{y + step}, từ {_fmt(v, unit)}"
+               f" {'lên' if up else 'xuống'} {_fmt(w, unit)}" + (f" (gấp {vn_number(w / v)} lần)" if many else ""),
+            ko=f"{a} 가장 빠른 {'증가' if up else '감소'} 구간: {y}–{y + step}년, {_fmt(v, unit)} → {_fmt(w, unit)}"
+               + (f" ({vn_number(w / v)}배)" if many else "")))
     crossed = []
     for m in _milestones(min(first, last), max(first, last), pct):
         for (y0, v0), (y1, v1) in zip(s, s[1:]):
@@ -278,20 +342,24 @@ def story_beats(named: dict, focus: list, unit: str, step: int = 5) -> list:
                 break
     if crossed:
         m, y = crossed[-1] if up else crossed[0]
-        out.append(f"{a} {'vượt' if up else 'xuống dưới'} mốc {_fmt(m, unit)} vào năm {y}")
+        out.append(lang.pick(vi=f"{a} {'vượt' if up else 'xuống dưới'} mốc {_fmt(m, unit)} vào năm {y}",
+                             ko=f"{y}년 {a} {_fmt(m, unit)} {'돌파' if up else '아래로 하락'}"))
     # Cả chặng, kèm số năm và tỷ số TÍNH SẴN: model mạnh hơn hay tự tính (515 - 347 = 168, "gấp 12 lần"
     # khi thật là 12,6) — đúng hay sai thì cổng chống bịa số cũng không kiểm được (19/11/2026)
     y0, y1 = s[0][0], s[-1][0]
     if y1 > y0 and first != last:
-        bit = (f"Sau {y1 - y0} năm ({y0}–{y1}): {a} từ {_fmt(first, unit)} {'lên' if up else 'xuống'}"
-               f" {_fmt(last, unit)}")
+        bit = lang.pick(vi=f"Sau {y1 - y0} năm ({y0}–{y1}): {a} từ {_fmt(first, unit)} {'lên' if up else 'xuống'}"
+                           f" {_fmt(last, unit)}",
+                        ko=f"{y1 - y0}년 동안({y0}–{y1}): {a} {_fmt(first, unit)} → {_fmt(last, unit)}")
         if pct:
-            bit += (f", {'tăng' if up else 'giảm'} "
-                    f"{vn_number(abs(round(shown_value(last) - shown_value(first), 6)))} điểm phần trăm")
+            d = vn_number(abs(round(shown_value(last) - shown_value(first), 6)))
+            bit += lang.pick(vi=f", {'tăng' if up else 'giảm'} {d} điểm phần trăm",
+                             ko=f", {d}%p {'증가' if up else '감소'}")
         elif first > 0 and last > 0:
             r = last / first
-            bit += (f", gấp {vn_number(r)} lần" if r >= 1.5
-                    else f", còn {vn_number(100 * r)}% mức năm {y0}" if r <= 0.67 else "")
+            bit += (lang.pick(vi=f", gấp {vn_number(r)} lần", ko=f", {vn_number(r)}배") if r >= 1.5
+                    else lang.pick(vi=f", còn {vn_number(100 * r)}% mức năm {y0}",
+                                   ko=f", {y0}년의 {vn_number(100 * r)}% 수준") if r <= 0.67 else "")
         out.append(bit)
     return out
 
@@ -299,7 +367,8 @@ def story_beats(named: dict, focus: list, unit: str, step: int = 5) -> list:
 def ratio_phrase(hi_name: str, hi: float, lo_name: str, lo: float, min_ratio: float = 1.5) -> str:
     """"A gấp N lần B" tính sẵn (hai giá trị dương, tỷ số đủ lớn để đáng nói) — hoặc ""."""
     if hi > 0 and lo > 0 and hi / lo >= min_ratio:
-        return f"{hi_name} gấp {vn_number(hi / lo)} lần {lo_name}"
+        return lang.pick(vi=f"{hi_name} gấp {vn_number(hi / lo)} lần {lo_name}",
+                         ko=f"{_k(hi_name, '은/는')} {lo_name}의 {vn_number(hi / lo)}배")
     return ""
 
 
@@ -316,7 +385,7 @@ def trim_leading(*series, share: float = 0.001) -> tuple:
 
 
 def beats_lines(beats: list) -> list:
-    return [BEATS_HEADER] + [f"• {b}." for b in beats] if beats else []
+    return [beats_header()] + [f"• {b}." for b in beats] if beats else []
 
 
 def race_lines(series: dict, years: list, focus: list, unit: str = None) -> list:
@@ -330,7 +399,7 @@ def race_lines(series: dict, years: list, focus: list, unit: str = None) -> list
     last = ranking({n: at[n][y1] for n in series})
 
     def rank_line(y, order):
-        return f"Xếp hạng năm {y}: " + "; ".join(
+        return lang.pick(vi=f"Xếp hạng năm {y}: ", ko=f"{y}년 순위: ") + "; ".join(
             f"{k + 1}. {n} {vn_number(at[n][y])}" for k, n in enumerate(order)) + "."
     lines = [rank_line(y0, first), rank_line(y1, last)]
     for n in focus:
@@ -339,11 +408,11 @@ def race_lines(series: dict, years: list, focus: list, unit: str = None) -> list
         r0, r1 = first.index(n) + 1, last.index(n) + 1
         passed = [m for m in first[:r0 - 1] if last.index(m) > r1 - 1]       # trước ở trên, sau ở dưới
         lost = [m for m in first[r0:] if last.index(m) < r1 - 1]             # trước ở dưới, sau ở trên
-        line = f"{n}: hạng {r0} năm {y0}, hạng {r1} năm {y1}"
+        line = lang.pick(vi=f"{n}: hạng {r0} năm {y0}, hạng {r1} năm {y1}", ko=f"{n}: {y0}년 {r0}위, {y1}년 {r1}위")
         if passed:
-            line += " — vượt " + ", ".join(passed)
+            line += lang.pick(vi=" — vượt ", ko=" — 앞지른 상대: ") + ", ".join(passed)
         if lost:
-            line += ("; " if passed else " — ") + "bị vượt bởi " + ", ".join(lost)
+            line += ("; " if passed else " — ") + lang.pick(vi="bị vượt bởi ", ko="추월당한 상대: ") + ", ".join(lost)
         lines.append(line + ".")
     beats = story_beats(series, [n for n in focus if n in series], unit) if unit is not None else []
     for n in focus:                       # giai đoạn leo (hoặc tụt) hạng mạnh nhất giữa hai mốc liền nhau
@@ -353,16 +422,20 @@ def race_lines(series: dict, years: list, focus: list, unit: str = None) -> list
         k = max(range(len(years) - 1), key=lambda i: abs(ranks[i] - ranks[i + 1]))
         if ranks[k] != ranks[k + 1]:
             verb = "leo" if ranks[k + 1] < ranks[k] else "tụt"
-            beats.append(f"Giai đoạn {n} {verb} hạng mạnh nhất: {years[k]}–{years[k + 1]}, từ hạng"
-                         f" {ranks[k]} {'lên' if verb == 'leo' else 'xuống'} hạng {ranks[k + 1]}")
+            beats.append(lang.pick(
+                vi=f"Giai đoạn {n} {verb} hạng mạnh nhất: {years[k]}–{years[k + 1]}, từ hạng"
+                   f" {ranks[k]} {'lên' if verb == 'leo' else 'xuống'} hạng {ranks[k + 1]}",
+                ko=f"{n} 순위가 가장 크게 {'상승' if verb == 'leo' else '하락'}한 구간: {years[k]}–{years[k + 1]}년,"
+                   f" {ranks[k]}위 → {ranks[k + 1]}위"))
     for n in focus:                       # bên dẫn đầu gấp bao nhiêu lần — tính sẵn cho năm đầu, năm cuối
         if n not in series:
             continue
-        bits = [f"năm {y}: {r}" for y, order in ((y0, first), (y1, last))
-                for r in [ratio_phrase(f"{order[0]} (dẫn đầu)", at[order[0]][y], n, at[n][y])] if r and order[0] != n]
+        lead = lang.pick(vi="(dẫn đầu)", ko="(1위)")
+        bits = [lang.pick(vi=f"năm {y}: {r}", ko=f"{y}년: {r}") for y, order in ((y0, first), (y1, last))
+                for r in [ratio_phrase(f"{order[0]} {lead}", at[order[0]][y], n, at[n][y])] if r and order[0] != n]
         if bits:
             beats.append("; ".join(bits))
     lines += beats_lines(beats)
     for n in sorted(series, key=lambda n: -at[n][y1]):
-        lines.append(f"{n} theo năm: " + "; ".join(f"{y}: {vn_number(at[n][y])}" for y in years) + ".")
+        lines.append(series_line(n, [(y, at[n][y]) for y in years]))
     return lines

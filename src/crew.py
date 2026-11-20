@@ -256,8 +256,8 @@ def unsourced_numbers(script: dict, idea: dict, source_text: str) -> list:
     # Làm tròn ĐÚNG về số nguyên của một số có trong nguồn cũng được ("gấp 86,4 lần" đọc thành "gấp 86
     # lần"); làm tròn sai thì vẫn bị bắt (12,6 thành "12 lần"). Không lấy từ bảng mọi nước (200 số lẻ
     # phủ gần hết số nguyên hai chữ số — cổng sẽ lỏng)
-    from .sources.datatable import WORLD_TABLE
-    have |= {str(round(v)) for v in number_values(pool.split(WORLD_TABLE)[0]) if v != int(v)}
+    from .sources.datatable import before_world_table
+    have |= {str(round(v)) for v in number_values(before_world_table(pool)) if v != int(v)}
     voice = " ".join(str(s.get("voice", "")) for s in script.get("scenes", []))
     out = []
     for m in re.finditer(r"\d[\d.,]*\d|\d", voice):
@@ -765,13 +765,13 @@ def design_scenes(idea: dict, scenes: list, cfg: dict, log_problems=None, lesson
 
     # Dữ liệu gốc của ý tưởng (bảng số World Bank, tóm tắt bài báo): agent được phép lấy số
     # ở đây để vẽ biểu đồ — một đường xu hướng cần 6-10 điểm, lời đọc không thể đọc hết.
-    from .sources.datatable import WORLD_TABLE, parse_world_table
+    from .sources.datatable import before_world_table, parse_world_table
     from .sources.worldbank import parse_series
     full_summary = str(idea.get("summary") or "").strip()
     # Bảng mọi nước (bản đồ thế giới) quá dài để đưa model — code đọc từ toàn văn, model chỉ
     # thấy phần kể chuyện phía trên
     world = parse_world_table(full_summary)
-    source_data = full_summary.split(WORLD_TABLE)[0].strip()[:3000]
+    source_data = before_world_table(full_summary).strip()[:3000]
     data_series = parse_series(source_data)
     data_block = (f"\nDỮ LIỆU NGUỒN (số thật, ĐƯỢC dùng cho biểu đồ kể cả khi lời đọc không nhắc"
                   f" hết):\n\"\"\"\n{source_data}\n\"\"\"\n" if source_data else "")
