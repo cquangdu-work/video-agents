@@ -443,8 +443,9 @@ def _connect_facebook(con, msg: dict, text: str) -> None:
         return
     tg.delete_message(msg.get("message_id"))         # tin chứa token: không để lại trong lịch sử chat
     try:
-        page_id = ((load_config()["publish"].get("facebook") or {}).get("page_id"))
-        who = facebook.connect(parts[1], page_id)
+        cfg_now = load_config()
+        page_id = ((cfg_now["publish"].get("facebook") or {}).get("page_id"))
+        who = facebook.connect(parts[1], page_id, prefer_name=cfg_now["channel"]["name"])   # nhiều Trang: Trang trùng tên kênh
     except Exception as exc:
         tg.send_message(f"⚠️ Kết nối Facebook chưa được: {exc}")
         return

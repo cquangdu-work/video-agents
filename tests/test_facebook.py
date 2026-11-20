@@ -68,6 +68,16 @@ class ConnectTest(FbCase):
         self.assertIn("pages_manage_posts", str(e.exception))
         self.assertFalse(self.tok.exists())
 
+    def test_many_pages_pick_the_one_named_like_the_channel(self):
+        pages = [{"id": "1", "name": "숫자세계", "access_token": "a", "tasks": ["CREATE_CONTENT"]},
+                 {"id": "2", "name": "Thế giới qua con số", "access_token": "b", "tasks": ["CREATE_CONTENT"]},
+                 {"id": "3", "name": "Trang khác", "access_token": "c", "tasks": ["CREATE_CONTENT"]}]
+        self.assertEqual(facebook.pick_page(pages, prefer_name="Thế giới qua con số")["id"], "2")
+        self.assertEqual(facebook.pick_page(pages, prefer_name="숫자세계")["id"], "1")
+        self.assertEqual(facebook.pick_page(pages, page_id="3", prefer_name="숫자세계")["id"], "3")   # id thắng tên
+        with self.assertRaisesRegex(facebook.FacebookAuthError, "FACEBOOK_PAGE_ID"):
+            facebook.pick_page(pages, prefer_name="Không trùng")
+
     def test_page_choice(self):
         a = {"id": "1", "name": "A", "access_token": "t", "tasks": ["CREATE_CONTENT"]}
         b = {"id": "2", "name": "B", "access_token": "t", "tasks": ["ANALYZE"]}

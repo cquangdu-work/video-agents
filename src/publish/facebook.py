@@ -85,18 +85,23 @@ def _app() -> tuple:
     return app_id, secret
 
 
-def pick_page(pages: list, page_id: str = None) -> dict:
-    """Chọn Trang để đăng: đúng page_id trong cấu hình, không thì Trang duy nhất Du quản lý.
-    Trang phải cho phép tạo nội dung (task CREATE_CONTENT)."""
+def pick_page(pages: list, page_id: str = None, prefer_name: str = None) -> dict:
+    """Chọn Trang để đăng: đúng page_id (FACEBOOK_PAGE_ID trong .env, hoặc publish.facebook.page_id), không thì Trang
+    TRÙNG TÊN KÊNH (ca thật 21/11: token của Du quản lý 3 Trang, gồm cả Trang của hai kênh), không nữa thì Trang duy
+    nhất. Trang phải cho phép tạo nội dung (task CREATE_CONTENT)."""
     if page_id:
         pages = [p for p in pages if str(p.get("id")) == str(page_id)]
+    elif prefer_name and len(pages) > 1:
+        same = [p for p in pages if " ".join(str(p.get("name", "")).split()).casefold()
+                == " ".join(str(prefer_name).split()).casefold()]
+        pages = same or pages
     if not pages:
         raise FacebookAuthError("Token không quản lý Trang nào" + (f" có id {page_id}" if page_id else "")
                                 + " — khi lấy token nhớ chọn Trang của kênh")
     if len(pages) > 1:
         names = ", ".join(f"{p.get('name')} ({p.get('id')})" for p in pages)
-        raise FacebookAuthError(f"Token quản lý nhiều Trang: {names}. Ghi page_id của Trang kênh vào"
-                                " config/channel.yaml (publish.facebook.page_id) rồi gửi lại")
+        raise FacebookAuthError(f"Token quản lý nhiều Trang: {names}, không Trang nào trùng tên kênh. Ghi"
+                                " FACEBOOK_PAGE_ID=<id Trang của kênh> vào .env trên VM rồi gửi lại")
     page = pages[0]
     tasks = page.get("tasks")
     if tasks is not None and "CREATE_CONTENT" not in tasks:
@@ -117,7 +122,7 @@ def _save(page: dict, now: datetime = None, permissions=()) -> dict:
     return tok
 
 
-def connect(user_token: str, page_id: str = None) -> dict:
+def connect(user_token: str, page_id: str = None, prefer_name: str = None) -> dict:
     """User token ngắn hạn (Graph API Explorer) -> user token dài hạn -> page token không hết hạn, lưu lại.
     -> {"page_id", "page_name"}."""
     app_id, secret = _app()
@@ -135,7 +140,7 @@ def connect(user_token: str, page_id: str = None) -> dict:
         raise FacebookAuthError("Token thiếu quyền: " + ", ".join(missing) + " — tích thêm ở Graph API Explorer")
     pages = _check(requests.get(f"{GRAPH}/me/accounts", timeout=30, params={
         "access_token": long_lived, "fields": "id,name,access_token,tasks"})).get("data", [])
-    tok = _save(pick_page(pages, page_id), permissions=have)
+    tok = _save(pick_page(pages, page_id or os.getenv("FACEBOOK_PAGE_ID"), prefer_name), permissions=have)
     return {"page_id": tok["page_id"], "page_name": tok["page_name"],
             "missing_optional": [p for p in OPTIONAL if p not in have]}
 
