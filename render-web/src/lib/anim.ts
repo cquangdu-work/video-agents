@@ -1,3 +1,4 @@
+import { SEP } from "./locale";
 import { Easing, interpolate } from "remotion";
 
 export const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
@@ -15,11 +16,11 @@ export const pop = (t: number, at: number, dur = 0.35) => ramp(t, at, at + dur, 
 export const pulse = (t: number, at: number, dur = 0.25) =>
   t < at || t > at + dur ? 0 : 1 - (t - at) / dur;
 
-/** Số kiểu Việt Nam với ĐÚNG `dec` chữ số lẻ (giống fmt_num của Python): 1.234,5 */
+/** Số với ĐÚNG `dec` chữ số lẻ (giống fmt_num của Python), kiểu của kênh (lib/locale.ts): 1.234,5 | 1,234.5 */
 export const fmtDec = (v: number, dec: number) => {
   const [i, f] = v.toFixed(Math.max(0, dec)).split(".");
-  const int = i.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  return f ? `${int},${f}` : int;
+  const int = i.replace(/\B(?=(\d{3})+(?!\d))/g, SEP.thou);
+  return f ? `${int}${SEP.dec}${f}` : int;
 };
 
 /** Ít chữ số lẻ nhất mà không làm tròn mất giá trị, tối đa maxDec (giống label_decimals Python). */
@@ -30,11 +31,11 @@ export const labelDec = (v: number, maxDec: number) => {
   return d;
 };
 
-/** Số kiểu Việt Nam: 1.234 và 0,03. Số nhỏ giữ đủ chữ số để không làm tròn mất giá trị. */
+/** Số kiểu của kênh: 1.234 và 0,03 (kênh Hàn 1,234 và 0.03). Số nhỏ giữ đủ chữ số để không làm tròn mất giá trị. */
 export const fmtVi = (v: number) => {
   const a = Math.abs(v);
   const dec = Number.isInteger(v) || a >= 10 ? 0 : a >= 0.1 ? 1 : 2;
   const [i, f] = v.toFixed(dec).split(".");
-  const int = i.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  return f ? `${int},${f}` : int;
+  const int = i.replace(/\B(?=(\d{3})+(?!\d))/g, SEP.thou);
+  return f ? `${int}${SEP.dec}${f}` : int;
 };

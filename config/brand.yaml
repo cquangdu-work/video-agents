@@ -44,6 +44,7 @@ signature:
 intro:
   seconds: 1.0
   text: "THẾ GIỚI QUA CON SỐ"
+  text_ko: "숫자로 보는 세계"     # kênh tiếng Hàn (src/render/web.brand_props)
   style: "đếm số 0→1 kèm logo chữ, nền background, chữ accent"
 
 # Nhịp dựng (theo file công thức + CLAUDE.md)

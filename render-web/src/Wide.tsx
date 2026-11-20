@@ -1,6 +1,8 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import { loadFont } from "@remotion/google-fonts/BeVietnamPro";
+import { loadFont as loadKR } from "@remotion/google-fonts/NotoSansKR";
+import { LANG } from "./lib/locale";
 import { Story } from "./Story";
 import { StoryProps, Word } from "./types";
 import { clamp01, ramp } from "./lib/anim";
@@ -10,7 +12,11 @@ import { clamp01, ramp } from "./lib/anim";
 // phải là số chương, tiêu đề, phụ đề lớn theo từ đang đọc và danh sách các chương.
 // Tiếng do Python ghép từ bản phát hành của Shorts (đã có giọng + nhạc + hiệu ứng).
 
-const { fontFamily } = loadFont("normal", { weights: ["500", "600", "700", "800"], subsets: ["vietnamese", "latin"] });
+const vi = loadFont("normal", { weights: ["500", "600", "700", "800"], subsets: ["vietnamese", "latin"] });
+// Kênh tiếng Hàn: Be Vietnam Pro không có chữ Hàn -> Noto Sans KR (OFL) đứng sau cho chữ Hàn, chữ số/Latin vẫn
+// dùng Be Vietnam Pro để giữ nhận diện kênh. Chỉ nạp khi video là tiếng Hàn (bộ chữ Hàn nặng).
+const kr = LANG === "ko" ? loadKR("normal", { weights: ["500", "700", "800"], subsets: ["korean", "latin"] }) : null;
+const fontFamily = kr ? `${vi.fontFamily}, ${kr.fontFamily}` : vi.fontFamily;
 
 export type WideProps = {
   story: StoryProps;
@@ -61,7 +67,7 @@ export const Wide: React.FC<WideProps> = ({ story, chapter, chapters, series }) 
         transform: `translateY(${(1 - enter) * 20}px)` }}>
         <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: "0.18em", color: b.accent }}>{series}</div>
         <div style={{ marginTop: 14, fontSize: 30, fontWeight: 700, color: b.muted }}>
-          Chương {chapter}/{chapters.length}
+          {LANG === "ko" ? "챕터" : "Chương"} {chapter}/{chapters.length}
         </div>
         <div style={{ marginTop: 10, fontSize: 52, fontWeight: 800, lineHeight: 1.18, maxHeight: 190, overflow: "hidden" }}>
           {title}

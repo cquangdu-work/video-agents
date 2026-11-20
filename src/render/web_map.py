@@ -6,6 +6,7 @@ Python làm hết những gì có luật: phép chiếu (src/render/geo.py), Ho�
 Kết quả là đường vẽ SVG theo điểm ảnh khung 1080x1920 — Remotion (render-web/src/scenes/
 MapRace.tsx) chỉ tô màu và cho chuyển động, không tự quyết định gì về bản đồ.
 """
+from .. import lang
 from .base import fmt_num
 from .templates import country_color_key, label_decimals
 
@@ -162,12 +163,14 @@ def map_props(p: dict, colors: dict) -> dict:
             rows.append((data[code][0], data[code][1], colors[key], rank[code]))
     if order and order[-1] not in ("VNM", "KOR"):
         top = order[-1]
-        rows.append((f"Cao nhất: {display_name(top)}", data[top][1], colors["accent"], rank[top]))
+        rows.append((lang.pick(vi="Cao nhất: ", ko="1위: ") + display_name(top), data[top][1], colors["accent"],
+                     rank[top]))
     panel, ranks_shown = [], []
     for label, value, color, r in rows:
         # nửa dưới bảng nói "thấp thứ 2/214" (khớp tóm tắt), không "cao thứ 213/214"
         from_bottom = 1 + sum(1 for _, v in data.values() if v < value)
-        pos = f"cao thứ {r}/{total}" if r <= total / 2 else f"thấp thứ {from_bottom}/{total}"
+        pos = (lang.pick(vi=f"cao thứ {r}/{total}", ko=f"{total}개국 중 {r}위") if r <= total / 2
+               else lang.pick(vi=f"thấp thứ {from_bottom}/{total}", ko=f"하위 {from_bottom}위/{total}"))
         ranks_shown += [r, from_bottom, total]
         panel.append({"label": label, "value": fmt(value), "color": color, "pos": pos})
     out.update(inset={"frame": frame, "shapes": inset_shapes, "islands": inset_islands, "labels": inset_labels,

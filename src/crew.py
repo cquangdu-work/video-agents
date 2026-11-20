@@ -710,7 +710,7 @@ def make_room_for_rich(spec: list) -> list:
     return [sc for i, sc in enumerate(spec) if i not in drop]
 
 
-FOCUS_LABELS = {"việt nam", "hàn quốc"}
+FOCUS_LABELS = {"việt nam", "hàn quốc", "한국", "일본"}     # kênh Việt / kênh Hàn
 MAX_LINES = 4              # biểu đồ đường trên khung dọc: quá 4 đường là không đọc nổi
 
 

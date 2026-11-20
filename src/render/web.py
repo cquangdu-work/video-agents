@@ -15,6 +15,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .. import lang
 from .base import brand
 
 log = logging.getLogger(__name__)
@@ -71,7 +72,8 @@ def scene_spans(spec: list) -> list:
 
 def brand_props() -> dict:
     b = brand()
-    return {**b["colors"], "channel": b["intro"]["text"]}
+    # tên kênh ở logo góc theo ngôn ngữ kênh (brand.yaml intro.text_<mã>; thiếu thì tên kênh Việt)
+    return {**b["colors"], "channel": b["intro"].get(f"text_{lang.code()}") or b["intro"]["text"]}
 
 
 def node_env() -> tuple:
@@ -160,6 +162,22 @@ ICON_KEYWORDS = [
     (r"mục tiêu|cột mốc", "target"),
     (r"ý tưởng|phát minh|sáng tạo", "lightbulb"),
 ]
+# Kênh tiếng Hàn (20/11/2026): cùng bộ icon, từ khoá tiếng Hàn (so chuỗi con: trợ từ dính liền danh từ)
+ICON_KEYWORDS_KO = [
+    (r"태양광|태양에너지", "sun"), (r"휴대폰|스마트폰|이동통신|휴대전화", "smartphone"),
+    (r"인터넷|온라인|와이파이|SNS", "wifi"), (r"석유|휘발유|연료|석탄", "fuel"),
+    (r"전력|전기|에너지|kwh", "zap"), (r"배출|이산화탄소|co2|오염|공장|제조|산업", "factory"),
+    (r"산림|숲|나무", "trees"), (r"농업|쌀|식량|농민", "wheat"), (r"기온|폭염|기후|온난화", "thermometer"),
+    (r"식수|수자원", "droplets"), (r"교육|학생|대학|학교|취학", "graduation-cap"), (r"병원|의사|의료", "hospital"),
+    (r"건강|기대수명|수명|질병|사망", "heart-pulse"), (r"출산|출생|아기|영아|신생아|아이", "baby"),
+    (r"도시|도심", "building"), (r"주택|아파트|부동산", "house"), (r"수출|수입|무역|항구", "ship"),
+    (r"투자|자본", "landmark"), (r"은행|금융|결제", "wallet"), (r"관광|여행|항공|공항", "plane"),
+    (r"자동차|전기차|교통|신차", "car"), (r"철도|기차|지하철", "train"), (r"기술|컴퓨터|반도체|칩", "cpu"),
+    (r"인공지능|로봇", "bot"), (r"소비|소매|쇼핑", "shopping-cart"), (r"인구|국민|근로|일자리|노동", "users"),
+    (r"급증|도약|성장세", "rocket"), (r"gdp|경제|성장|소득", "trending-up"), (r"급감|하락|감소", "trending-down"),
+    (r"임금|달러|지출|물가", "coins"), (r"세계|글로벌|국제", "globe"), (r"격차|차이|배", "arrow-left-right"),
+    (r"년간|기간|세월", "hourglass"), (r"목표", "target"),
+]
 _YEAR = re.compile(r"\b(1[89]\d\d|20\d\d)\b")
 
 
@@ -169,7 +187,7 @@ def pick_icon(*texts):
     if re.search(r"\bAI\b", raw):              # "AI" viết hoa; "ai" thường là đại từ "ai"
         return "bot"
     low = raw.lower()
-    for rx, icon in ICON_KEYWORDS:
+    for rx, icon in (ICON_KEYWORDS_KO if lang.code() == "ko" else ICON_KEYWORDS):
         if re.search(rx, low):
             return icon
     return None
@@ -249,7 +267,8 @@ def build_world(spec: list, colors: dict):
     if not lines or not all(len(xs) == len(ys) and len(xs) >= 2 for _, xs, ys, _ in lines):
         return None
     labels = [lbl for lbl, *_ in lines]
-    emph = next((i for i, l in enumerate(labels) if l.strip().lower() == "việt nam"), 0)
+    anchor = lang.pick(vi="việt nam", ko="한국")          # nước "của ta" được tô đậm
+    emph = next((i for i, l in enumerate(labels) if l.strip().lower() == anchor), 0)
     dec = int(p.get("decimals", 2) or 0)
     series = [{"label": lbl or str(p.get("title", "")), "color": color, "flag": flag_of(lbl) if lbl else None,
                "xs": [int(x) if float(x).is_integer() else float(x) for x in xs],
@@ -264,7 +283,7 @@ def build_world(spec: list, colors: dict):
     per = re.search(r"(?:/|trên)\s*100\s*(?:dân|người)", unit + " " + str(p.get("title", "")))
     noun = re.split(r"\s*(?:/|trên)\s*100", unit)[0].strip() if per else ""
     if per and noun and y_max > 105:
-        world["reference"] = {"y": 100, "label": f"100 = mỗi người 1 {noun}"}
+        world["reference"] = {"y": 100, "label": lang.pick(vi=f"100 = mỗi người 1 {noun}", ko=f"100 = 1인당 1{noun}")}
     return world
 
 
@@ -413,11 +432,11 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None, capt
             if "chart" not in out:
                 low = (title + " " + suffix).lower()
                 share = "%" in suffix and 1 <= v <= 100 and re.search(
-                    r"dân số|người|lao động|hộ gia đình|trẻ em|phụ nữ|học sinh", low)
+                    r"dân số|người|lao động|hộ gia đình|trẻ em|phụ nữ|học sinh|인구|근로자|가구|어린이|여성|학생|성인", low)
                 per100 = re.search(r"(?:/|trên)\s*100\s*(?:dân|người)", low) and 1 <= v <= 160
                 icon = pick_icon(title, suffix)
                 if share:
-                    out["isotype"] = {"mode": "share", "count": round(v), "noun": "người"}
+                    out["isotype"] = {"mode": "share", "count": round(v), "noun": lang.pick(vi="người", ko="명")}
                 elif per100 and icon:
                     out["isotype"] = {"mode": "per100", "count": round(v), "icon": icon, "noun": suffix}
             add_sfx("tick", start + 0.05 * dur, 0.3)
@@ -478,4 +497,6 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None, capt
              "source": max(set(sources), key=sources.count) if sources else "", "sfx": sfx, "world": world}
     if caption_size:
         props["captionSize"] = int(round(float(caption_size)))
+    if lang.code() != "vi":       # Remotion đọc để chọn phông chữ + kiểu viết số (render-web/src/lib/locale.ts)
+        props["lang"] = lang.code()
     return props

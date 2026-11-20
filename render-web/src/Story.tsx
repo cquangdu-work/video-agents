@@ -1,6 +1,8 @@
 import React from "react";
 import { AbsoluteFill, Audio, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { loadFont } from "@remotion/google-fonts/BeVietnamPro";
+import { loadFont as loadKR } from "@remotion/google-fonts/NotoSansKR";
+import { LANG } from "./lib/locale";
 import { Background } from "./components/Background";
 import { Captions } from "./components/Captions";
 import { ChartWorld } from "./components/ChartWorld";
@@ -14,7 +16,11 @@ import { Orbit } from "./scenes/Orbit";
 import { Scene, StoryProps } from "./types";
 
 // Font của bộ nhận diện (Be Vietnam Pro, giấy phép OFL) — tải lúc render, đủ dấu tiếng Việt.
-const { fontFamily } = loadFont("normal", { weights: ["500", "600", "700", "800"], subsets: ["vietnamese", "latin"] });
+const vi = loadFont("normal", { weights: ["500", "600", "700", "800"], subsets: ["vietnamese", "latin"] });
+// Kênh tiếng Hàn: Be Vietnam Pro không có chữ Hàn -> Noto Sans KR (OFL) đứng sau cho chữ Hàn, chữ số/Latin vẫn
+// dùng Be Vietnam Pro để giữ nhận diện kênh. Chỉ nạp khi video là tiếng Hàn (bộ chữ Hàn nặng).
+const kr = LANG === "ko" ? loadKR("normal", { weights: ["500", "700", "800"], subsets: ["korean", "latin"] }) : null;
+const fontFamily = kr ? `${vi.fontFamily}, ${kr.fontFamily}` : vi.fontFamily;
 
 // Cảnh MỞ ĐẦU chạy hiệu ứng "đi trước" chừng này giây: khung hình đầu tiên đã có hình (cột, số) thay vì
 // đang mọc từ 0 — người xem quyết định lướt đi trong 1-2 giây đầu (bản thử 19/11: khung 0 chỉ có tiêu đề).
@@ -81,7 +87,7 @@ export const Story: React.FC<StoryProps> = ({ brand, scenes, words, source, sfx,
       {!hideCaptions && <Captions words={words} t={t} brand={brand} size={captionSize} />}
       {src && current?.kind !== "clip" && (
         <div style={{ position: "absolute", bottom: 46, left: 40, right: 40, textAlign: "center", fontSize: 24,
-          fontWeight: 500, color: brand.muted }}>Nguồn: {src}</div>
+          fontWeight: 500, color: brand.muted }}>{LANG === "ko" ? "출처" : "Nguồn"}: {src}</div>
       )}
       {sfx.map((s, i) => (
         <Sequence key={`a${i}`} from={Math.round(s.at * fps)} durationInFrames={2 * fps}>
