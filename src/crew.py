@@ -1152,6 +1152,29 @@ nhưng nói gọn/làm tròn. Không có câu sai thì "sentence_issues" là m�
 
 
 # ------------------------------------------------------------------ Đăng bài
+def translate_for_review(lines: list, title: str = "", description: str = "") -> str:
+    """Kênh không phải tiếng Việt: dịch lời đọc + tiêu đề sang tiếng Việt để Du duyệt (Du đọc tiếng Việt
+    nhanh nhất). Chỉ để HIỂU nội dung — số liệu đã được code đối chiếu với nguồn. Lỗi -> ""."""
+    numbered = "\n".join(f"{k}. {t}" for k, t in enumerate(lines, 1))
+    try:
+        out = _run_single_task(
+            role="Người dịch Hàn–Việt",
+            goal="Dịch sát nghĩa, giữ nguyên mọi con số",
+            description=f"""Dịch sang TIẾNG VIỆT, sát nghĩa (không thêm bớt, không bình luận), giữ NGUYÊN mọi con số
+đúng như bản gốc (kể cả dấu chấm/phẩy). Giữ số thứ tự dòng.
+
+TIÊU ĐỀ: {title}
+MÔ TẢ: {description}
+
+LỜI ĐỌC:
+{numbered}""",
+            expected_output="Văn bản thường: dòng 'Tiêu đề: …', dòng 'Mô tả: …', rồi từng dòng lời đọc đánh số như bản gốc")
+    except Exception as exc:
+        log.warning("Không dịch được kịch bản để duyệt: %s", exc)
+        return ""
+    return str(out or "").strip()
+
+
 def write_metadata(idea: dict, scenes: list, hooks: list, cfg: dict,
                    feedback: str = None) -> dict:
     """Agent Đăng bài: đề xuất tiêu đề, mô tả, hashtag, thẻ cho video đã dựng.

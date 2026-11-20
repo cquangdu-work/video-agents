@@ -134,6 +134,15 @@ def _send_for_review(cfg, con, script_id, force, skip_qc):
         return None
     db.update_video(con, video_id, tg_message_id=mid)
     tg.send_message("Mô tả sẽ đăng kèm:\n\n" + meta["description"], reply_to=mid)
+    if lang.code() != "vi":
+        # Kênh tiếng Hàn: bản dịch tiếng Việt để Du duyệt nhanh (dịch máy — chỉ để hiểu nội dung; mọi con số
+        # đã được code đối chiếu với nguồn trước khi tới đây)
+        from .crew import translate_for_review
+        voices = [str(s.get("voice") or "") for s in scenes if isinstance(s, dict) and s.get("voice")]
+        tr = translate_for_review(voices, meta["title"], meta["description"])
+        if tr:
+            tg.send_message("🇻🇳 Bản dịch để duyệt (máy dịch — chỉ để hiểu nội dung; số liệu đã được code đối chiếu"
+                            " với nguồn):\n\n" + tr[:3500], reply_to=mid)
     print(f"Đã gửi video #{video_id} vào Telegram, chờ Du duyệt.")
     return video_id
 
