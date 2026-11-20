@@ -105,5 +105,59 @@ class KoreanStoryTest(unittest.TestCase):
         self.assertTrue(any("định nghĩa" in h for h in hard))
 
 
+class KoreanLearningTest(unittest.TestCase):
+    """Bộ tự học phân loại được video kênh Hàn (không rơi hết vào "khac")."""
+
+    def test_hook_type_and_kind(self):
+        with lang.using("ko"):
+            self.assertEqual(learning.hook_type("2024년 한국은 1980년 일본 수준입니다"), "moc-thoi-gian")
+            self.assertEqual(learning.hook_type("OECD 38개국 중 꼴찌, 한국 재생에너지"), "thu-hang")
+            self.assertEqual(learning.hook_type("한국 출산율, 일본보다 낮습니다"), "doi-lap")
+            self.assertEqual(learning.hook_type("한국 출산율은 왜 이렇게 낮을까?"), "cau-hoi")
+            src = "Our World in Data"
+            self.assertEqual(learning.video_kind("세계 지도: 2024년 재생에너지 발전 비율 — 한국 …", src), "ban-do")
+            self.assertEqual(learning.video_kind("1인당 GDP 순위 경쟁: 아시아 10개 경제", src), "cuoc-dua")
+        with lang.using("vi"):
+            self.assertEqual(learning.hook_type("Việt Nam đứng thứ 5 Đông Nam Á"), "thu-hang")
+
+
+class KoreanTopicTest(unittest.TestCase):
+    """/chude và đề xuất của người xem trên kênh Hàn: gõ tiếng Hàn (từ ghép, trợ từ) hoặc Du gõ tiếng Việt."""
+
+    def test_match(self):
+        import yaml
+        from pathlib import Path
+        from src import topics
+        cfg = yaml.safe_load((Path(__file__).resolve().parent.parent / "config" / "channel_ko.yaml")
+                             .read_text(encoding="utf-8"))
+        with lang.using("ko"):
+            self.assertEqual(topics.match(cfg, "출산율을 다뤄 주세요"), ["wb:SP.DYN.TFRT.IN"])
+            self.assertEqual(topics.match(cfg, "tỷ suất sinh"), ["wb:SP.DYN.TFRT.IN"])     # Du gõ tiếng Việt
+            got = topics.match(cfg, "GDP")
+            self.assertIn("wb:NY.GDP.PCAP.CD", got)
+            self.assertNotIn("wb:GB.XPD.RSDV.GD.ZS", got)                                  # "GDP 대비 연구개발비"
+            self.assertEqual(topics.match(cfg, "영상 만들어 주세요"), [])
+
+
+class KoreanCommunityTest(unittest.TestCase):
+    def test_cards_carry_a_vietnamese_translation(self):
+        from src import community
+        cards = [{"id": "c1", "text": "한국은 몇 위예요?", "reply": "2024년 한국은 23위예요."},
+                 {"id": "c2", "text": "영상 잘 봤어요"}]
+        seen = {}
+
+        def llm(role, goal, description, expected_output, models=None):
+            seen["prompt"] = description
+            return "Tiêu đề: \nMô tả: \n1. Hàn Quốc hạng mấy?\n2. Năm 2024 Hàn Quốc hạng 23.\n3. Video hay quá"
+        community.translate_cards(cards, llm)
+        self.assertIn("1. 한국은 몇 위예요?", seen["prompt"])
+        self.assertEqual(cards[0]["text_vi"], "Hàn Quốc hạng mấy?")
+        self.assertEqual(cards[0]["reply_vi"], "Năm 2024 Hàn Quốc hạng 23.")
+        self.assertEqual(cards[1]["text_vi"], "Video hay quá")
+        text = community.card_text({**cards[0], "kind": "cau_hoi", "video_id": 1, "youtube_id": "abc", "author": "A"})
+        self.assertIn("🇻🇳 Hàn Quốc hạng mấy?", text)
+        self.assertIn("🇻🇳 Năm 2024 Hàn Quốc hạng 23.", text)
+
+
 if __name__ == "__main__":
     unittest.main()

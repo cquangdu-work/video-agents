@@ -267,6 +267,15 @@ def hook_type(text: str) -> str:
     t = " ".join(str(text or "").lower().split())
     if t.endswith("?"):
         return "cau-hoi"
+    from . import lang
+    if lang.code() == "ko":                      # kênh tiếng Hàn: cùng 4 kiểu, mẫu tiếng Hàn
+        if re.search(r"(19|20)\d{2}년.{0,40}(수준|같은|맞먹|따라잡)", t):
+            return "moc-thoi-gian"
+        if re.search(r"\d+위|꼴찌|최하위|1위|상위\s*\d|하위\s*\d|한가운데|중간", t):
+            return "thu-hang"
+        if re.search(r"배\b|배,|보다|하지만|그런데|반면|불과|겨우|앞지|추월|역전|→", t):
+            return "doi-lap"
+        return "khac"
     if re.search(r"mới (bằng|đạt)|tương đương|bằng .{0,30}năm \d{4}", t):
         return "moc-thoi-gian"
     if re.search(r"\b(thứ|hạng)\s+\d|đứng đầu|dẫn đầu|bét bảng|chót bảng|cuối bảng|chính giữa|top \d", t):
@@ -283,9 +292,9 @@ def video_kind(title: str, source_name: str) -> str:
     title = str(title or "").lower()
     if not is_data_source(source_name):
         return "bai-bao"
-    if title.startswith("bản đồ"):
+    if title.startswith(("bản đồ", "세계 지도")):            # kênh Hàn: "세계 지도: …", "… 순위 경쟁…"
         return "ban-do"
-    if "cuộc đua" in title:
+    if "cuộc đua" in title or "순위 경쟁" in title:
         return "cuoc-dua"
     return "bieu-do"
 

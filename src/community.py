@@ -22,7 +22,7 @@ import os
 import sys
 from datetime import datetime, timedelta, timezone
 
-from . import db
+from . import db, lang
 from . import telegram_bot as tg
 
 log = logging.getLogger("community")
@@ -142,7 +142,7 @@ def classify(comments: list, cfg: dict, run=None) -> list:
     answer = run(
         role="Trợ lý cộng đồng của kênh video ngắn giải thích số liệu",
         goal="Phân loại bình luận đúng, không suy diễn",
-        description=f"""Kênh YouTube "{cfg['channel']['name']}" (video ngắn giải thích số liệu, tiếng Việt).
+        description=f"""Kênh YouTube "{cfg['channel']['name']}" (video ngắn giải thích số liệu, {lang.locale()['name']}).
 Phân loại TỪNG bình luận dưới đây vào đúng một loại:
 - "cau_hoi": hỏi một điều về nội dung / số liệu của video (cần trả lời)
 - "de_xuat": muốn kênh làm video về một chủ đề
@@ -193,6 +193,8 @@ def draft_reply(comment: dict, video: dict, cfg: dict, run=None):
     data = str(video.get("summary") or "")[:2500]
     if not data.strip():
         return None
+    reply_lang = lang.pick(vi='tiếng Việt, xưng "kênh"',
+                           ko='TIẾNG HÀN lịch sự (해요체), xưng "저희 채널"; số viết kiểu Hàn đúng như trong số liệu')
     answer = str(run(
         role="Người trả lời bình luận cho kênh video số liệu",
         goal="Trả lời đúng, ngắn, thân thiện, chỉ dựa trên số liệu có sẵn",
@@ -202,7 +204,7 @@ def draft_reply(comment: dict, video: dict, cfg: dict, run=None):
 \"\"\"
 Người xem hỏi: "{comment['text'][:500]}"
 
-Viết câu trả lời tiếng Việt, tối đa 2 câu, thân thiện, xưng "kênh". CHỈ dùng con số có trong số liệu trên
+Viết câu trả lời {reply_lang}, tối đa 2 câu, thân thiện. CHỈ dùng con số có trong số liệu trên
 (viết bằng chữ số), không đoán, không khuyên ai làm gì. Số liệu trên không trả lời được câu hỏi thì trả về
 đúng chữ {NO_ANSWER}.""",
         expected_output="Một đoạn văn ngắn, không markdown") or "").strip().strip('"')
@@ -246,12 +248,36 @@ def card_text(c: dict) -> str:
         lines.append(f"→ cho là sai: {c['claim']}")
     if c.get("note"):
         lines.append(f"→ {c['note']}")
+    if c.get("text_vi"):                      # kênh tiếng Hàn: bản dịch để Du hiểu (dịch máy)
+        lines.append(f"🇻🇳 {c['text_vi']}")
     if c.get("reply"):
-        lines += [f"✍️ Nháp trả lời: {c['reply']}",
+        lines += [f"✍️ Nháp trả lời: {c['reply']}"] + ([f"🇻🇳 {c['reply_vi']}"] if c.get("reply_vi") else []) + [
                   "Bấm ✅ để kênh đăng câu này, hoặc TRẢ LỜI tin này bằng câu khác để sửa nháp."]
     else:
         lines.append("Muốn trả lời: TRẢ LỜI tin này bằng câu Du muốn đăng (bot hỏi lại trước khi đăng).")
     return "\n".join(lines)
+
+
+def translate_cards(cards: list, llm=None) -> None:
+    """Kênh không phải tiếng Việt: dịch bình luận + nháp trả lời sang tiếng Việt cho Du (MỘT lần gọi model cho cả
+    mẻ). Lỗi thì thôi — thẻ vẫn gửi, chỉ thiếu bản dịch."""
+    import re
+    from .crew import translate_for_review
+    lines, where = [], []
+    for k, c in enumerate(cards):
+        lines.append(str(c.get("text") or "")[:300]); where.append((k, "text_vi"))
+        if c.get("reply"):
+            lines.append(str(c["reply"])); where.append((k, "reply_vi"))
+    try:
+        out = translate_for_review(lines, run=llm)
+    except Exception as exc:
+        log.warning("Không dịch được bình luận: %s", exc)
+        return
+    for m in re.finditer(r"(?m)^\s*(\d+)[.)]\s*(.+)$", str(out or "")):
+        i = int(m.group(1)) - 1
+        if 0 <= i < len(where):
+            k, field = where[i]
+            cards[k][field] = m.group(2).strip()[:400]
 
 
 def card_buttons(c: dict) -> list:
@@ -337,7 +363,8 @@ def run(cfg: dict, con, dry_run: bool = False, fetch=None, llm=None, send=None, 
         elif c["kind"] == "de_xuat":
             done = topics.covered(con, c["match"]) if c["match"] else []
             if done:
-                c["reply"] = f"Kênh đã có video về chủ đề này nè: {_link(done[0][1])}"
+                c["reply"] = lang.pick(vi=f"Kênh đã có video về chủ đề này nè: {_link(done[0][1])}",
+                                       ko=f"이 주제는 저희 채널에 이미 영상이 있어요: {_link(done[0][1])}")
             elif not dry_run:
                 status = topics.request(con, c["match"], c["topic"] or c["text"][:80], "viewer", c["text"])
                 c["note"] = {"pending": "đã xếp hàng ưu tiên cho lượt săn ý tưởng kế tiếp",
@@ -346,6 +373,8 @@ def run(cfg: dict, con, dry_run: bool = False, fetch=None, llm=None, send=None, 
     from .publish import youtube
     cards = sorted([c for c in new if c["kind"] in CARD_KINDS], key=lambda c: CARD_KINDS.index(c["kind"]))
     cards = cards[:MAX_CARDS]
+    if lang.code() != "vi" and cards:
+        translate_cards(cards, llm)
     text = digest(new, youtube.has_scope(youtube.FORCE_SSL), len(cards))
     if any(c.get("platform") == "facebook" for c in new) and not facebook.can("pages_manage_engagement"):
         text += ("\n🔑 Trang Facebook chưa có quyền pages_manage_engagement: bot chưa đăng được trả lời trên Reels"

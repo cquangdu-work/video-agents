@@ -66,6 +66,55 @@ def _units(text: str, keep: bool, single: set) -> set:
 
 
 def match(cfg: dict, query: str, limit: int = 3, min_cover: float = 0.0) -> list:
+    """Như _match; thêm cho KÊNH TIẾNG HÀN (20/11/2026): danh mục toàn tên tiếng Hàn mà Du gõ /chude bằng tiếng Việt
+    -> khớp theo tên tiếng Việt của CÙNG mã chỉ số (wb:<mã>, owid:<slug>) trong cấu hình kênh Việt, rồi chỉ giữ
+    khoá kênh Hàn đang có."""
+    if re.search(r"[가-힣]", str(query or "")):
+        return _match_ko(cfg, query, limit, min_cover)
+    keys = _match(cfg, query, limit, min_cover)
+    from . import lang
+    if keys or lang.code() != "ko":
+        return keys
+    try:
+        import yaml
+        vi_cfg = yaml.safe_load((lang.ROOT / lang.DEFAULT_CONFIG).read_text(encoding="utf-8")) or {}
+    except Exception:
+        return keys
+    have = catalog(cfg)
+    with lang.using("vi"):
+        found = _match(vi_cfg, query, limit * 4, min_cover)
+    return [k for k in found if k in have][:limit]
+
+
+_KO_GENERIC = {"영상", "채널", "만들어", "주세요", "해주세요", "대해", "관련", "비교", "한국", "세계", "나라"}
+
+
+def _match_ko(cfg: dict, query: str, limit: int = 3, min_cover: float = 0.0) -> list:
+    """Từ khoá tiếng Hàn: tiếng Hàn viết liền từ ghép ("합계출산율") và dính trợ từ ("출산율을") -> so CHUỖI CON: mỗi
+    từ của query (bỏ trợ từ cuối, ≥ 2 chữ) nằm trong tên chỉ số thì được một điểm."""
+    words = []
+    for w in re.findall(r"[가-힣A-Za-z0-9]+", str(query or "")):
+        w = re.sub(r"(을|를|이|가|은|는|의|에|도|로|으로|에서|와|과)$", "", w)
+        if len(w) >= 2 and w not in _KO_GENERIC:
+            words.append(w.lower())
+    if not words:
+        return []
+    scored = []
+    for key, name in catalog(cfg).items():
+        # "GDP 대비 연구개발비" nói về chi R&D (GDP chỉ là mẫu số) — như luật "… so với GDP" của bản Việt
+        low = re.sub(r"^gdp\s*대비\s*", "", name.lower())
+        score = sum(1 for w in words if w in low)
+        if score:
+            scored.append((score, score / max(1, len(low)), key))
+    if not scored:
+        return []
+    best = max(s for s, _, _ in scored)
+    if best < min_cover * len(words):
+        return []
+    return [k for s, _, k in sorted(scored, key=lambda x: (-x[0], -x[1], x[2])) if s == best][:limit]
+
+
+def _match(cfg: dict, query: str, limit: int = 3, min_cover: float = 0.0) -> list:
     """Khoá các chỉ số có tên khớp nhiều cụm từ nhất với `query` (bỏ từ chung). [] nếu không khớp.
     Gõ CÓ DẤU thì so cả dấu ("lương" khác "lượng" — bỏ dấu thì tiền lương khớp nhầm sản lượng cà phê);
     gõ không dấu thì so không dấu. min_cover: phần cụm từ của query phải khớp (chủ đề do model viết ra thì
