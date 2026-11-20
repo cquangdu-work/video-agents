@@ -57,7 +57,8 @@ class ApiTest(FbCase):
                 mock.patch.object(facebook.requests, "get", side_effect=get):
             who = facebook.connect("x" * 40)
         self.assertEqual(who["missing_optional"], ["pages_read_user_content", "pages_manage_engagement",
-                                                "instagram_basic", "instagram_content_publish"])
+                                                "instagram_basic", "instagram_content_publish",
+                                                "instagram_manage_insights"])
         self.assertTrue(facebook.can("read_insights"))
         self.assertFalse(facebook.can("pages_manage_engagement"))
 
@@ -124,6 +125,18 @@ class AgentTest(FbCase):
         self.assertEqual((prefs["based_on"], prefs["metric"]), (4, "avg_view_pct+sub"))
         self.assertEqual(learning.preferences(), {})                       # sở thích YouTube không bị ghi đè
         self.assertEqual(learned.load_learned()["facebook"]["latest"]["cm"], [4, 1])
+
+    def test_photo_posts_are_measured(self):
+        self.connect()
+        for k in (1, 2):
+            self.reel(k, days_ago=3)
+            db.update_video(self.con, k, fb_post_id=f"123_{k}")
+        eng = {"123_1": {"reactions": 40, "comments": 5, "shares": 2}, "123_2": {"reactions": 3, "comments": 0, "shares": 0}}
+        with mock.patch.object(facebook, "page_insights", return_value={"followers": 50}), \
+                mock.patch.object(facebook, "reel_insights", return_value={}), \
+                mock.patch.object(facebook, "post_engagement", side_effect=lambda pid, get=None: eng[pid]):
+            text = "\n".join(fb_insights.update(self.con, CFG, NOW))
+        self.assertIn("Bài viết (2 bài, 60 ngày): 43 cảm xúc, 5 bình luận, 2 chia sẻ; nhiều tương tác nhất: #1", text)
 
     def test_missing_insights_permission_is_reported_not_fatal(self):
         self.connect(perms=list(facebook.NEEDED))

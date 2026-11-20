@@ -403,7 +403,7 @@ def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
         except Exception as exc:
             log.warning("LLM rút bài học lỗi: %s", exc)
 
-    from .. import community, fb_insights, growth, learning, style, topics, yt_insights, yt_news
+    from .. import community, fb_insights, growth, ig_insights, learning, style, topics, yt_insights, yt_news
     from . import big_channels
     style_notes, growth_lines, insight_lines, big_lines, fb_lines = [], [], [], [], []
     if not dry_run:
@@ -437,6 +437,10 @@ def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
             fb_lines = fb_insights.update(con, cfg, now)
         except Exception as exc:
             log.warning("Agent Facebook lỗi: %s", exc)
+        try:
+            fb_lines += ig_insights.update(con, cfg, now)      # AGENT INSTAGRAM (kênh Hàn, src/ig_insights.py)
+        except Exception as exc:
+            log.warning("Agent Instagram lỗi: %s", exc)
         # Hai bước dưới PHẢI nằm trong nhánh chạy thật (không phải dry_run) — 20/11 từng lọt vào nhánh
         # else khi thêm agent Hiểu YouTube nên lượt Chủ nhật thật không cập nhật gì (test chốt chặn)
         try:
@@ -453,7 +457,7 @@ def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
     else:
         insight_lines = yt_insights.report_lines(yt_insights._data().get("latest") or {})
         big_lines = big_channels.report_lines(big_channels._data(), [], [])
-        fb_lines = fb_insights.report_lines(fb_insights._data().get("latest") or {})
+        fb_lines = fb_insights.report_lines(fb_insights._data().get("latest") or {})             + ig_insights.report_lines(ig_insights._data().get("latest") or {})
 
     report =format_report(rows, len(videos), source, weight_notes, insights)
     for part, what in ((lambda: growth_lines, "tăng trưởng"),

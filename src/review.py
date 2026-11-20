@@ -437,7 +437,8 @@ def _connect_facebook(con, msg: dict, text: str) -> None:
             "4. Gửi vào đây: /facebook <token vừa chép>. Bot đổi sang token Trang không hết hạn và xoá tin"
             " chứa token."
             + ("\n\n📸 Kênh này đăng Reels lên INSTAGRAM qua Trang: tài khoản Instagram phải là tài khoản Chuyên"
-               " nghiệp và LIÊN KẾT với Trang; ở bước 3 tích thêm instagram_basic, instagram_content_publish."
+               " nghiệp và LIÊN KẾT với Trang; ở bước 3 tích thêm instagram_basic, instagram_content_publish,"
+               " instagram_manage_insights (agent Instagram đọc số liệu)."
                if (load_config()["publish"].get("instagram") or {}).get("enabled") else ""))
         return
     tg.delete_message(msg.get("message_id"))         # tin chứa token: không để lại trong lịch sử chat

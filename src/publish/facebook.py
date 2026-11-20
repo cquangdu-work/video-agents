@@ -46,7 +46,8 @@ OPTIONAL = {"read_insights": "đọc số liệu Reels + Trang",
             "pages_manage_engagement": "đọc số liệu Reels + đăng trả lời bình luận (chỉ khi Du bấm ✅)",
             # kênh tiếng Hàn: đăng Reels lên tài khoản Instagram LIÊN KẾT với Trang (src/publish/instagram.py)
             "instagram_basic": "đọc tài khoản Instagram liên kết với Trang",
-            "instagram_content_publish": "đăng Reels lên Instagram (chỉ sau khi Du bấm ✅)"}
+            "instagram_content_publish": "đăng Reels lên Instagram (chỉ sau khi Du bấm ✅)",
+            "instagram_manage_insights": "đọc số liệu Reels Instagram (agent Instagram)"}
 MAX_SECONDS = 90                        # Reels qua API: 3-90 giây
 AUTH_CODES = {102, 190, 200, 10, 3}     # mã lỗi Graph API = thiếu quyền / token hỏng
 

@@ -209,5 +209,54 @@ class InstagramTest(DbCase):
         self.assertIsNone(db.get_video(self.con, self.vid)["instagram_due"])
 
 
+class InstagramAgentTest(DbCase):
+    def setUp(self):
+        super().setUp()
+        from src.analysis import learned
+        self.learned = learned
+
+    def test_weekly_measure_and_learn(self):
+        from src import ig_insights, learning
+        facebook._save({"id": "123", "name": "Trang", "access_token": "PAGE"},
+                       permissions=list(facebook.NEEDED) + list(instagram.NEEDED) + ["instagram_manage_insights"])
+        cfg = {"publish": {"instagram": {"enabled": True}}}
+        now = datetime.now(timezone.utc)
+        for k in range(101, 105):                             # 4 Reel đã đăng 5 ngày trước
+            self.con.execute("INSERT INTO ideas (id,title,title_norm,source_url,source_name) VALUES (?,?,?,?,?)",
+                             (k, f"세계 지도: x{k}", f"x{k}", f"u{k}", "World Bank Open Data"))
+            self.con.execute("INSERT INTO scripts (id,idea_id,body,status) VALUES (?,?,?,'verified')",
+                             (k, k, "- voice: 한국 23위입니다\n"))
+            self.con.execute("INSERT INTO videos (id,script_id,file,title,status,instagram_id,instagram_due)"
+                             " VALUES (?,?,?,?,'published',?,?)",
+                             (k, k, "f", f"V{k}", f"IG{k}", (now - timedelta(days=5)).strftime("%Y-%m-%dT%H:%M:%SZ")))
+        self.con.commit()
+        views = {"IG101": 300, "IG102": 400, "IG103": 350, "IG104": 9000}
+
+        def get(url, params=None, **kw):
+            if url.endswith("/123"):
+                return resp({"instagram_business_account": {"id": "U1", "username": "sujasegye"}})
+            if url.endswith("/U1"):
+                return resp({"followers_count": 210, "media_count": 4, "username": "sujasegye"})
+            mid = url.rsplit("/", 2)[-2]
+            return resp({"data": [{"name": "views", "values": [{"value": views[mid]}]},
+                                  {"name": "reels_skip_rate", "values": [{"value": 40.0}]},
+                                  {"name": "ig_reels_avg_watch_time", "values": [{"value": 15000}]},
+                                  {"name": "total_interactions", "values": [{"value": 12}]}]})
+        with mock.patch("src.fb_insights._duration", return_value=30.0):
+            text = "\n".join(ig_insights.update(self.con, cfg, now, get=get))
+        self.assertIn("@sujasegye: 210 người theo dõi", text)
+        self.assertIn("#104 “V104”: 9.000 lượt xem", text)
+        self.assertIn("Lướt qua trong 3 giây đầu: trung bình 40,0%", text)
+        self.assertIn("🚀 Đột biến: #104", text)
+        prefs = learning.preferences("ig_preferences")
+        self.assertEqual(prefs["metric"], "engaged_pct")          # 100 - tỷ lệ lướt qua 3 giây đầu
+        self.assertEqual(ig_insights.watch_seconds(15000, 30.0), 15.0)  # mili giây đoán ra từ độ dài video
+
+    def test_off_or_not_ready(self):
+        from src import ig_insights
+        self.assertEqual(ig_insights.update(self.con, {"publish": {}}), [])
+        self.assertEqual(ig_insights.update(self.con, {"publish": {"instagram": {"enabled": True}}}), [])
+
+
 if __name__ == "__main__":
     unittest.main()

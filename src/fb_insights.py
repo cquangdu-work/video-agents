@@ -209,6 +209,31 @@ def vs_youtube(con, rows: list):
     return round(ratios[mid] if len(ratios) % 2 else (ratios[mid - 1] + ratios[mid]) / 2, 2), len(ratios)
 
 
+# ------------------------------------------------------------------ bài viết (src/fb_post.py)
+def post_stats(con, now: datetime, get=None) -> dict:
+    """Tương tác của các bài viết ảnh + chữ đã đăng trong 60 ngày (cảm xúc, bình luận, chia sẻ). Bài còn hẹn giờ
+    (chưa lên) hoặc lỗi đọc thì bỏ qua bài đó."""
+    from .publish import facebook
+    since = (now - timedelta(days=60)).isoformat(timespec="seconds")
+    rows = con.execute("SELECT id, title, fb_post_id FROM videos WHERE fb_post_id IS NOT NULL"
+                       " AND COALESCE(decided_at, facebook_at, published_at, created_at) >= ?", (since,)).fetchall()
+    stats = []
+    for r in rows:
+        try:
+            e = facebook.post_engagement(r["fb_post_id"], get)
+        except Exception as exc:
+            log.info("Không đọc được tương tác bài viết của video #%s: %s", r["id"], str(exc)[:120])
+            continue
+        stats.append({"id": r["id"], "title": str(r["title"] or "")[:60], **e,
+                      "total": e["reactions"] + e["comments"] + e["shares"]})
+    if not stats:
+        return {}
+    top = max(stats, key=lambda s: s["total"])
+    return {"n": len(stats), "reactions": sum(s["reactions"] for s in stats),
+            "comments": sum(s["comments"] for s in stats), "shares": sum(s["shares"] for s in stats),
+            "top": {k: top[k] for k in ("id", "title", "total")}}
+
+
 # ------------------------------------------------------------------ 4. tổng hợp
 def update(con, cfg: dict, now: datetime = None, get=None) -> list:
     """Agent Phân tích gọi mỗi Chủ nhật. Lưu learned.yaml["facebook"], trả về các dòng báo cáo."""
@@ -243,6 +268,10 @@ def update(con, cfg: dict, now: datetime = None, get=None) -> list:
     latest["top"] = [{"id": r["id"], "title": str(r["title"] or "")[:60], "plays": r["views"],
                       "followers": r["subs_gained"], "pct": round(r["avg_view_pct"]) if r["avg_view_pct"] else None}
                      for r in top]
+    try:
+        latest["posts"] = post_stats(con, now, get)
+    except Exception as exc:                       # bài viết là phần thêm: lỗi không làm hỏng báo cáo Reels
+        log.warning("Đo bài viết Facebook lỗi: %s", exc)
     holds = [r["hold_quarter"] for r in rows if r.get("hold_quarter") is not None]
     latest["hold_quarter"] = round(sum(holds) / len(holds), 1) if holds else None
     history = [h for h in (prev.get("history") or []) if isinstance(h, dict)]
@@ -287,6 +316,12 @@ def report_lines(latest: dict, history: list = None) -> list:
     if slots:
         lines.append("  Giờ đăng đang thử (giờ VN): " + " · ".join(
             f"{s}: {v['n']} Reel, ~{_vn(v['plays_per_day'])} lượt phát/ngày" for s, v in sorted(slots.items())))
+    posts = latest.get("posts") or {}
+    if posts:
+        top = posts.get("top") or {}
+        lines.append(f"  Bài viết ({posts['n']} bài, 60 ngày): {_vn(posts['reactions'])} cảm xúc, {_vn(posts['comments'])}"
+                     f" bình luận, {_vn(posts['shares'])} chia sẻ"
+                     + (f"; nhiều tương tác nhất: #{top['id']} “{top['title']}” ({_vn(top['total'])})" if top else "") + ".")
     vs = latest.get("vs_youtube")
     if vs:
         lines.append(f"  So với YouTube ({vs[1]} video có cả hai): Facebook được {str(vs[0]).replace('.', ',')}×"
