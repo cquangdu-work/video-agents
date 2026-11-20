@@ -1,0 +1,241 @@
+# ============================================================
+# Cấu hình kênh TIẾNG HÀN "숫자로 보는 세계" (Thế giới qua con số — bản Hàn), Du chốt mở 20/11/2026.
+# Chạy bằng thư mục riêng trên VM (~/video-agents-ko) với CHANNEL_CONFIG=config/channel_ko.yaml trong .env
+# của thư mục đó (src/lang.py). Dữ liệu, token, video, lịch chạy đều riêng — kênh Việt không bị ảnh hưởng.
+# Mã kỳ hạn (`period`: tháng/tuần/ngày) và `per` giữ chữ Việt: đó là MÃ cho code, chữ hiện ra do code dịch.
+# ============================================================
+
+render:
+  engine: web
+  web_concurrency: 3
+  intro: false
+
+qc:
+  min_seconds: 20
+  max_seconds: 70
+
+channel:
+  name: "숫자로 보는 세계"
+  language: ko
+  description: >
+    데이터로 세상을 설명하는 채널: 코드로 만든 움직이는 그래프, 지도, 순위 경쟁.
+    경제, 인구, 에너지, 기후, 생활 등 다양한 주제를 다루며 한국이 세계에서 어디쯤인지,
+    일본·중국 등 이웃 나라와 비교해 보여 줍니다.
+  video_seconds_min: 45
+  video_seconds_max: 60
+
+sources:
+  rss:
+    - name: "OWID Data Insights"
+      url: "https://ourworldindata.org/atom-data-insights.xml"
+      lang: en
+      weight: 3
+    - name: "ScienceDaily Top"
+      url: "https://www.sciencedaily.com/rss/top/science.xml"
+      lang: en
+      weight: 2
+  arxiv:
+    categories: ["econ.GN", "physics.soc-ph", "cs.CY"]
+    max_results: 10
+
+  # World Bank: "한국 vs 일본" qua một con số. Nước đầu là "ta", nước sau là mốc so sánh.
+  worldbank:
+    per_day: 1
+    start_year: 1960
+    countries:
+      - {iso3: KOR, iso2: KR, name: "한국"}
+      - {iso3: JPN, iso2: JP, name: "일본"}
+    indicators:
+      - {code: NY.GDP.PCAP.CD,       name: "1인당 GDP",                  unit: "달러", period: tháng}
+      - {code: SP.DYN.TFRT.IN,       name: "합계출산율",                  unit: "명"}
+      - {code: SP.DYN.LE00.IN,       name: "기대수명",                    unit: "세"}
+      - {code: SP.POP.65UP.TO.ZS,    name: "65세 이상 인구 비율",          unit: "%", per: người}
+      - {code: IT.NET.USER.ZS,       name: "인터넷 이용자 비율",           unit: "%", per: người}
+      - {code: SP.URB.TOTL.IN.ZS,    name: "도시 인구 비율",               unit: "%", per: người}
+      - {code: NE.EXP.GNFS.ZS,       name: "GDP 대비 수출 비중",           unit: "%"}
+      - {code: SL.UEM.TOTL.ZS,       name: "실업률",                      unit: "%", per: người lao động}
+      - {code: SE.XPD.TOTL.GD.ZS,    name: "GDP 대비 공공 교육비",         unit: "%"}
+      - {code: SH.XPD.CHEX.GD.ZS,    name: "GDP 대비 의료비 지출",         unit: "%"}
+      - {code: GB.XPD.RSDV.GD.ZS,    name: "GDP 대비 연구개발비",          unit: "%"}
+      - {code: SP.POP.TOTL,          name: "인구",                        unit: "만 명", scale: 10000}
+      - {code: NY.GDP.MKTP.KD.ZG,    name: "경제성장률",                   unit: "%"}
+      - {code: SL.TLF.CACT.FE.ZS,    name: "여성 경제활동 참가율",          unit: "%", per: phụ nữ}
+      - {code: EG.USE.ELEC.KH.PC,    name: "1인당 전력 소비량",            unit: "kWh", period: ngày}
+      - {code: SP.DYN.IMRT.IN,       name: "영아 사망률",                  unit: "명(출생아 1,000명당)"}
+      - {code: FP.CPI.TOTL.ZG,       name: "소비자물가 상승률",             unit: "%"}
+      - {code: NY.GDP.MKTP.CD,       name: "GDP 규모",                    unit: "억 달러", scale: 100000000}
+      - {code: AG.LND.FRST.ZS,       name: "산림 면적 비율",               unit: "%"}
+      - {code: SE.TER.ENRR,          name: "대학 취학률",                  unit: "%"}
+      - {code: NV.IND.MANF.ZS,       name: "GDP 대비 제조업 비중",          unit: "%"}
+      - {code: SL.AGR.EMPL.ZS,       name: "농업 종사자 비율",              unit: "%", per: người lao động}
+    races:
+      per_day: 1
+      start_year: 1990
+      year_step: 5
+      focus: [KOR]
+      countries:
+        - {iso3: KOR, iso2: KR, name: "한국"}
+        - {iso3: JPN, iso2: JP, name: "일본"}
+        - {iso3: CHN, iso2: CN, name: "중국"}
+        - {iso3: VNM, iso2: VN, name: "베트남"}
+        - {iso3: THA, iso2: TH, name: "태국"}
+        - {iso3: MYS, iso2: MY, name: "말레이시아"}
+        - {iso3: IDN, iso2: ID, name: "인도네시아"}
+        - {iso3: PHL, iso2: PH, name: "필리핀"}
+        - {iso3: IND, iso2: IN, name: "인도"}
+        - {iso3: SGP, iso2: SG, name: "싱가포르"}
+      indicators:
+        - {code: NY.GDP.PCAP.CD,    name: "1인당 GDP",             unit: "달러"}
+        - {code: SP.DYN.LE00.IN,    name: "기대수명",               unit: "세"}
+        - {code: IT.NET.USER.ZS,    name: "인터넷 이용자 비율",      unit: "%", start_year: 2000}
+        - {code: EG.USE.ELEC.KH.PC, name: "1인당 전력 소비량",       unit: "kWh"}
+        - {code: NY.GDP.MKTP.CD,    name: "GDP 규모",              unit: "억 달러", scale: 100000000}
+        - {code: SP.URB.TOTL.IN.ZS, name: "도시 인구 비율",          unit: "%"}
+    # Bản đồ thế giới: TẮT cho tới khi bản đồ có tên nước tiếng Hàn + góc nhìn của Hàn Quốc (giai đoạn 4).
+    world:
+      per_day: 0
+      start_year: 1990
+      focus: [KOR, JPN]
+      indicators: [SP.DYN.LE00.IN, NY.GDP.PCAP.CD, SP.DYN.TFRT.IN]
+
+  # KOSIS: người nước ngoài cư trú tại Hàn Quốc theo quốc tịch (cuộc đua). Bảng "người Việt theo visa" của
+  # kênh Việt không hợp khán giả Hàn nên không dùng.
+  kosis:
+    per_day: 1
+    tables:
+      - {kind: nationality_race, org: "111", tbl: DT_1B040A7, start: 2010, top: 10,
+         org_name: "법무부", unit: "명", focus: [],
+         name: "국적별 국내 체류 외국인"}
+
+  # Our World in Data — chỉ dạng cuộc đua (race) cho tới khi bản đồ có tên tiếng Hàn.
+  owid:
+    per_day: 1
+    focus: [KOR]
+    groups:
+      major: [USA, CHN, JPN, DEU, GBR, FRA, IND, BRA, KOR, VNM]
+    charts:
+      - {slug: electric-car-sales-share, kind: race, group: major, start_year: 2015, year_step: 2,
+         name: "신차 판매 중 전기차 비율", unit: "%", origin: "국제에너지기구(IEA)", per: xe mới bán}
+      - {slug: annual-working-hours-per-worker, kind: race, group: major,
+         name: "근로자 1인당 연간 근로시간", unit: "시간", origin: "Penn World Table", period: tuần}
+      - {slug: installed-solar-pv-capacity, kind: race, group: top, start_year: 2010,
+         name: "태양광 발전 설비 용량", unit: "GW", origin: "IRENA"}
+      - {slug: annual-co2-emissions-per-country, kind: race, group: top, scale: 1000000,
+         name: "연간 이산화탄소 배출량", unit: "백만 톤", origin: "Global Carbon Budget"}
+      - {slug: per-capita-energy-use, kind: race, group: major,
+         name: "1인당 에너지 소비량", unit: "kWh", origin: "Energy Institute", period: ngày}
+      - {slug: coffee-bean-production, kind: race, group: top, scale: 1000,
+         name: "커피 생산량", unit: "천 톤", origin: "FAO"}
+
+  reddit:
+    subreddits: []
+    listing: "top"
+    time: "day"
+    limit: 20
+
+dedup:
+  title_similarity_threshold: 0.55
+  youtube_check:
+    max_results: 10
+    high_view_threshold: 300000      # thị trường Hàn có nhiều kênh lớn hơn -> ngưỡng cao hơn kênh Việt
+    max_popular_allowed: 2
+
+angle_rules: >
+  Mỗi ý tưởng PHẢI có ít nhất một "góc": (a) số liệu mới 1-2 năm gần đây, (b) điều ngược suy nghĩ
+  thông thường và có nguồn, hoặc (c) kết nối hai lĩnh vực. Khán giả là NGƯỜI HÀN: cộng điểm khi có
+  điểm neo Hàn Quốc (Hàn Quốc đứng thứ mấy, so với Nhật Bản / Trung Quốc / OECD), nhưng chủ đề thế
+  giới có số liệu tốt được ưu tiên ngang.
+
+daily:
+  raw_target: 20
+  shortlist: 2
+  extra_script_tries: 1
+  videos_per_day: 1
+  utc_offset_hours: 9
+  max_attempts: 2
+  max_script_age_days: 3
+  min_script_words: 45       # tiếng Hàn: "từ" = cụm cách nhau bởi dấu cách (어절), ít hơn tiếng Việt
+  min_script_numbers: 4
+
+music:
+  enabled: true
+  target_lufs: -27
+  gain_db: -20
+  max_uses_per_week: 3
+  library: "YouTube Audio Library"
+  license: "YouTube Audio Library — dùng trong video YouTube; mô tả luôn ghi công tên bài + tác giả"
+
+pacing:
+  scene_seconds_min: 2
+  scene_seconds_max: 4
+  # CHƯA ĐO: tiếng Hàn đếm theo cụm cách nhau bởi dấu cách (어절), mỗi cụm dài hơn một tiếng Việt. Số tạm
+  # 2,6 cụm/giây — đo lại sau video đầu tiên (giọng TTS_VOICE trong .env của thư mục kênh Hàn).
+  words_per_second: 2.6
+
+style:
+  experiments: true
+
+community:
+  enabled: false      # bật khi kênh có video + Du duyệt được bình luận tiếng Hàn
+  max_videos: 30
+growth:
+  ypp: {subs: 1000, watch_hours: 8000, shorts_views_90d: 20000000}
+
+big_channels:
+  min_subs: 300000
+  max_channels: 12
+  outlier_ratio: 3.0
+  watch_per_week: 4
+  rediscover_days: 28
+  seed_channels: []
+  queries:
+    - {q: "국가 비교", lang: ko}
+    - {q: "나라별 순위", lang: ko}
+    - {q: "데이터 시각화", lang: ko}
+    - {q: "한국 일본 비교", lang: ko}
+    - {q: "country comparison", lang: en}
+
+competitor_analysis:
+  months_back: 6
+  min_subs: 3000
+  max_subs: 800000
+  max_channels: 30
+  outlier_ratio: 5.0
+  seed_queries:
+    - {q: "지식 쇼츠", lang: ko}
+    - {q: "통계 쇼츠", lang: ko}
+    - {q: "나라별 비교 쇼츠", lang: ko}
+
+scoring_weights:
+  curiosity: 1.0
+  novelty: 1.0
+  verifiability: 1.0
+  accessibility: 1.0
+  visualizability: 1.5
+  min_total: 17
+
+policy_rules: >
+  - Không viết như lời khuyên sức khỏe/tài chính/pháp lý; chỉ giải thích dữ liệu.
+  - Không giật tít gây sợ hãi hay thao túng cảm xúc; không khơi gợi đối đầu dân tộc (Hàn–Nhật, Hàn–Trung):
+    so sánh bằng số liệu, giọng trung tính.
+  - Mọi con số phải có nguồn kèm link.
+  - Giọng văn tự nhiên, có quan điểm, không đọc đều đều như máy.
+
+publish:
+  youtube:
+    mode: api
+    privacy: public
+    category_id: "27"
+    made_for_kids: false
+    contains_synthetic_media: true
+    notify_subscribers: true
+    publish_time_local: "19:00"   # giờ tối Hàn Quốc
+    utc_offset_hours: 9
+    oauth_token_days: null
+  tiktok:
+    enabled: false              # bật khi có tài khoản TikTok tiếng Hàn
+  facebook:
+    enabled: false              # người Hàn ít dùng Facebook — để kênh Việt dùng Trang Facebook
+  hashtags_fixed: ["#숫자로보는세계", "#Shorts"]
+  max_hashtags: 5
+  disclosure: "AI 음성으로 제작했습니다. 모든 수치는 게시 전에 출처와 대조했습니다."

@@ -24,14 +24,14 @@ from pathlib import Path
 
 import yaml
 
-from . import db
+from . import db, lang
 from . import telegram_bot as tg
 
 log = logging.getLogger("review")
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "output"
-CONFIG_PATH = ROOT / "config" / "channel.yaml"
+CONFIG_PATH = lang.config_path()          # kênh đang chạy (CHANNEL_CONFIG; mặc định kênh Việt)
 
 _YT_LINK = re.compile(r"(?:youtu\.be/|youtube\.com/(?:shorts/|watch\?v=|live/))([\w-]{11})")
 _CALLBACK = re.compile(r"^(ok|no|done|retry|tt|fb):(\d+)$")

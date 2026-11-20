@@ -6,6 +6,8 @@ Mọi template kế thừa BrandScene nên tự động cùng một bộ nhận 
 from functools import lru_cache
 from pathlib import Path
 
+from .. import lang
+
 import yaml
 from manim import (DOWN, UP, Dot, Scene, Text, VGroup, config)
 
@@ -35,9 +37,8 @@ def pick_font(kind: str = "primary") -> str:
 
 
 def fmt_num(x: float, decimals: int = 0) -> str:
-    """1234567 -> '1.234.567' (kiểu Việt Nam)."""
-    s = f"{x:,.{decimals}f}"
-    return s.replace(",", " ").replace(".", ",").replace(" ", ".")
+    """1234567 -> '1.234.567' (kiểu số của kênh, src/lang.py: kênh Hàn '1,234,567')."""
+    return lang.fixed(x, decimals)
 
 
 class BrandScene(Scene):

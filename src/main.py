@@ -15,13 +15,13 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
-from . import db
+from . import db, lang
 from .sources import fetch_all
 from .sources.youtube_check import count_popular_vietnamese_videos
 
 log = logging.getLogger("pipeline")
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "channel.yaml"
+CONFIG_PATH = lang.config_path()          # kênh đang chạy (CHANNEL_CONFIG; mặc định kênh Việt)
 
 
 def load_config() -> dict:

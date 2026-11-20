@@ -26,3 +26,6 @@ render-web/public/clips/
 render-web/public/flags/*.svg
 !render-web/public/flags/vn.svg
 !render-web/public/flags/kr.svg
+
+# Cài đặt Claude Code riêng của máy này (quyền tự cho phép) — không đưa lên repo công khai
+.claude/settings.local.json

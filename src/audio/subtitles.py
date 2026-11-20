@@ -29,7 +29,8 @@ def transcribe_words(audio_path: Path, model_size: str = "small") -> list:
     audio = audio.astype(np.float32) / 32768.0
 
     model = WhisperModel(model_size, device="cpu", compute_type="int8")
-    segments, _ = model.transcribe(audio, language="vi", word_timestamps=True)
+    from .. import lang                           # ngôn ngữ của kênh (vi | ko)
+    segments, _ = model.transcribe(audio, language=lang.whisper_code(), word_timestamps=True)
     words = []
     for seg in segments:
         for w in seg.words or []:

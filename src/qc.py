@@ -21,6 +21,8 @@ import yaml
 from dotenv import load_dotenv
 
 log = logging.getLogger("qc")
+from . import lang
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -28,7 +30,7 @@ def duration_bounds() -> tuple:
     """Khung độ dài AN TOÀN (config/channel.yaml qc.min_seconds/max_seconds). Từ 19/11/2026 Shorts
     45-60 giây nên sàn hạ còn 35 giây; trần giữ 95 cho kịch bản đời cũ trong mấy ngày chuyển đổi."""
     try:
-        q = (yaml.safe_load((ROOT / "config" / "channel.yaml").read_text(encoding="utf-8")) or {}).get("qc") or {}
+        q = (yaml.safe_load(lang.config_path().read_text(encoding="utf-8")) or {}).get("qc") or {}
     except (OSError, yaml.YAMLError):
         q = {}
     return float(q.get("min_seconds", 35)), float(q.get("max_seconds", 95))

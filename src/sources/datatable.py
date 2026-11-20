@@ -7,6 +7,8 @@ Khuôn quan trọng nhất: mỗi đối tượng một dòng "<Tên> theo năm:
 """
 import re
 
+from .. import lang
+
 WB_SOURCE = "World Bank Open Data"
 KOSIS_SOURCE = "KOSIS — Thống kê Hàn Quốc"
 OWID_SOURCE = "Our World in Data"
@@ -33,28 +35,20 @@ def topic_family(source_name) -> str:
 
 
 def vn_number(x: float) -> str:
-    """Viết số kiểu Việt Nam, làm tròn vừa đủ để ĐỌC được: 36226.97 -> '36.227',
-    83.74 -> '83,7', 0.721 -> '0,72'. Biên kịch chép nguyên dạng này vào lời đọc nên
-    cổng chống bịa số khớp được từng chữ số."""
-    a = abs(x)
-    decimals = 0 if a >= 100 else 1 if a >= 10 else 2
-    s = f"{x:,.{decimals}f}"
-    if "." in s:                         # bỏ số 0 thừa: 8,90 -> 8,9; 5,00 -> 5
-        s = s.rstrip("0").rstrip(".")
-    return s.replace(",", " ").replace(".", ",").replace(" ", ".")
+    """Viết số theo kiểu của KÊNH (src/lang.py), làm tròn vừa đủ để ĐỌC được: kênh Việt 36226.97 -> '36.227',
+    83.74 -> '83,7', 0.721 -> '0,72' (kênh Hàn: '36,227', '83.7', '0.72'). Biên kịch chép nguyên dạng này
+    vào lời đọc nên cổng chống bịa số khớp được từng chữ số. Tên giữ "vn_" vì có từ trước khi có kênh Hàn."""
+    return lang.readable(x)
 
 
 def spoken_scale(x: float) -> str:
-    """Số rất lớn kèm cách nói gọn: 100987686 -> ' (khoảng 101,0 triệu)'. Nhỏ thì rỗng."""
-    for size, word in ((1e12, "nghìn tỷ"), (1e9, "tỷ"), (1e6, "triệu")):
-        if abs(x) >= size:
-            return f" (khoảng {vn_number(x / size)} {word})"
-    return ""
+    """Số rất lớn kèm cách nói gọn: 100987686 -> ' (khoảng 101 triệu)' | ' (약 1.01억)'. Nhỏ thì rỗng."""
+    return lang.spoken_scale(x)
 
 
 def parse_vn_number(s: str) -> float:
-    """Ngược lại vn_number: '36.227' -> 36227, '98,9' -> 98.9, '0,75' -> 0.75."""
-    return float(s.replace(".", "").replace(",", "."))
+    """Ngược lại vn_number: '36.227' -> 36227, '98,9' -> 98.9, '0,75' -> 0.75 (kênh Hàn: '36,227' -> 36227)."""
+    return lang.parse(s)
 
 
 def parse_series(summary: str) -> list:

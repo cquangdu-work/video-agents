@@ -34,14 +34,14 @@ from pathlib import Path
 
 import yaml
 
-from .. import db
+from .. import db, lang
 from .. import telegram_bot as tg
 from . import learned as learned_mod
 
 log = logging.getLogger("weekly")
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-CONFIG_PATH = ROOT / "config" / "channel.yaml"
+CONFIG_PATH = lang.config_path()          # kênh đang chạy (CHANNEL_CONFIG; mặc định kênh Việt)
 SPEC_DIR = ROOT / "data" / "specs"
 
 CRITERIA = ("curiosity", "novelty", "verifiability", "accessibility", "visualizability")

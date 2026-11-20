@@ -43,7 +43,8 @@ def digits_of(value) -> set:
         v = float(value)
     except (TypeError, ValueError):
         return out
-    for scaled in (v, v / 1e3, v / 1e6, v / 1e9):
+    from . import lang                    # kênh Hàn nói số theo bội 10.000 (만, 억, 조)
+    for scaled in (v, *(v / d for d in lang.scale_divisors())):
         s = f"{scaled:.10g}"
         if "e" not in s:
             out.add(re.sub(r"[.,\s-]", "", s))
