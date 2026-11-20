@@ -15,7 +15,7 @@ REPEAT_DAYS = 30           # cùng một khoá đã xếp hàng trong chừng n�
 # từ quá chung để khớp tên chỉ số (đã bỏ dấu)
 STOP = {"cua", "cho", "voi", "nhung", "nhat", "nhieu", "lam", "video", "kenh", "mot", "cac", "nhu", "the",
         "nao", "khong", "duoc", "hay", "ban", "minh", "toi", "xin", "muon", "xem", "gium", "giup", "tren",
-        "trong", "nay", "kia", "nuoc", "viet", "nam", "han", "quoc", "the gioi"}
+        "trong", "nay", "kia", "nuoc", "viet", "nam", "han", "quoc", "nguoi", "moi", "the gioi"}
 
 
 def _now() -> str:
@@ -47,10 +47,11 @@ def _tokens(text: str, keep_marks: bool) -> list:
     return re.findall(r"\w+", t)
 
 
-def match(cfg: dict, query: str, limit: int = 3) -> list:
+def match(cfg: dict, query: str, limit: int = 3, min_cover: float = 0.0) -> list:
     """Khoá các chỉ số có tên khớp nhiều từ nhất với `query` (bỏ từ chung). [] nếu không khớp.
     Gõ CÓ DẤU thì so cả dấu ("lương" khác "lượng" — bỏ dấu thì tiền lương khớp nhầm sản lượng cà phê);
-    gõ không dấu thì so không dấu."""
+    gõ không dấu thì so không dấu. min_cover: phần từ của query phải khớp (chủ đề do model viết ra thì đòi
+    cao hơn chủ đề Du gõ)."""
     keep = fold(query) != " ".join(unicodedata.normalize("NFC", str(query or "").lower()).split())
     words = {w for w in _tokens(query, keep) if len(fold(w)) >= 3 and fold(w) not in STOP}
     if not words:
@@ -63,6 +64,8 @@ def match(cfg: dict, query: str, limit: int = 3) -> list:
     if not scored:
         return []
     best = max(s for s, _ in scored)
+    if best < min_cover * len(words):
+        return []
     if len(words) >= 2 and best < 2:               # hỏi nhiều từ mà chỉ khớp một từ: chưa đủ chắc
         return []
     return [k for s, k in sorted(scored, key=lambda x: (-x[0], x[1])) if s == best][:limit]

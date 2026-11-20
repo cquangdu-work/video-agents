@@ -130,6 +130,40 @@ class BigChannelTest(Case):
         self.assertNotIn("search", yt2.calls)
         self.assertEqual(post2.bodies, [])
 
+    def test_real_false_positives_of_20_11_are_filtered(self):
+        # tiêu đề THẬT của kênh lọt bộ lọc lần chạy đầu
+        for title in ("$1 vs $100,000 Knife", "Cost vs Price: Coca-Cola 🥤 #finance", "1 Second vs 1 Hour Egg"):
+            self.assertIsNone(big.NICHE.search(title), title)
+        for title in ("Population of countries 2025", "Richest countries in Asia", "나라별 인구 순위", "Dân số các nước"):
+            self.assertIsNotNone(big.NICHE.search(title), title)
+        # tên kênh trong tiêu đề ("| The Economist") không được tính là đúng ngách
+        yt = FakeYouTube()
+        CHANNELS["UCecon0000000000000000000"] = ("The Economist", 4_250_000,
+                                                 [f"Story {k} | The Economist" for k in range(10)], [100] * 10)
+        self.addCleanup(CHANNELS.pop, "UCecon0000000000000000000")
+        s = big.scan_channel({"id": "UCecon0000000000000000000", "title": "The Economist", "subs": 4_250_000,
+                              "uploads": "UUecon0000000000000000000"}, 3.0, yt, NOW)
+        self.assertEqual(s["niche"], 0.0)
+        # chủ đề do model viết: phải phủ phần lớn ý mới được xếp hàng
+        from src import topics
+        cfg = {"sources": {"worldbank": {"indicators": [{"code": "FP.CPI.TOTL.ZG", "name": "Lạm phát giá tiêu dùng"}]},
+                           "owid": {"charts": [{"slug": "per-capita-energy-use",
+                                                "name": "Năng lượng tiêu thụ bình quân mỗi người"}]}}}
+        self.assertEqual(topics.match(cfg, "quyền lợi người tiêu dùng", min_cover=0.6), [])
+        self.assertEqual(topics.match(cfg, "lạm phát giá tiêu dùng", min_cover=0.6), ["wb:FP.CPI.TOTL.ZG"])
+
+    def test_videos_of_dropped_channels_leave_the_playbook(self):
+        learned.save_learned({"big_channels": {
+            "channels": [{"id": "UCcook0000000000000000000", "title": "Cooking Star", "subs": 40_000_000,
+                          "uploads": "UUcook0000000000000000000"}],
+            "discovered_at": NOW.isoformat(),
+            "watched": {"old": dict(WATCHED, channel="Cooking Star", title="Making pasta", seconds=45)}}})
+        big.update(self.con, self.cfg, NOW, get=FakeYouTube(), post=gemini(WATCHED))
+        data = learned.load_learned()["big_channels"]
+        self.assertEqual(data["channels"], [])                       # lạc ngách: bỏ
+        self.assertEqual(data["watched"], {})                        # video của nó cũng bỏ khỏi sổ tay
+        self.assertEqual(big.writer_block(), "")
+
     def test_model_answers_are_clamped(self):
         bad = gemini([{"first_line": "x", "hook_type": "viral!!", "cuts": 500, "ending": "?", "on_screen_text": "yes"}])
         w = big.watch("vid", 45, bad)

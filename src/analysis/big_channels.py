@@ -39,11 +39,12 @@ HOOK_TYPES = {"so_sanh": "đối lập / so sánh con số", "cau_hoi": "câu h�
 ENDINGS = {"quay_lai_dau": "quay lại câu mở đầu", "cau_hoi": "hỏi người xem", "keu_goi": "kêu gọi theo dõi",
            "khac": "khác"}
 COPY_LIMIT = 0.5          # độ giống từ khoá (Jaccard) của tiêu đề với tiêu đề kênh lớn từ mức này là chép
-# Kênh ĐÚNG NGÁCH: phần lớn tiêu đề Shorts gần đây nói chuyện số liệu / quốc gia / xếp hạng. Đo thật 20/11:
-# tìm theo lượt xem kéo về cả kênh nấu ăn 48,8 triệu sub, chương trình tranh luận, đài KBS...
-NICHE = re.compile(r"population|gdp|econom|per capita|rank|richest|poorest|largest|biggest|statistic|\bdata\b|"
-                   r"\bmaps?\b|countr|nation|compar|\bvs\.?\b|versus|dân số|kinh tế|xếp hạng|giàu|nghèo|quốc gia|"
-                   r"các nước|bản đồ|số liệu|so sánh|thế giới|인구|경제|순위|국가|나라|지도|통계|비교|세계", re.I)
+# Kênh ĐÚNG NGÁCH: phần lớn tiêu đề Shorts gần đây nói chuyện SỐ LIỆU / QUỐC GIA / XẾP HẠNG. Chỉ dùng từ đặc
+# trưng — thử thật 20/11: chữ "vs" cho lọt kênh nấu ăn ("$1 vs $100,000 Knife") và tài chính cá nhân ("Cost vs
+# Price"); tên kênh trong tiêu đề ("| The Economist") khớp "econom" -> bỏ tên kênh trước khi xét.
+NICHE = re.compile(r"population|\bgdp\b|econom|per capita|\brank(ing|ed|s)?\b|richest|poorest|statistic|\bdata\b|"
+                   r"\bmaps?\b|countr|\bnations?\b|dân số|kinh tế|xếp hạng|giàu nhất|nghèo nhất|quốc gia|các nước|"
+                   r"bản đồ|số liệu|인구|경제|순위|국가|나라|지도|통계", re.I)
 MIN_NICHE = 0.3
 DEFAULTS = {"min_subs": 300_000, "max_channels": 12, "rediscover_days": 28, "outlier_ratio": 3.0,
             "watch_per_week": 4, "months_back": 6, "queries": [], "seed_channels": []}
@@ -152,7 +153,8 @@ def scan_channel(ch: dict, ratio: float, get=None, now: datetime = None) -> dict
     return {"channel": ch["title"], "id": ch["id"], "subs": ch["subs"], "shorts": len(shorts),
             "median_views": int(med), "median_seconds": statistics.median(s["seconds"] for s in shorts),
             "per_week": round(len(recent) / 4, 1),
-            "niche": round(sum(1 for s in shorts if NICHE.search(s["title"])) / len(shorts), 2),
+            "niche": round(sum(1 for s in shorts
+                               if NICHE.search(s["title"].replace(ch["title"], " "))) / len(shorts), 2),
             "outliers": sorted(outliers, key=lambda o: -o["ratio"])}
 
 
@@ -301,7 +303,9 @@ def update(con, cfg: dict, now: datetime = None, get=None, post=None) -> list:
     data["channels"] = kept
     if stale:
         data["discovered_at"] = now.isoformat(timespec="seconds")
-    watched = dict(data.get("watched") or {})
+    # sổ tay chỉ dựa trên video của kênh CÒN được giữ (kênh bị loại vì lạc ngách thì quên video của nó)
+    kept_titles = {s["channel"] for s in scans}
+    watched = {vid: w for vid, w in (data.get("watched") or {}).items() if w.get("channel") in kept_titles}
     todo = [o for s in scans for o in s["outliers"] if o["id"] not in watched]
     fresh = []
     for o in sorted(todo, key=lambda o: -o["ratio"])[: c["watch_per_week"]]:
@@ -317,7 +321,9 @@ def update(con, cfg: dict, now: datetime = None, get=None, post=None) -> list:
     _save(data)
     queued = []
     for w in fresh:                       # chủ đề đột biến khớp nguồn số liệu của kênh -> làm sớm
-        keys = topics.match(cfg, w.get("topic", ""))
+        # khớp phải phủ phần lớn ý của chủ đề (thử thật 20/11: "quyền lợi người tiêu dùng" khớp nhầm
+        # "năng lượng tiêu thụ bình quân mỗi người" chỉ vì trùng vài chữ)
+        keys = topics.match(cfg, w.get("topic", ""), min_cover=0.6)
         if keys and topics.request(con, keys[0], w["topic"], "big_channel",
                                    f"{w['channel']}: {w['title']}") == "pending":
             queued.append(w["topic"])
