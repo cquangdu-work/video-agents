@@ -316,10 +316,11 @@ EXPLORE = 0.5         # thưởng cho cái ít được thử (đơn vị độ 
 SUB_WEIGHT = 0.5      # kéo người đăng ký nặng bằng nửa giữ chân trong điểm tổng hợp (khi có số liệu sub)
 
 
-def update_preferences(con, rows: list, now: datetime = None) -> dict:
+def update_preferences(con, rows: list, now: datetime = None, key: str = "preferences") -> dict:
     """Agent Phân tích gọi mỗi tuần: kiểu mở đầu / mảng / dạng video nào giữ chân tốt.
     Thước đo: % lượt xem qua vài giây đầu (engaged) nếu đủ, không thì % xem trung bình, không nữa thì
-    log lượt xem. Lưu vào learned.yaml["preferences"]. Trả về phần đã lưu."""
+    log lượt xem. Lưu vào learned.yaml[key] ("preferences" = người xem YouTube, "fb_preferences" = người xem
+    Facebook — agent Facebook, src/fb_insights.py). Trả về phần đã lưu."""
     metric = next((m for m in ("engaged_pct", "avg_view_pct")
                    if sum(1 for r in rows if r.get(m) is not None) >= max(3, len(rows) // 2)), "views")
     samples = []
@@ -363,14 +364,14 @@ def update_preferences(con, rows: list, now: datetime = None) -> dict:
                             "score": round((sum(vs) + SHRINK * mean) / (len(vs) + SHRINK), 3)}
                         for k, vs in groups.items()}
     data = store.load_learned()
-    data["preferences"] = prefs
+    data[key] = prefs
     store.save_learned(data)
     return prefs
 
 
-def preferences() -> dict:
-    """Sở thích người xem agent Phân tích đã học ({} nếu chưa có / file hỏng)."""
-    prefs = _learned().get("preferences")
+def preferences(key: str = "preferences") -> dict:
+    """Sở thích người xem agent Phân tích đã học ({} nếu chưa có / file hỏng). key="fb_preferences": Facebook."""
+    prefs = _learned().get(key)
     return prefs if isinstance(prefs, dict) else {}
 
 

@@ -403,9 +403,9 @@ def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
         except Exception as exc:
             log.warning("LLM rút bài học lỗi: %s", exc)
 
-    from .. import community, growth, learning, style, topics, yt_insights, yt_news
+    from .. import community, fb_insights, growth, learning, style, topics, yt_insights, yt_news
     from . import big_channels
-    style_notes, growth_lines, insight_lines, big_lines = [], [], [], []
+    style_notes, growth_lines, insight_lines, big_lines, fb_lines = [], [], [], [], []
     if not dry_run:
         from ..publish import youtube
         try:
@@ -431,9 +431,14 @@ def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
             big_lines = big_channels.update(con, cfg, now)
         except Exception as exc:
             log.warning("Agent Học kênh lớn lỗi: %s", exc)
-    else:
-        insight_lines = yt_insights.report_lines(yt_insights._data().get("latest") or {})
-        big_lines = big_channels.report_lines(big_channels._data(), [], [])
+        try:
+            # AGENT FACEBOOK (src/fb_insights.py): số liệu Reels + Trang, sở thích người xem Facebook,
+            # thử giờ đăng. Chưa kết nối Trang thì không làm gì.
+            fb_lines = fb_insights.update(con, cfg, now)
+        except Exception as exc:
+            log.warning("Agent Facebook lỗi: %s", exc)
+        # Hai bước dưới PHẢI nằm trong nhánh chạy thật (không phải dry_run) — 20/11 từng lọt vào nhánh
+        # else khi thêm agent Hiểu YouTube nên lượt Chủ nhật thật không cập nhật gì (test chốt chặn)
         try:
             # TỰ HỌC từ người xem: kiểu mở đầu / mảng / dạng video nào giữ chân tốt -> learned.yaml,
             # daily và máy chọn hook đọc lại. Gọi TRƯỚC load_learned bên dưới để không ghi đè mất.
@@ -445,11 +450,16 @@ def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
             style_notes = style.update(con, rows, now)
         except Exception as exc:
             log.warning("Cập nhật học cách dựng lỗi: %s", exc)
+    else:
+        insight_lines = yt_insights.report_lines(yt_insights._data().get("latest") or {})
+        big_lines = big_channels.report_lines(big_channels._data(), [], [])
+        fb_lines = fb_insights.report_lines(fb_insights._data().get("latest") or {})
 
-    report = format_report(rows, len(videos), source, weight_notes, insights)
+    report =format_report(rows, len(videos), source, weight_notes, insights)
     for part, what in ((lambda: growth_lines, "tăng trưởng"),
                        (lambda: insight_lines, "hiểu YouTube"),
                        (lambda: big_lines, "học kênh lớn"),
+                       (lambda: fb_lines, "Facebook"),
                        (lambda: yt_news.report_lines(con, now), "tin YouTube"),
                        (lambda: learning.weekly_lines(con, now), "tự học"),
                        (lambda: style.weekly_lines(con, now, style_notes), "học cách dựng"),

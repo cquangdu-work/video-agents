@@ -41,6 +41,7 @@ LOCK = ROOT / "data" / "daily.lock"
 
 MAX_FAILS_PER_SCRIPT = 2          # kịch bản dựng hỏng 2 lần thì thôi không thử nữa
 PREF_WEIGHT = 2.0                 # 1 độ lệch chuẩn "người xem thích" = 2 điểm Biên tập (thang ~15-30)
+FB_PREF_SHARE = 0.5               # sở thích người xem Facebook tính bằng nửa YouTube (kênh chính vẫn là YouTube)
 EXIT_RETRY_LATER = 75             # bước con thoát mã này = "lỗi tạm thời của dịch vụ ngoài"
                                   # (assemble: hết quota TTS) — khớp src/assemble.py
 STEP_TIMEOUT = {"ideas": 3600, "produce": 1800, "assemble": 5400, "review": 1200,  # giây
@@ -155,7 +156,8 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     from . import growth, learning
     from .sources.datatable import topic_family
     prefs = learning.preferences()
-    grow = growth._data()                   # ưu tiên của agent Tăng trưởng (đọc một lần)
+    fb_prefs = learning.preferences("fb_preferences")
+    grow = growth._data()                  # ưu tiên của agent Tăng trưởng (đọc một lần)
     max_age = cfg["daily"].get("max_script_age_days", 3)
     min_words = cfg["daily"].get("min_script_words", 150)
     max_words = max_script_words(cfg)
@@ -209,6 +211,8 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
         # có thưởng thăm dò cho cái ít được thử. Đơn vị độ lệch chuẩn, nhân PREF_WEIGHT điểm Biên tập.
         feats = learning.features(learning._hook_of(r["body"]), r["title"], r["source_name"])
         bonus = learning.preference_bonus(feats, prefs)
+        # người xem FACEBOOK (agent Facebook, src/fb_insights.py) — nặng bằng nửa YouTube; chưa có số liệu = 0
+        bonus += FB_PREF_SHARE * learning.preference_bonus(feats, fb_prefs)
         # agent Tăng trưởng (src/growth.py): cùng mảng + dạng với video ĐỘT BIẾN gần đây thì làm trước
         boost = growth.boost_for(feats["family"], feats["kind"], grow)
         out.append({"id": r["id"], "score": score, "has_final": final_path(r["id"]).exists(),

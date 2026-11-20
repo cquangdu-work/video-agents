@@ -84,6 +84,49 @@ def fetch_new(con, videos: list, token: str = None, api_key: str = None, fetch=N
     return out
 
 
+def recent_reels(con, days: int = 60, limit: int = 30) -> list:
+    """Reel Facebook đã công khai gần đây kèm bảng số của ý tưởng (cùng khuôn recent_videos)."""
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+    rows = con.execute(
+        "SELECT v.id, v.facebook_id, v.title, i.summary, i.source_url FROM videos v"
+        " LEFT JOIN scripts s ON s.id = v.script_id LEFT JOIN ideas i ON i.id = s.idea_id"
+        " WHERE v.facebook_id IS NOT NULL AND v.facebook_at >= ? AND v.facebook_at <= ?"
+        " ORDER BY v.id DESC LIMIT ?", (since, now, limit)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def fetch_new_fb(con, reels: list, fetch=None) -> list:
+    """Bình luận gốc mới trên các Reel Facebook (Graph API, token Trang). Gặp bình luận đã lưu thì dừng."""
+    from .publish import facebook
+    fetch = fetch or (lambda fb_id, after: facebook.comments(fb_id, after))
+    out = []
+    for v in reels:
+        after = None
+        for _ in range(5):
+            try:
+                data = fetch(v["facebook_id"], after)
+            except Exception as exc:
+                log.info("Không đọc được bình luận Facebook của video #%s: %s", v["id"], str(exc)[:120])
+                break
+            stop = False
+            for item in data.get("data") or []:
+                if con.execute("SELECT 1 FROM comments WHERE id = ?", (item.get("id"),)).fetchone():
+                    stop = True
+                    break
+                text = str(item.get("message") or "").strip()
+                if item.get("id") and text:
+                    out.append({"id": item["id"], "youtube_id": None, "video_id": v["id"], "platform": "facebook",
+                                "link": f"https://www.facebook.com/reel/{v['facebook_id']}",
+                                "title": v.get("title") or "", "author": (item.get("from") or {}).get("name", ""),
+                                "text": text[:1000], "published_at": item.get("created_time", ""),
+                                "likes": int(item.get("like_count") or 0)})
+            after = data.get("next")
+            if stop or not after:
+                break
+    return out
+
+
 def classify(comments: list, cfg: dict, run=None) -> list:
     """[{kind, topic, match, claim}] cùng thứ tự `comments`. Model chỉ đề xuất; code ép loại về danh sách
     cố định và chỉ nhận khoá chủ đề có thật trong danh mục (src/topics.catalog)."""
@@ -195,7 +238,9 @@ def digest(items: list, can_post: bool, carded: int) -> str:
 
 def card_text(c: dict) -> str:
     """Tin riêng cho MỘT bình luận: nội dung, ghi chú của agent, nháp trả lời (nếu có)."""
-    lines = [f"{KINDS.get(c['kind'], c['kind'])} — video #{c['video_id']} {_link(c['youtube_id'])}",
+    where = ("📘 Facebook " + str(c.get("link") or "") if c.get("platform") == "facebook"
+             else _link(c["youtube_id"]))
+    lines = [f"{KINDS.get(c['kind'], c['kind'])} — video #{c['video_id']} {where}",
              f"{c['author']}: “{str(c['text'])[:300]}”"]
     if c["kind"] == "bao_loi" and c.get("claim"):
         lines.append(f"→ cho là sai: {c['claim']}")
@@ -237,7 +282,11 @@ def post_reply(con, comment_id: str) -> str:
     if cur.rowcount != 1:
         raise ValueError(f"bình luận này đã xử lý rồi ({row['status']})")
     try:
-        posted = youtube.reply_comment(comment_id, row["reply"], youtube.access_token())
+        if (row["platform"] or "youtube") == "facebook":       # bình luận trên Reel của Trang
+            from .publish import facebook
+            posted = facebook.reply_comment(comment_id, row["reply"])
+        else:
+            posted = youtube.reply_comment(comment_id, row["reply"], youtube.access_token())
     except Exception:
         con.execute("UPDATE comments SET status = 'new' WHERE id = ?", (comment_id,))
         con.commit()
@@ -248,23 +297,31 @@ def post_reply(con, comment_id: str) -> str:
     return posted
 
 
-def run(cfg: dict, con, dry_run: bool = False, fetch=None, llm=None, send=None) -> list:
-    """Một lượt: đọc -> phân loại -> nháp trả lời / xếp hàng chủ đề -> lưu -> gửi bản tin. Trả về
-    danh sách bình luận mới đã xử lý."""
+def run(cfg: dict, con, dry_run: bool = False, fetch=None, llm=None, send=None, fb_fetch=None) -> list:
+    """Một lượt: đọc (YouTube + Reels Facebook) -> phân loại -> nháp trả lời / xếp hàng chủ đề -> lưu -> gửi
+    bản tin. Trả về danh sách bình luận mới đã xử lý."""
     from . import learning, topics
+    from .publish import facebook
     # Đọc bằng API key: bình luận công khai. Token OAuth hiện có (youtube.readonly) KHÔNG đọc được bình
     # luận — commentThreads đòi youtube.force-ssl (đo 19/11: 403 insufficientPermissions), mà quyền đó
     # cũng cho đăng/xoá bình luận nên không xin khi Du chưa đồng ý.
     api_key = os.getenv("YOUTUBE_API_KEY")
+    limit = int((cfg.get("community") or {}).get("max_videos", 30))
+    videos, new = [], []
     if fetch is None and not api_key:
-        log.warning("Thiếu YOUTUBE_API_KEY — agent Cộng đồng cần nó để đọc bình luận công khai")
-        return []
-    videos = recent_videos(con, limit=int((cfg.get("community") or {}).get("max_videos", 30)))
-    new = fetch_new(con, videos, None, api_key, fetch)[:MAX_NEW]
+        log.warning("Thiếu YOUTUBE_API_KEY — agent Cộng đồng không đọc được bình luận YouTube")
+    else:
+        videos = recent_videos(con, limit=limit)
+        new = fetch_new(con, videos, None, api_key, fetch)
+    reels = []
+    if fb_fetch is not None or facebook.connected():          # Trang Facebook (src/publish/facebook.py)
+        reels = recent_reels(con, limit=limit)
+        new += fetch_new_fb(con, reels, fb_fetch)
+    new = new[:MAX_NEW]
     if not new:
         log.info("Không có bình luận mới.")
         return []
-    by_video = {v["id"]: v for v in videos}
+    by_video = {v["id"]: v for v in reels + videos}
     for c, verdict in zip(new, classify(new, cfg, llm)):
         c.update(verdict)
     replies = 0
@@ -290,15 +347,19 @@ def run(cfg: dict, con, dry_run: bool = False, fetch=None, llm=None, send=None) 
     cards = sorted([c for c in new if c["kind"] in CARD_KINDS], key=lambda c: CARD_KINDS.index(c["kind"]))
     cards = cards[:MAX_CARDS]
     text = digest(new, youtube.has_scope(youtube.FORCE_SSL), len(cards))
+    if any(c.get("platform") == "facebook" for c in new) and not facebook.can("pages_manage_engagement"):
+        text += ("\n🔑 Trang Facebook chưa có quyền pages_manage_engagement: bot chưa đăng được trả lời trên Reels"
+                 " — gửi /facebook để xem cách cấp thêm. Trước đó Du trả lời tay trên Facebook.")
     if dry_run:
         print("\n\n".join([text] + [card_text(c) for c in cards]))
         return new
     for c in new:
         con.execute("INSERT OR IGNORE INTO comments (id, youtube_id, video_id, author, text, published_at, likes,"
-                    " kind, topic, matched, reply, fetched_at, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    " kind, topic, matched, reply, fetched_at, status, platform, link)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (c["id"], c["youtube_id"], c["video_id"], c["author"], c["text"], c["published_at"],
                      c["likes"], c["kind"], c["topic"], c["match"], c.get("reply"), _now(),
-                     "new" if c["kind"] in CARD_KINDS else "done"))
+                     "new" if c["kind"] in CARD_KINDS else "done", c.get("platform", "youtube"), c.get("link")))
         if c["kind"] in ("bao_loi", "che"):
             # người xem chê / báo sai là tín hiệu học — báo cáo tuần đếm; thành luật thì Du quyết (/hoc)
             learning.record(con, "viewer", c["kind"], c["text"][:400], "comment")

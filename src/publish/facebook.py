@@ -39,7 +39,11 @@ TOKEN_PATH = ROOT / ".secrets" / "facebook_token.json"
 VERSION = "v27.0"                       # bản Graph API trong ví dụ của tài liệu Reels (11/2026)
 GRAPH = f"https://graph.facebook.com/{VERSION}"
 RUPLOAD = f"https://rupload.facebook.com/video-upload/{VERSION}"
-NEEDED = ("pages_show_list", "pages_read_engagement", "pages_manage_posts")
+NEEDED = ("pages_show_list", "pages_read_engagement", "pages_manage_posts")      # bắt buộc: đăng Reels
+# không bắt buộc — thiếu thì agent tương ứng tự nghỉ (agent Facebook, agent Cộng đồng):
+OPTIONAL = {"read_insights": "đọc số liệu Reels + Trang",
+            "pages_read_user_content": "đọc bình luận",
+            "pages_manage_engagement": "đọc số liệu Reels + đăng trả lời bình luận (chỉ khi Du bấm ✅)"}
 MAX_SECONDS = 90                        # Reels qua API: 3-90 giây
 AUTH_CODES = {102, 190, 200, 10, 3}     # mã lỗi Graph API = thiếu quyền / token hỏng
 
@@ -96,9 +100,9 @@ def pick_page(pages: list, page_id: str = None) -> dict:
     return page
 
 
-def _save(page: dict, now: datetime = None) -> dict:
+def _save(page: dict, now: datetime = None, permissions=()) -> dict:
     tok = {"page_id": str(page["id"]), "page_name": page.get("name", ""),
-           "page_token": page["access_token"],
+           "page_token": page["access_token"], "permissions": sorted(permissions),
            "obtained_at": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds")}
     TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
     TOKEN_PATH.write_text(json.dumps(tok, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -127,8 +131,9 @@ def connect(user_token: str, page_id: str = None) -> dict:
         raise FacebookAuthError("Token thiếu quyền: " + ", ".join(missing) + " — tích thêm ở Graph API Explorer")
     pages = _check(requests.get(f"{GRAPH}/me/accounts", timeout=30, params={
         "access_token": long_lived, "fields": "id,name,access_token,tasks"})).get("data", [])
-    tok = _save(pick_page(pages, page_id))
-    return {"page_id": tok["page_id"], "page_name": tok["page_name"]}
+    tok = _save(pick_page(pages, page_id), permissions=have)
+    return {"page_id": tok["page_id"], "page_name": tok["page_name"],
+            "missing_optional": [p for p in OPTIONAL if p not in have]}
 
 
 def _token() -> dict:
@@ -146,6 +151,25 @@ def connected() -> bool:
         return True
     except FacebookAuthError:
         return False
+
+
+def can(permission: str) -> bool:
+    """Token Trang đang lưu có quyền này không (kết nối trước 20/11 chưa ghi quyền -> False)."""
+    try:
+        return permission in (_token().get("permissions") or [])
+    except FacebookAuthError:
+        return False
+
+
+def graph_get(path: str, get=None, **params) -> dict:
+    """GET Graph API bằng token Trang. `get` để test thay requests.get."""
+    tok = _token()
+    return _check((get or requests.get)(f"{GRAPH}/{path.lstrip('/')}", timeout=60,
+                                        params={**params, "access_token": tok["page_token"]}))
+
+
+def page_id() -> str:
+    return _token()["page_id"]
 
 
 def whoami() -> dict:
@@ -216,6 +240,75 @@ def wait_processed(video_id: str, token: str, wait_seconds: int = 120) -> str:
         if status == "ready" or time.time() >= deadline:
             return status
         time.sleep(6)
+
+
+# ------------------------------------------------------------------ đọc số liệu / bình luận
+REEL_METRICS = ("blue_reels_play_count", "post_impressions_unique", "post_video_avg_time_watched",
+                "post_video_view_time", "post_video_followers", "post_video_likes_by_reaction_type",
+                "post_video_social_actions", "post_video_retention_graph")
+
+
+def _value(v):
+    """Giá trị một chỉ số: số, hoặc dict (theo loại cảm xúc / mốc thời gian) -> giữ nguyên."""
+    if isinstance(v, dict):
+        return {str(k): float(x) for k, x in v.items() if isinstance(x, (int, float))}
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def reel_insights(video_id: str, get=None) -> dict:
+    """Số liệu trọn đời của một Reel (GET /{video-id}/video_insights, quyền read_insights +
+    pages_manage_engagement). -> {tên chỉ số: giá trị}; chỉ số nào Facebook không trả thì vắng mặt."""
+    body = graph_get(f"{video_id}/video_insights", get, metric=",".join(REEL_METRICS))
+    out = {}
+    for item in body.get("data") or []:
+        vals = item.get("values") or []
+        if item.get("name") and vals:
+            out[item["name"]] = _value(vals[-1].get("value"))
+    return out
+
+
+def page_insights(get=None) -> dict:
+    """Số liệu cả Trang: người theo dõi (trường followers_count) + 28 ngày gần nhất (lượt theo dõi mới / bỏ
+    theo dõi, lượt xem nội dung, người xem). Chỉ số Meta đã bỏ (page_fans, page_impressions...) không dùng.
+    Trang dưới 100 lượt thích thì Meta chưa trả insights -> chỉ có followers_count."""
+    pid = page_id()
+    out = {}
+    info = graph_get(pid, get, fields="followers_count,fan_count,name")
+    out["followers"] = info.get("followers_count")
+    out["name"] = info.get("name")
+    for metric in ("page_daily_follows_unique", "page_daily_unfollows_unique", "page_media_view",
+                   "page_total_media_view_unique", "page_video_views"):
+        try:
+            body = graph_get(f"{pid}/insights", get, metric=metric, period="days_28")
+            vals = ((body.get("data") or [{}])[0].get("values") or [])
+            if vals:
+                out[metric] = _value(vals[-1].get("value"))
+        except (FacebookAuthError, FacebookUploadError) as exc:
+            log.info("Không đọc được %s: %s", metric, str(exc)[:120])
+    return out
+
+
+def comments(video_id: str, after: str = None, get=None) -> dict:
+    """Bình luận gốc của một Reel, mới nhất trước. -> {"data": [...], "next": con trỏ trang sau | None}."""
+    params = {"fields": "id,message,from{name},created_time,like_count", "filter": "toplevel",
+              "order": "reverse_chronological", "limit": 100}
+    if after:
+        params["after"] = after
+    body = graph_get(f"{video_id}/comments", get, **params)
+    paging = body.get("paging") or {}
+    return {"data": body.get("data") or [],
+            "next": (paging.get("cursors") or {}).get("after") if paging.get("next") else None}
+
+
+def reply_comment(comment_id: str, message: str, post=None) -> str:
+    """Trang trả lời một bình luận. CHỈ gọi từ nút ✅ của Du (src/community.post_reply). -> id câu trả lời."""
+    tok = _token()
+    body = _check((post or requests.post)(f"{GRAPH}/{comment_id}/comments", timeout=60,
+                                          data={"message": message, "access_token": tok["page_token"]}))
+    return str(body.get("id") or "")
 
 
 def caption(video: dict) -> str:

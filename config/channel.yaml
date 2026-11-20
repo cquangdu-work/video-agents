@@ -354,7 +354,10 @@ publish:
     enabled: true
     page_id: null               # chỉ cần khi tài khoản quản lý nhiều Trang
     video_state: SCHEDULED      # SCHEDULED = hẹn giờ dưới đây · PUBLISHED = đăng ngay · DRAFT = nháp để Du tự đăng
-    publish_time_local: "19:00" # cùng giờ với YouTube (giờ Việt Nam)
+    publish_time_local: "19:00" # giờ dự phòng (giờ Việt Nam)
+    # agent Facebook (src/fb_insights.py) THỬ các khung giờ này, Chủ nhật đo lượt phát/ngày của từng khung,
+    # khung tốt được dùng nhiều hơn (Thompson sampling). Chỉ để một giờ = tắt thử nghiệm.
+    slots: ["12:00", "19:00", "21:00"]
     utc_offset_hours: 7
     ai_generated: true          # nhãn "AI info" của Meta (giọng đọc AI) — cùng khai báo như YouTube
   hashtags_fixed: ["#thegioiquaconso", "#Shorts"]   # luôn có ở mọi video

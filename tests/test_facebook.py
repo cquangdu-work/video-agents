@@ -56,7 +56,8 @@ class ConnectTest(FbCase):
     def test_short_token_becomes_a_saved_page_token(self):
         with self.graph():
             who = facebook.connect("x" * 40)
-        self.assertEqual(who, {"page_id": "123", "page_name": "Thế giới qua con số"})
+        self.assertEqual(who, {"page_id": "123", "page_name": "Thế giới qua con số",
+                               "missing_optional": list(facebook.OPTIONAL)})
         saved = json.loads(self.tok.read_text(encoding="utf-8"))
         self.assertEqual((saved["page_id"], saved["page_token"]), ("123", "PAGE"))
         self.assertTrue(facebook.connected())

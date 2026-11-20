@@ -243,9 +243,11 @@ def push_facebook(con, video: dict, cfg: dict) -> None:
         tg.send_message(f"ℹ️ Video #{video['id']} dài {secs:.0f} giây — Reels qua API tối đa"
                         f" {facebook.MAX_SECONDS} giây nên không đăng lên Facebook.")
         return
-    state, at = str(fcfg.get("video_state") or "SCHEDULED").upper(), None
+    state, at, slot = str(fcfg.get("video_state") or "SCHEDULED").upper(), None, None
     if state == "SCHEDULED":
-        iso = youtube.compute_publish_at(fcfg)
+        from . import fb_insights            # agent Facebook: thử nhiều khung giờ đăng, học khung nào tốt
+        slot = fb_insights.choose_slot(con, fcfg, video["id"])
+        iso = youtube.compute_publish_at({**fcfg, "publish_time_local": slot})
         if iso:
             at = int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
         else:
@@ -266,6 +268,9 @@ def push_facebook(con, video: dict, cfg: dict) -> None:
                         buttons=[[("🔁 Thử lại Facebook", f"fb:{video['id']}")]])
         return
     db.set_state(con, key, res["video_id"])
+    db.update_video(con, video["id"], facebook_id=res["video_id"], facebook_slot=slot,
+                    facebook_at=(datetime.fromtimestamp(at, timezone.utc) if at else datetime.now(timezone.utc))
+                    .isoformat(timespec="seconds"))
     log.info("Đã đăng video #%d lên Facebook: %s (%s, %s)", video["id"], res["url"], res["state"], res["status"])
     when = (f"hẹn công khai lúc {_local_times(datetime.fromtimestamp(at, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'), fcfg)}"
             if res["state"] == "SCHEDULED" else
@@ -280,9 +285,11 @@ def _connect_facebook(con, msg: dict, text: str) -> None:
     if len(parts) < 2:
         status = ""
         if facebook.connected():
+            from . import fb_insights
             try:
                 who = facebook.whoami()
-                status = f"✅ Đang kết nối Trang: {who.get('name')} ({who.get('followers_count', '?')} người theo dõi)\n\n"
+                status = (f"✅ Đang kết nối Trang: {who.get('name')} ({who.get('followers_count', '?')} người theo"
+                          f" dõi)\n{fb_insights.status_text(con)}\n\n")
             except Exception as exc:
                 status = f"⚠️ Token Trang không dùng được nữa: {exc}\n\n"
         tg.send_message(
@@ -291,7 +298,10 @@ def _connect_facebook(con, msg: dict, text: str) -> None:
             "2. Cài đặt → Thông tin cơ bản: chép App ID và App Secret vào .env trên VM (FACEBOOK_APP_ID,"
             " FACEBOOK_APP_SECRET) rồi khởi động lại bot.\n"
             "3. Công cụ → Graph API Explorer: chọn app đó, “Get User Access Token”, tích pages_show_list,"
-            " pages_read_engagement, pages_manage_posts, chọn Trang của kênh.\n"
+            " pages_read_engagement, pages_manage_posts (để đăng) + read_insights, pages_read_user_content,"
+            " pages_manage_engagement (để agent Facebook đọc số liệu, đọc bình luận và đăng trả lời — CHỈ khi"
+            " Du bấm ✅; pages_manage_engagement cũng cho phép ẩn/xoá bình luận trên Trang nhưng code không"
+            " dùng), chọn Trang của kênh.\n"
             "4. Gửi vào đây: /facebook <token vừa chép>. Bot đổi sang token Trang không hết hạn và xoá tin"
             " chứa token.")
         return
@@ -302,8 +312,11 @@ def _connect_facebook(con, msg: dict, text: str) -> None:
     except Exception as exc:
         tg.send_message(f"⚠️ Kết nối Facebook chưa được: {exc}")
         return
+    missing = who.get("missing_optional") or []
     tg.send_message(f"✅ Đã kết nối Trang Facebook: {who['page_name']}. Từ giờ video được duyệt (✅) sẽ được"
-                    " đăng lên Trang dạng Reel, hẹn cùng giờ với YouTube.")
+                    " đăng lên Trang dạng Reel." + (
+                        "\nℹ️ Chưa có quyền: " + "; ".join(f"{p} ({facebook.OPTIONAL[p]})" for p in missing)
+                        + " — muốn có thì lấy token mới tích thêm rồi gửi lại /facebook <token>." if missing else ""))
 
 
 # --------------------------------------------------------------- TikTok (bản nháp)

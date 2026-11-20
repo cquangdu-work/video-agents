@@ -145,7 +145,8 @@ class WeeklyRunTest(unittest.TestCase):
         p = mock.patch.object(tg, "send_message", side_effect=lambda t, **k: self.msgs.append(t) or 1)
         p.start(); self.addCleanup(p.stop)
         # agent Hiểu YouTube / Tin YouTube gọi mạng thật (Analytics, RSS) — có test riêng (test_yt_agents)
-        for target in ("src.yt_news.fetch_feeds", "src.yt_insights.update", "src.analysis.big_channels.update"):
+        for target in ("src.yt_news.fetch_feeds", "src.yt_insights.update", "src.analysis.big_channels.update",
+                       "src.fb_insights.update"):
             p = mock.patch(target, return_value=[]); p.start(); self.addCleanup(p.stop)
         self.root, self.con = root, db.connect()
         self.addCleanup(self.con.close)
@@ -162,6 +163,18 @@ class WeeklyRunTest(unittest.TestCase):
         if views is not None:
             db.save_video_stats(self.con, n, "analytics" if pct else "public",
                                 {"views": views, "avg_view_pct": pct})
+
+    def test_real_run_updates_learning_and_dry_run_does_not(self):
+        # ca thật 20/11: khi thêm agent Hiểu YouTube, hai bước tự học lọt vào nhánh dry_run -> lượt Chủ nhật thật
+        # không cập nhật sở thích người xem lẫn học cách dựng
+        self.video(1, pct=60.0)
+        with mock.patch.dict(os.environ, {"YOUTUBE_API_KEY": ""}), \
+                mock.patch("src.learning.update_preferences", return_value={}) as prefs, \
+                mock.patch("src.style.update", return_value=[]) as style_up:
+            weekly.run_weekly(now=NOW)
+            self.assertEqual((prefs.call_count, style_up.call_count), (1, 1))
+            weekly.run_weekly(dry_run=True, now=NOW)
+            self.assertEqual((prefs.call_count, style_up.call_count), (1, 1))
 
     def test_few_videos_report_honestly_and_change_nothing(self):
         self.video(1, pct=60.0); self.video(2, days_ago=1, pct=90.0)     # video 2 còn quá mới

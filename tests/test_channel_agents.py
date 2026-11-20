@@ -36,8 +36,10 @@ class Case(unittest.TestCase):
         logging.disable(logging.WARNING); self.addCleanup(logging.disable, logging.NOTSET)
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
+        from src.publish import facebook      # VM có token Trang thật: test không được gọi Facebook
         for target, attr, val in [(db, "DB_PATH", self.root / "t.db"),
-                                  (learned, "LEARNED_PATH", self.root / "learned.yaml")]:
+                                  (learned, "LEARNED_PATH", self.root / "learned.yaml"),
+                                  (facebook, "TOKEN_PATH", self.root / "no_fb_token.json")]:
             p = mock.patch.object(target, attr, val); p.start(); self.addCleanup(p.stop)
         self.con = db.connect(); self.addCleanup(self.con.close)
 

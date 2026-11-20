@@ -103,6 +103,9 @@ class DbCase(unittest.TestCase):
         from src.analysis import learned          # luật Du dạy (/hoc) ghi vào learned.yaml giả
         p = mock.patch.object(learned, "LEARNED_PATH", self.root / "learned.yaml")
         p.start(); self.addCleanup(p.stop)
+        from src.publish import facebook          # VM có token Trang thật: test không được đăng lên Facebook
+        p = mock.patch.object(facebook, "TOKEN_PATH", self.root / "no_fb_token.json")
+        p.start(); self.addCleanup(p.stop)
         self.addCleanup(self.tmp.cleanup)
         env = mock.patch.dict(os.environ, {"TELEGRAM_CHAT_ID": OWNER, "TELEGRAM_BOT_TOKEN": "T0KEN"})
         env.start(); self.addCleanup(env.stop)

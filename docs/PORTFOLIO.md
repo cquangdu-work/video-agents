@@ -120,6 +120,15 @@ agents read structure, never wording, and a similarity gate sends back any title
 channel's. Matching outlier topics to the channel's own data catalog had to move from single Vietnamese
 syllables to two-syllable compounds after live false matches ("quốc gia" vs "tham gia").
 
+**A second platform with its own learning loop** (`src/publish/facebook.py`, `src/fb_insights.py`).
+Approved videos are also published as Facebook Reels (three-step Reels Publishing API, AI-content label,
+one-time lock + retry button). A weekly agent reads Reel and Page insights (avoiding Page metrics Meta has
+deprecated), tracks the posting cadence the Content Monetization program asks for, and reuses the YouTube
+preference learner on Facebook data under a separate key, so the daily script ranking blends both
+audiences (Facebook at half weight). Posting time is a Thompson-sampling experiment over three time slots,
+seeded per video so a retry never moves a Reel to another slot. Facebook comments flow through the same
+approve-before-posting community cards as YouTube.
+
 **Designed around free-tier limits, measured in production.** Gemini TTS allows ~15 calls/day,
 so the whole script is voiced in one call and split per sentence with forced alignment
 (`audio/batch.py`); Whisper only supplies timestamps while subtitles use the script's own words
@@ -161,6 +170,7 @@ Posting API · Telegram Bot API · systemd · Oracle Cloud ARM64.
 | Channel growth | `src/community.py`, `src/growth.py`, `src/topics.py`, `tests/test_channel_agents.py` |
 | Platform analysis | `src/yt_insights.py`, `src/yt_news.py`, `tests/test_yt_agents.py` |
 | Learning from big channels | `src/analysis/big_channels.py`, `tests/test_big_channels.py` |
+| Facebook Reels | `src/publish/facebook.py`, `src/fb_insights.py`, `tests/test_facebook.py`, `tests/test_fb_agents.py` |
 | Audio | `src/audio/tts.py`, `src/audio/batch.py`, `src/audio/subtitles.py`, `src/audio/music.py` |
 | Rendering | `src/render/web.py`, `src/render/web_map.py`, `render-web/src/` |
 | QC and publishing | `src/qc.py`, `src/review.py`, `src/publish/` |

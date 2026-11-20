@@ -21,18 +21,24 @@ log = logging.getLogger("yt_news")
 
 FEEDS = [("YouTube Official Blog", "https://blog.youtube/rss/"),
          ("Creator Insider", "https://www.youtube.com/feeds/videos.xml?channel_id=UCGg-UqjRgzhYDPJMr-9HXCg"),
-         ("YouTube Creators", "https://www.youtube.com/feeds/videos.xml?channel_id=UCkRfArvrzheW2E7b6SVT7vQ")]
+         ("YouTube Creators", "https://www.youtube.com/feeds/videos.xml?channel_id=UCkRfArvrzheW2E7b6SVT7vQ"),
+         # Facebook (từ 20/11/2026, kênh có Trang Facebook đăng Reels): tin chính thức của Meta, RSS đo được 20/11
+         ("Meta Newsroom", "https://about.fb.com/news/feed/"),
+         ("Facebook for Business", "https://www.facebook.com/business/news/rss"),
+         ("Meta for Developers", "https://developers.facebook.com/blog/feed/")]
 FRESH_DAYS = 30          # tin cũ hơn chừng này (lần chạy đầu có cả trăm tin) chỉ đánh dấu đã đọc
-MAX_PER_RUN = 25
+MAX_PER_RUN = 40
 IMPACTS = ("cao", "vua", "thap")
 # Mức "cao" (báo Du ngay) chỉ giữ khi CHÍNH bài gốc nói về những chuyện này — model nhỏ hay báo động nhầm
 # (thử thật 20/11: chấm "cao" cho tin YouTube tính thêm lượt xem chung trên TV vào số lượt xem công khai)
 HIGH_IMPACT = re.compile(r"monetiz|partner program|\bypp\b|polic|guideline|revenue|strike|copyright|synthetic|"
                          r"altered|\bai\b|artificial intelligence|disclos|inauthentic|reused|repetitive|"
-                         r"mass[- ]produced|\bapi\b|quota|terms of service|community guidelines", re.I)
+                         r"mass[- ]produced|unoriginal|originality|\bapi\b|quota|terms of service|community guidelines", re.I)
 PROFILE = ("kênh YouTube Shorts tiếng Việt giải thích SỐ LIỆU bằng biểu đồ / bản đồ dựng bằng code, giọng đọc"
            " AI, phụ đề tự động, đăng qua YouTube Data API theo lịch, kèm video dài tổng hợp hằng tuần; CHƯA bật"
-           " kiếm tiền, đang nhắm điều kiện YouTube Partner Program; chủ kênh duyệt từng video")
+           " kiếm tiền, đang nhắm điều kiện YouTube Partner Program; chủ kênh duyệt từng video. Cùng video được"
+           " đăng dạng Reels lên Trang Facebook của kênh qua Graph API (Reels Publishing API), nhắm chương trình"
+           " Kiếm tiền từ nội dung của Facebook")
 
 
 def _now() -> str:
@@ -77,14 +83,16 @@ def classify(items: list, run=None) -> list:
         from .crew import _run_single_task as run
     listing = "\n".join(f"{k + 1}. [{it['source']}] {it['title']} — {it['summary'][:400]}" for k, it in enumerate(items))
     answer = run(
-        role="Người theo dõi thay đổi của YouTube cho một kênh nhỏ",
+        role="Người theo dõi thay đổi của YouTube và Facebook cho một kênh nhỏ",
         goal="Chỉ báo những thay đổi thật sự ảnh hưởng tới kênh, tóm tắt đúng, không suy diễn",
         description=f"""Kênh: {PROFILE}.
 
-Dưới đây là các bài / video mới từ kênh tin CHÍNH THỨC của YouTube. Với TỪNG mục, cho biết:
-- "relevant": true nếu nó ảnh hưởng tới kênh trên (Shorts: phân phối, thời lượng, kiếm tiền; điều kiện YPP;
-  chính sách nội dung AI, nội dung lặp lại / theo mẫu; nhạc, bản quyền; API tải lên, Analytics; tiêu đề, mô
-  tả, phụ đề, bình luận). Tính năng livestream, game, quảng cáo cho nhà quảng cáo... -> false.
+Dưới đây là các bài / video mới từ kênh tin CHÍNH THỨC của YouTube và Meta (Facebook). Với TỪNG mục, cho biết:
+- "relevant": true nếu nó ảnh hưởng tới kênh trên (Shorts / Reels: phân phối, thời lượng, kiếm tiền; điều kiện
+  YPP, Kiếm tiền từ nội dung của Facebook; chính sách nội dung AI, nội dung lặp lại / theo mẫu / không nguyên
+  bản; nhạc, bản quyền; API tải lên (YouTube Data API, Graph API / Reels API), Analytics / Page Insights; tiêu
+  đề, mô tả, phụ đề, bình luận; Trang Facebook). Tính năng livestream, game, kính VR, WhatsApp, quảng cáo cho
+  nhà quảng cáo, tin doanh nghiệp của Meta... -> false.
 - "impact": "cao" (phải đổi cách làm hoặc ảnh hưởng kiếm tiền / bị phạt), "vua" (nên biết, có thể tận
   dụng), "thap".
 - "summary": 1-2 câu TIẾNG VIỆT nói đúng điều bài viết nói, không thêm thắt.
@@ -140,7 +148,8 @@ def run(con, now: datetime = None, dry_run: bool = False, feeds=None, get=None, 
     con.commit()
     urgent = [it for it in relevant if it["impact"] == "cao"]
     if urgent:
-        (send or tg.send_message)("📰 YouTube vừa thay đổi điều có thể ảnh hưởng tới kênh (agent Tin YouTube):\n\n"
+        (send or tg.send_message)("📰 YouTube / Facebook vừa thay đổi điều có thể ảnh hưởng tới kênh (agent Tin"
+                                  " YouTube):\n\n"
                                   + "\n\n".join(f"• {it['title']}\n  {it['summary']}"
                                                 + (f"\n  → Nên làm: {it['action']}" if it["action"] else "")
                                                 + f"\n  {it['link']}" for it in urgent)
@@ -157,7 +166,7 @@ def report_lines(con, now: datetime = None) -> list:
     if not rows:
         return []
     mark = {"cao": "❗", "vua": "•", "thap": "·"}
-    return ["", "📰 YouTube có gì mới liên quan tới kênh (agent Tin YouTube):"] + [
+    return ["", "📰 YouTube / Facebook có gì mới liên quan tới kênh (agent Tin YouTube):"] + [
         f"  {mark.get(r['impact'], '•')} {r['title']}: {r['summary']}" + (f" → {r['action']}" if r["action"] else "")
         + f" {r['link']}" for r in rows]
 

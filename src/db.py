@@ -119,6 +119,21 @@ CREATE TABLE IF NOT EXISTS comments (   -- bình luận người xem (agent Cộ
     posted_id    TEXT,               -- id câu trả lời đã đăng
     posted_at    TEXT
 );
+CREATE TABLE IF NOT EXISTS fb_stats (   -- số liệu Reels trên Trang Facebook (agent Facebook, src/fb_insights.py)
+    video_id     INTEGER PRIMARY KEY,   -- videos.id của mình (mỗi video một dòng, lần đo mới nhất)
+    facebook_id  TEXT,
+    fetched_at   TEXT,
+    age_days     REAL,
+    duration_s   REAL,
+    plays        INTEGER,   -- blue_reels_play_count (không tính xem lại)
+    reach        INTEGER,   -- post_impressions_unique
+    avg_watch_s  REAL,      -- post_video_avg_time_watched (gồm cả xem lại, có thể dài hơn video)
+    view_time_s  REAL,
+    followers    INTEGER,   -- người theo dõi Trang nhờ Reel này
+    reactions    INTEGER,
+    social       INTEGER,   -- bình luận + chia sẻ
+    hold_quarter REAL       -- % lượt phát còn xem ở 1/4 video (đường giữ chân)
+);
 CREATE TABLE IF NOT EXISTS yt_news (   -- tin chính thức của YouTube đã đọc (agent Tin YouTube, src/yt_news.py)
     id        TEXT PRIMARY KEY,   -- link bài / video
     source    TEXT,
@@ -142,7 +157,11 @@ CREATE TABLE IF NOT EXISTS state (   -- ô nhớ nhỏ: vị trí đọc Telegra
 _ADDED_COLUMNS = [("video_stats", "engaged_views", "INTEGER"),       # 19/11/2026
                   # bảng comments tạo sáng 19/11 chưa có các cột duyệt-đăng trả lời (chiều 19/11)
                   ("comments", "status", "TEXT"), ("comments", "tg_message_id", "INTEGER"),
-                  ("comments", "posted_id", "TEXT"), ("comments", "posted_at", "TEXT")]
+                  ("comments", "posted_id", "TEXT"), ("comments", "posted_at", "TEXT"),
+                  # Facebook Reels (20/11/2026): id Reel + giờ đăng + khung giờ đang thử; bình luận Facebook
+                  ("videos", "facebook_id", "TEXT"), ("videos", "facebook_at", "TEXT"),
+                  ("videos", "facebook_slot", "TEXT"),
+                  ("comments", "platform", "TEXT"), ("comments", "link", "TEXT")]
 
 
 def connect() -> sqlite3.Connection:
@@ -248,7 +267,7 @@ def get_script_with_idea(con, script_id: int):
 _VIDEO_FIELDS = {
     "file", "title", "description", "tags", "qc", "status", "review_note",
     "tg_message_id", "youtube_id", "youtube_url", "youtube_privacy",
-    "decided_at", "published_at",
+    "decided_at", "published_at", "facebook_id", "facebook_at", "facebook_slot",
 }
 
 

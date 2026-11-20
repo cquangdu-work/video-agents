@@ -245,6 +245,23 @@ Kết nối (một lần, Du làm):
 4. Gửi bot `/facebook <token>`: bot đổi sang token dài hạn, lấy **page token không hết hạn**, lưu ở
    `.secrets/facebook_token.json` (chỉ trên VM) và xoá tin chứa token. `/facebook` (không kèm token)
    xem Trang đang kết nối + hướng dẫn. Kiểm tra: `python -m src.publish.facebook whoami`.
+   Tích thêm `read_insights`, `pages_read_user_content`, `pages_manage_engagement` để agent Facebook đọc
+   số liệu / bình luận và đăng trả lời (chỉ khi Du bấm ✅); thiếu thì phần đó tự nghỉ.
+
+#### Agent Facebook (`src/fb_insights.py`, Chủ nhật, từ 20/11/2026)
+
+Trong lượt Phân tích Chủ nhật, chỉ đọc:
+- **Đo** từng Reel (lượt phát, người tiếp cận, thời gian xem TB, người theo dõi mới nhờ Reel, cảm xúc,
+  bình luận + chia sẻ, % còn xem ở 1/4 video) vào bảng `fb_stats`, và cả Trang (người theo dõi + chênh
+  lệch theo tuần, 28 ngày: lượt xem, theo dõi mới / bỏ theo dõi).
+- **Nhịp đăng cho Kiếm tiền từ nội dung**: số Reels / số ngày đăng trong 30 ngày so với 15 / 10.
+- **Tự học**: sở thích người xem Facebook (kiểu mở đầu / mảng / dạng video, cùng thuật toán với YouTube,
+  daily cộng nửa trọng số); Reel đột biến -> ưu tiên mảng + dạng đó; **giờ đăng**: mỗi Reel hẹn vào một
+  khung trong `publish.facebook.slots` (12:00 / 19:00 / 21:00 giờ VN), khung có nhiều lượt phát/ngày được
+  chọn nhiều hơn (Thompson sampling) — để một giờ là tắt thử nghiệm.
+- **So với YouTube**: cùng video, Facebook được bao nhiêu lần lượt xem YouTube.
+- Bình luận trên Reels đi qua **agent Cộng đồng** (cùng thẻ ✅ Đăng / ❌ Bỏ), tin chính thức của Meta qua
+  **agent Tin YouTube**. Xem nhanh: `/facebook` trên Telegram hoặc `python -m src.fb_insights`.
 
 ## Chạy hằng ngày
 
