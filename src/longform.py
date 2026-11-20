@@ -19,7 +19,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from . import db
+from . import db, lang
 
 log = logging.getLogger("longform")
 
@@ -102,10 +102,12 @@ def build_text(videos: list, starts: list, span: str, cfg: dict) -> tuple:
     from .publish import metadata
     n = len(videos)
     # khuôn cố định, ngắn (bản đầu ghép tiêu đề một chương vào nên bị cắt "…Việt Nam và Hàn…")
-    title = metadata._truncate_words(f"{n} câu chuyện qua con số tuần {span} | Việt Nam, Hàn Quốc và thế giới",
-                                     metadata.TITLE_MAX)
-    lines = [f"{n} câu chuyện dữ liệu Việt Nam – Hàn Quốc – thế giới trong tuần {span}, mỗi câu chuyện"
-             " một chương:", ""]
+    title = metadata._truncate_words(lang.pick(
+        vi=f"{n} câu chuyện qua con số tuần {span} | Việt Nam, Hàn Quốc và thế giới",
+        ko=f"숫자로 본 이번 주 이야기 {n}편 ({span}) | 한국과 세계"), metadata.TITLE_MAX)
+    lines = [lang.pick(vi=f"{n} câu chuyện dữ liệu Việt Nam – Hàn Quốc – thế giới trong tuần {span}, mỗi câu chuyện"
+                          " một chương:",
+                       ko=f"{span} 한 주 동안의 데이터 이야기 {n}편, 이야기마다 한 챕터:"), ""]
     lines += [f"{ts(s)} {v['title']}" for v, s in zip(videos, starts)]
     sources, music = [], []
     for v in videos:
@@ -142,17 +144,21 @@ def build(now: datetime = None, concurrency: int = 3) -> dict:
         con.close()
     if len(videos) < MIN_CHAPTERS:
         raise RuntimeError(f"Tuần này mới có {len(videos)} Shorts đã đăng (cần >= {MIN_CHAPTERS})")
-    tz_vn = timezone(timedelta(hours=7))
+    # giờ của người xem chính (kênh Việt +7, kênh Hàn +9 — publish.youtube.utc_offset_hours)
+    tz_vn = timezone(timedelta(hours=float(cfg.get("publish", {}).get("youtube", {}).get("utc_offset_hours", 7))))
     d0 = datetime.fromisoformat(videos[0]["published_at"]).astimezone(tz_vn)
     d1 = datetime.fromisoformat(videos[-1]["published_at"]).astimezone(tz_vn)
-    span = f"{d0:%d/%m}–{d1:%d/%m}"
-    series = f"TUẦN QUA CON SỐ · {span}"
+    span = lang.pick(vi=f"{d0:%d/%m}–{d1:%d/%m}", ko=f"{d0:%m.%d}–{d1:%m.%d}")
+    series = lang.pick(vi=f"TUẦN QUA CON SỐ · {span}", ko=f"숫자로 본 한 주 · {span}")
     chapters = [v["title"] for v in videos]
     TMP.mkdir(parents=True, exist_ok=True)
     parts, starts, t = [], [], 0.0
     for k, v in enumerate(videos, 1):
         story, audio = chapter_source(v["script_id"])
-        raw = web.render({"story": story, "chapter": k, "chapters": chapters, "series": series},
+        wide = {"story": story, "chapter": k, "chapters": chapters, "series": series}
+        if lang.code() != "vi":                # Wide.tsx đọc props.lang ở cấp ngoài để chọn phông + kiểu số
+            wide["lang"] = lang.code()
+        raw = web.render(wide,
                          TMP / f"wide_{k}.mp4", concurrency=concurrency, composition="Wide")
         part = TMP / f"part_{k}.mp4"
         # hình của chương + TIẾNG của bản phát hành (giọng + nhạc + hiệu ứng, đã chuẩn -16 LUFS)
