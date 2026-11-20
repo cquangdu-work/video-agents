@@ -400,6 +400,9 @@ LUẬT HOOK (cảnh 1 — quyết định người xem có ở lại không):
   e) Điều ngược trực giác (phải có trong nguồn).
 - 6-16 từ, có ít nhất một con số từ nguồn HOẶC một so sánh cụ thể. Hook là câu ĐỌC THÀNH TIẾNG:
   không hashtag, không emoji, không tên kênh.
+- Hook phải NÓI RÕ ĐANG ĐO CÁI GÌ ("ô tô điện", "lao động nông nghiệp", "vốn FDI"): người lướt tới không
+  biết video nói về gì trong 1-2 giây là lướt đi. Ca thật: "Năm 2018 Việt Nam xếp chót bảng nhưng năm 2025
+  đã vượt qua Mỹ và Anh" (không nói xếp hạng gì) được 35 lượt xem; các hook nói rõ chủ đề được 400-1.235.
 - CẤM (video theo mẫu và câu view bị YouTube cắt kiếm tiền): mở bằng "Đừng…", "Sai lầm…",
   "Bạn có biết…", "Hôm nay…", "Cùng tìm hiểu…"; các từ "sốc", "giật mình", "kinh hoàng", "không
   thể tin", "sự thật sẽ khiến bạn…"; câu hỏi chung chung kiểu "…đạt bao nhiêu?"."""
@@ -534,7 +537,7 @@ AGENT KIỂM CHỨNG ĐÃ PHÁT HIỆN LỖI SỐ LIỆU Ở BẢN TRƯỚC — 
             {"scenes": [{"voice": text}]}, idea, source_text)
             and not claims.comparison_problems([text], summary)
             and not (claims.data_table(str(summary or "")) and claims.WHY_HOOK.search(text)),
-            bonus=hook_bonus)
+            bonus=hook_bonus, subject=story.subject_words(summary) if data_story else set())
         problems = script_problems(script, cfg, recent_openers)
         problems += content_problems(script, summary)
         if problems and log_problems:

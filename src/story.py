@@ -99,7 +99,38 @@ def hook_score(text: str, recent_openers=()) -> float:
     return score
 
 
-def pick_hook(script: dict, recent_openers=(), is_sourced=lambda text: True, bonus=None) -> str:
+# Câu mở đầu phải nói ĐANG ĐO CÁI GÌ. Ca thật 19/11/2026: video #11 mở bằng "Năm 2018 Việt Nam xếp chót bảng
+# nhưng năm 2025 đã vượt qua Mỹ và Anh" — không nói xếp hạng gì (ô tô điện) — 35 lượt xem sau 16 giờ, trong
+# khi các video nói rõ chủ đề ngay câu đầu ("Tỷ lệ lao động nông nghiệp…", "Vốn FDI…") được 400-1.235 lượt.
+SUBJECT_POINTS = 1.0
+_GENERIC = {"tỷ", "lệ", "người", "dân", "số", "năm", "trên", "so", "với", "bình", "quân", "đầu", "mỗi", "trung",
+            "và", "của", "trong", "các", "theo", "tổng", "lượng", "mới", "cả", "vào", "làm", "từ", "đến", "nền",
+            "kinh", "tế", "chỉ", "việt", "nam", "hàn", "quốc", "thế", "giới", "bản", "đồ", "cuộc", "đua", "bán"}
+
+
+def subject_words(text: str) -> set:
+    """Từ ĐẶC TRƯNG của chỉ số mà video nói tới, đọc từ tóm tắt ("Chỉ số: X (đơn vị)…") hoặc tiêu đề ý
+    tưởng ("Cuộc đua X: …", "Bản đồ thế giới: X năm …", "X: Việt Nam và Hàn Quốc…"). Rỗng = không phải
+    ý tưởng bảng số (bài báo)."""
+    t = " ".join(str(text or "").split())
+    m = (re.search(r"Chỉ số:\s*([^(.]+)", t) or re.match(r"Cuộc đua\s+([^:(]+)", t)
+         or re.match(r"Bản đồ thế giới:\s*(.+?)\s+năm\s+\d{4}", t)
+         or re.match(r"([^:<>/]{4,80}):\s", t))        # "X: Việt Nam và Hàn Quốc…" (không phải HTML / link)
+    if not m:
+        return set()
+    words = {w for w in re.findall(r"\w+", m.group(1).lower()) if not w.isdigit()}
+    return {w for w in words if w not in _GENERIC and len(w) >= 2}
+
+
+def names_subject(text: str, words: set) -> bool:
+    """Câu có nhắc tới chỉ số không (ít nhất 2 từ đặc trưng, hoặc đủ cả khi chỉ có 1 từ như "GDP")."""
+    if not words:
+        return True
+    have = set(re.findall(r"\w+", str(text or "").lower()))
+    return len(words & have) >= min(2, len(words))
+
+
+def pick_hook(script: dict, recent_openers=(), is_sourced=lambda text: True, bonus=None, subject=()) -> str:
     """Chọn câu mở đầu mạnh nhất trong các phương án "hooks" và cảnh 1 hiện có; phương án nào
     mạnh hơn hẳn cảnh 1 thì thay vào lời đọc của cảnh 1 (giữ hình của cảnh 1).
     is_sourced(text): câu đúng với nguồn (mọi con số có trong nguồn, câu so sánh khớp bảng số) —
@@ -110,8 +141,11 @@ def pick_hook(script: dict, recent_openers=(), is_sourced=lambda text: True, bon
     if not scenes:
         return ""
     # bonus(text): điểm cộng tự học từ người xem (src/learning.hook_bonus) — chỉ để phân thắng thua giữa
-    # các phương án ĐÚNG; phương án phạm khuôn cấm vẫn -10 điểm
-    score = lambda text: hook_score(text, recent_openers) + (bonus(text) if bonus and not hook_problems(text) else 0)
+    # các phương án ĐÚNG; phương án phạm khuôn cấm vẫn -10 điểm. subject: từ đặc trưng của chỉ số — phương
+    # án NÓI RÕ đang đo cái gì được cộng một điểm luật (SUBJECT_POINTS)
+    score = lambda text: (hook_score(text, recent_openers)
+                          + (bonus(text) if bonus and not hook_problems(text) else 0)
+                          + (SUBJECT_POINTS if subject and names_subject(text, subject) else 0))
     current = str(scenes[0].get("voice") or "")
     best, best_score = current, (score(current) if is_sourced(current) else float("-inf"))
     for h in script.get("hooks") or []:

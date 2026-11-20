@@ -289,6 +289,48 @@ class ViewerTest(MemoryCase):
         self.assertEqual(learning.viewer_block(), "")
 
 
+class SubjectHookTest(unittest.TestCase):
+    """Câu mở đầu phải nói ĐANG ĐO CÁI GÌ — câu thật của các video đã đăng (19/11/2026)."""
+    EV_HOOK = "Năm 2018 Việt Nam xếp chót bảng nhưng năm 2025 đã vượt qua Mỹ và Anh."         # #11: 35 lượt xem
+    AGRI_HOOK = "Tỷ lệ lao động nông nghiệp Việt Nam năm 2025 gấp 4,91 lần Hàn Quốc."         # #10: 1.235 lượt
+
+    def test_subject_is_read_from_summaries_and_idea_titles(self):
+        ev = {"tô", "điện", "xe"}
+        self.assertEqual(story.subject_words("Chỉ số: Tỷ lệ ô tô điện trong số xe mới bán (%). Nguồn: OWID"), ev)
+        self.assertEqual(story.subject_words("Cuộc đua tỷ lệ ô tô điện trong số xe mới bán: Việt Nam và 9 nền"
+                                             " kinh tế lớn"), ev)
+        self.assertEqual(story.subject_words("Tỷ lệ lao động làm nông nghiệp: Việt Nam và Hàn Quốc từ 1991"),
+                         {"lao", "động", "nông", "nghiệp"})
+        self.assertEqual(story.subject_words("Bản đồ thế giới: điện tái tạo năm 2023 — Việt Nam thứ 25/180"),
+                         {"điện", "tái", "tạo"})
+        self.assertEqual(story.subject_words("Cuộc đua GDP bình quân đầu người: 10 nền kinh tế châu Á"), {"gdp"})
+        self.assertEqual(story.subject_words('<img align="left" src="https://dimg.donga.com/x.jpg"> Sao lớn'), set())
+
+    def test_the_real_hooks(self):
+        ev = story.subject_words("Chỉ số: Tỷ lệ ô tô điện trong số xe mới bán (%).")
+        self.assertFalse(story.names_subject(self.EV_HOOK, ev))
+        self.assertTrue(story.names_subject(self.AGRI_HOOK, story.subject_words("Chỉ số: Tỷ lệ lao động làm nông nghiệp (%).")))
+        self.assertFalse(story.names_subject("Việt Nam từng xếp hạng 10 trong mười nền kinh tế năm 1990.", {"gdp"}))  # #4
+        self.assertTrue(story.names_subject("GDP đầu người Việt Nam năm 2025 là 5.066 USD.", {"gdp"}))
+        self.assertTrue(story.names_subject("bất kỳ câu nào", set()))                     # bài báo: không xét
+
+    def test_machine_prefers_the_hook_that_names_the_subject(self):
+        clear = "Tỷ lệ ô tô điện Việt Nam từ 0% năm 2018 lên 40% năm 2025."
+        self.assertEqual(story.hook_score(clear), story.hook_score(self.EV_HOOK))       # ngang điểm luật cũ
+        ev = story.subject_words("Chỉ số: Tỷ lệ ô tô điện trong số xe mới bán (%).")
+        self.assertEqual(story.pick_hook({"hooks": [clear], "scenes": [{"voice": self.EV_HOOK}]}), self.EV_HOOK)
+        self.assertEqual(story.pick_hook({"hooks": [clear], "scenes": [{"voice": self.EV_HOOK}]}, subject=ev), clear)
+
+    def test_viewer_learning_tracks_the_hypothesis(self):
+        f = learning.features(self.EV_HOOK, "Cuộc đua tỷ lệ ô tô điện trong số xe mới bán: Việt Nam và 9 nền kinh tế",
+                              dt.OWID_SOURCE)
+        self.assertEqual(f["subject"], "khong")
+        f = learning.features(self.AGRI_HOOK, "Tỷ lệ lao động làm nông nghiệp: Việt Nam và Hàn Quốc từ 1991 đến 2025",
+                              dt.WB_SOURCE)
+        self.assertEqual(f["subject"], "co")
+        self.assertNotIn("subject", learning.features("Sao lớn nuốt sao nhỏ?", "Bài báo thiên văn", "Donga Science"))
+
+
 class ExemplarTest(MemoryCase):
     def approved(self, n, scenes, source=dt.WB_SOURCE, status="approved", engaged=None):
         self.con.execute("INSERT INTO ideas (id,title,title_norm,source_url,source_name,summary)"

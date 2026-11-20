@@ -291,8 +291,16 @@ def video_kind(title: str, source_name: str) -> str:
 
 
 def features(hook: str, title: str, source_name: str) -> dict:
-    from .sources.datatable import topic_family
-    return {"hook": hook_type(hook), "family": topic_family(source_name), "kind": video_kind(title, source_name)}
+    """Đặc điểm của một video để học người xem thích gì. "subject" (video bảng số): câu mở đầu có nói rõ
+    đang đo cái gì không — giả thuyết từ ca thật 19/11 (video #11), hệ thống tự kiểm chứng dần."""
+    from . import story
+    from .sources.datatable import is_data_source, topic_family
+    out = {"hook": hook_type(hook), "family": topic_family(source_name), "kind": video_kind(title, source_name)}
+    if is_data_source(source_name):
+        words = story.subject_words(title)
+        if words:
+            out["subject"] = "co" if story.names_subject(hook, words) else "khong"
+    return out
 
 
 def _hook_of(body: str) -> str:
@@ -344,10 +352,13 @@ def update_preferences(con, rows: list, now: datetime = None) -> dict:
     sd = (sum((v - mean) ** 2 for v in vals) / len(vals)) ** 0.5 or 1.0
     prefs = {"metric": metric, "based_on": len(samples), "mean": round(mean, 3), "sd": round(sd, 3),
              "updated_at": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds")}
-    for ftype in ("hook", "family", "kind"):
+    for ftype in ("hook", "family", "kind", "subject"):
         groups = {}
         for f, v in samples:
-            groups.setdefault(f[ftype], []).append(v)
+            if ftype in f:
+                groups.setdefault(f[ftype], []).append(v)
+        if not groups:
+            continue
         prefs[ftype] = {k: {"n": len(vs), "mean": round(sum(vs) / len(vs), 3),
                             "score": round((sum(vs) + SHRINK * mean) / (len(vs) + SHRINK), 3)}
                         for k, vs in groups.items()}
@@ -484,6 +495,10 @@ def weekly_lines(con, now: datetime = None) -> list:
         hooks = sorted((prefs.get("hook") or {}).items(), key=lambda kv: -kv[1]["score"])
         lines.append(f"  Người xem ({prefs['based_on']} video): kiểu mở đầu "
                      + ", ".join(f"{k} {v['mean']} (n={v['n']})" for k, v in hooks))
+        subj = prefs.get("subject") or {}
+        if subj:      # giả thuyết 19/11 (video #11): câu mở đầu nói rõ đang đo gì thì giữ chân hơn
+            lines.append("  Mở đầu nói rõ đang đo gì: " + " · ".join(
+                f"{'có' if k == 'co' else 'không'} {v['mean']} (n={v['n']})" for k, v in sorted(subj.items())))
     return lines if len(lines) > 2 else []
 
 
