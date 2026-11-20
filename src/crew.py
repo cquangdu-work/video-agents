@@ -443,7 +443,9 @@ NGÔN NGỮ — KÊNH NÀY DÀNH CHO NGƯỜI HÀN (ưu tiên hơn mọi ví d�
 KO_PRODUCER = """
 
 NGÔN NGỮ: kênh tiếng Hàn — MỌI chữ hiện trên hình (title, label, caption, tên trục...) viết TIẾNG HÀN, ngắn
-(≤ 12 ký tự cho nhãn). Số viết kiểu Hàn (1,234.5). "voice" chép NGUYÊN VĂN câu tiếng Hàn của kịch bản."""
+(≤ 12 ký tự cho nhãn). Số viết kiểu Hàn (1,234.5). "voice" chép NGUYÊN VĂN câu tiếng Hàn của kịch bản.
+"source" chỉ ghi TÊN nguồn + năm (vd "Our World in Data (2024)") — không ghi thứ hạng, giải thích hay câu tiếng Anh.
+Câu tiếng Hàn ngắn (3-5 cụm ≈ 4 giây): cảnh "map" và "bar_race" (cần ≥ 5 giây) LUÔN gánh HAI câu liền nhau."""
 
 
 def language_block(kind: str) -> str:

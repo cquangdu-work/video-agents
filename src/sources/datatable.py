@@ -364,9 +364,14 @@ def story_beats(named: dict, focus: list, unit: str, step: int = 5) -> list:
     return out
 
 
+MAX_RATIO = 1000.0
+
+
 def ratio_phrase(hi_name: str, hi: float, lo_name: str, lo: float, min_ratio: float = 1.5) -> str:
     """"A gấp N lần B" tính sẵn (hai giá trị dương, tỷ số đủ lớn để đáng nói) — hoặc ""."""
-    if hi > 0 and lo > 0 and hi / lo >= min_ratio:
+    # Trần 1.000 lần: bên nhỏ gần bằng 0 cho tỷ số vô nghĩa (ca thật 20/11, kênh Hàn: "한국은 그린란드의 120,101배"
+    # — rừng Greenland ~0%); người xem không hiểu được, và model sẽ đọc nguyên con số đó lên
+    if hi > 0 and lo > 0 and min_ratio <= hi / lo <= MAX_RATIO:
         return lang.pick(vi=f"{hi_name} gấp {vn_number(hi / lo)} lần {lo_name}",
                          ko=f"{_k(hi_name, '은/는')} {lo_name}의 {vn_number(hi / lo)}배")
     return ""

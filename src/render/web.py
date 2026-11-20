@@ -374,7 +374,12 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None, capt
         hints = {int(y) for y in _YEAR.findall(" ".join([str(p.get("title", "")), voice]))}
         dec = int(p.get("decimals", 0) or 0)
         kind = tpl if tpl in WEB_KINDS else "clip"
-        out = {"start": start, "end": end, "source": str(p.get("source") or ""), "kind": kind}
+        source = str(p.get("source") or "")
+        if lang.code() == "ko":
+            # kênh Hàn: model hay ghi thêm "(149th out of 194)", "(Median 31%)" vào nguồn -> chân hình lẫn tiếng
+            # Anh (ca thật 20/11). Bỏ phần trong ngoặc có chữ Latin, giữ năm "(2024)" / "(1990-2024)".
+            source = re.sub(r"\s*\((?=[^)]*[A-Za-z])[^)]*\)", "", source).strip()
+        out = {"start": start, "end": end, "source": source, "kind": kind}
         extra_shown = []
         if tpl == "line_chart" and (not world or not _same_series(p, world, colors)):
             # line_chart thứ hai mang số liệu khác biểu đồ chính: biểu đồ riêng chỉ trong cảnh này;
