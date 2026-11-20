@@ -60,7 +60,7 @@ class TopicsTest(Case):
         self.assertEqual(topics.match(CFG, "Thất nghiệp"), ["wb:SL.UEM.TOTL.ZS"])
         self.assertEqual(topics.match(CFG, "làm về cà phê đi"), ["owid:coffee-production"])
         self.assertEqual(topics.match(CFG, "lương"), [])                # chưa có nguồn
-        self.assertEqual(topics.match(CFG, "nông nghiệp thất nghiệp"), ["wb:SL.AGR.EMPL.ZS", "wb:SL.UEM.TOTL.ZS"])
+        self.assertEqual(set(topics.match(CFG, "nông nghiệp thất nghiệp")), {"wb:SL.AGR.EMPL.ZS", "wb:SL.UEM.TOTL.ZS"})
         self.assertEqual(topics.key_of_url("https://data.worldbank.org/indicator/SP.DYN.LE00.IN?locations=VN-KR"),
                          "wb:SP.DYN.LE00.IN")
         self.assertEqual(topics.key_of_url("https://ourworldindata.org/grapher/coffee-production?tab=map"),

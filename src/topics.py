@@ -15,7 +15,7 @@ REPEAT_DAYS = 30           # cùng một khoá đã xếp hàng trong chừng n�
 # từ quá chung để khớp tên chỉ số (đã bỏ dấu)
 STOP = {"cua", "cho", "voi", "nhung", "nhat", "nhieu", "lam", "video", "kenh", "mot", "cac", "nhu", "the",
         "nao", "khong", "duoc", "hay", "ban", "minh", "toi", "xin", "muon", "xem", "gium", "giup", "tren",
-        "trong", "nay", "kia", "nuoc", "viet", "nam", "han", "quoc", "nguoi", "moi", "the gioi"}
+        "trong", "nay", "kia", "nuoc", "viet", "nam", "han", "quoc", "nguoi", "moi", "ty", "le"}
 
 
 def _now() -> str:
@@ -47,28 +47,49 @@ def _tokens(text: str, keep_marks: bool) -> list:
     return re.findall(r"\w+", t)
 
 
+LATIN = {"internet", "smartphone", "kwh", "co2"}     # từ nước ngoài hay gặp trong tên chỉ số
+
+
+def _acronyms(cfg: dict) -> set:
+    """Từ viết tắt trong tên chỉ số (GDP, FDI, PM2...) — được so lẻ từng từ."""
+    return {w.lower() for name in catalog(cfg).values() for w in re.findall(r"\b[A-Z][A-Z0-9]+\b", name)} | LATIN
+
+
+def _units(text: str, keep: bool, single: set) -> set:
+    """Đơn vị để so: CỤM HAI ÂM TIẾT liền nhau ("thất nghiệp", "cà phê") + từ viết tắt / nước ngoài (`single`:
+    "gdp", "fdi", "internet"). Tiếng Việt ghép từ bằng âm tiết: so từng âm tiết thì "gia" của "quốc gia" khớp
+    nhầm "tham gia lực lượng lao động" (thử thật 20/11) — và "gia" không dấu nên cũng không được coi là từ Latin."""
+    toks = _tokens(text, keep)
+    content = lambda w: fold(w) not in STOP and not w.isdigit()
+    units = {f"{a} {b}" for a, b in zip(toks, toks[1:]) if content(a) and content(b)}
+    return units | {w for w in toks if fold(w) in single}
+
+
 def match(cfg: dict, query: str, limit: int = 3, min_cover: float = 0.0) -> list:
-    """Khoá các chỉ số có tên khớp nhiều từ nhất với `query` (bỏ từ chung). [] nếu không khớp.
+    """Khoá các chỉ số có tên khớp nhiều cụm từ nhất với `query` (bỏ từ chung). [] nếu không khớp.
     Gõ CÓ DẤU thì so cả dấu ("lương" khác "lượng" — bỏ dấu thì tiền lương khớp nhầm sản lượng cà phê);
-    gõ không dấu thì so không dấu. min_cover: phần từ của query phải khớp (chủ đề do model viết ra thì đòi
-    cao hơn chủ đề Du gõ)."""
+    gõ không dấu thì so không dấu. min_cover: phần cụm từ của query phải khớp (chủ đề do model viết ra thì
+    đòi cao hơn chủ đề Du gõ)."""
     keep = fold(query) != " ".join(unicodedata.normalize("NFC", str(query or "").lower()).split())
-    words = {w for w in _tokens(query, keep) if len(fold(w)) >= 3 and fold(w) not in STOP}
-    if not words:
+    single = _acronyms(cfg)
+    want = _units(query, keep, single)
+    if not want:
         return []
     scored = []
     for key, name in catalog(cfg).items():
-        score = len(words & set(_tokens(name, keep)))
+        # "Xuất khẩu so với GDP" nói về XUẤT KHẨU (GDP chỉ là mẫu số) -> phần sau "so với" không đem ra so
+        units = _units(re.split(r"\s+so với\s+", name)[0], keep, single)
+        score = len(want & units)
         if score:
-            scored.append((score, key))
+            # ngang điểm thì chỉ số mà phần khớp chiếm nhiều tên hơn đứng trước ("GDP" -> "Quy mô GDP" trước
+            # "Vốn FDI vào so với GDP")
+            scored.append((score, score / len(units), key))
     if not scored:
         return []
-    best = max(s for s, _ in scored)
-    if best < min_cover * len(words):
+    best = max(s for s, _, _ in scored)
+    if best < min_cover * len(want):
         return []
-    if len(words) >= 2 and best < 2:               # hỏi nhiều từ mà chỉ khớp một từ: chưa đủ chắc
-        return []
-    return [k for s, k in sorted(scored, key=lambda x: (-x[0], x[1])) if s == best][:limit]
+    return [k for s, _, k in sorted(scored, key=lambda x: (-x[0], -x[1], x[2])) if s == best][:limit]
 
 
 def key_of_url(url: str):

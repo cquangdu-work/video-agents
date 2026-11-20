@@ -306,7 +306,12 @@ def update(con, cfg: dict, now: datetime = None, get=None, post=None) -> list:
     # sổ tay chỉ dựa trên video của kênh CÒN được giữ (kênh bị loại vì lạc ngách thì quên video của nó)
     kept_titles = {s["channel"] for s in scans}
     watched = {vid: w for vid, w in (data.get("watched") or {}).items() if w.get("channel") in kept_titles}
-    todo = [o for s in scans for o in s["outliers"] if o["id"] not in watched]
+    seen_titles = {w.get("title") for w in watched.values()}
+    todo = []
+    for o in (o for s in scans for o in s["outliers"]):
+        if o["id"] not in watched and o["title"] not in seen_titles:     # bản đăng lại cùng tiêu đề: xem 1 lần
+            seen_titles.add(o["title"])
+            todo.append(o)
     fresh = []
     for o in sorted(todo, key=lambda o: -o["ratio"])[: c["watch_per_week"]]:
         w = watch(o["id"], o["seconds"], post)

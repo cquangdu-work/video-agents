@@ -151,6 +151,12 @@ class BigChannelTest(Case):
                                                 "name": "Năng lượng tiêu thụ bình quân mỗi người"}]}}}
         self.assertEqual(topics.match(cfg, "quyền lợi người tiêu dùng", min_cover=0.6), [])
         self.assertEqual(topics.match(cfg, "lạm phát giá tiêu dùng", min_cover=0.6), ["wb:FP.CPI.TOTL.ZG"])
+        # so theo cụm hai âm tiết: "gia" của "quốc gia" không còn khớp "tham gia" (ca thật lần chạy thứ hai)
+        women = {"sources": {"worldbank": {"indicators": [
+            {"code": "SL.TLF.CACT.FE.ZS", "name": "Tỷ lệ phụ nữ tham gia lực lượng lao động"}]}}}
+        self.assertEqual(topics.match(women, "quốc kỳ quốc gia", min_cover=0.6), [])
+        self.assertEqual(topics.match(women, "phụ nữ đi làm", min_cover=0.6), [])      # "đi làm" ≠ "tham gia"
+        self.assertEqual(topics.match(women, "phụ nữ tham gia lao động"), ["wb:SL.TLF.CACT.FE.ZS"])
 
     def test_videos_of_dropped_channels_leave_the_playbook(self):
         learned.save_learned({"big_channels": {
