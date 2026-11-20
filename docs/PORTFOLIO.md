@@ -137,7 +137,10 @@ Vietnamese-formatted "2.462" as two-point-four, a 1000× error the digit-matchin
 gates also try Korean 10,000-based units (만/억), and Korean particles are chosen by the final consonant. The
 fact gates were rewritten for Korean's subject–object–verb order ("A는 B보다 높다", "A는 B의 N배") rather than
 translated pattern-for-pattern, with the error messages kept identical so the learning memory still classifies
-them. Measured before tuning: Korean narration runs ~1 word-phrase per second because numbers are read out in
+them. Maps follow each audience's official viewpoint, built from Natural Earth's per-country worldview columns:
+the Vietnamese channel draws the Paracel/Spratly islands as Vietnamese; the Korean channel uses the Korean
+worldview (Kosovo recognised), draws Dokdo, labels the East Sea "동해", and swaps the South China Sea inset for a
+Korean peninsula inset — with regression tests on both sides. Measured before tuning: Korean narration runs ~1 word-phrase per second because numbers are read out in
 full, so the word budget is per-language config, not a constant.
 
 **Designed around free-tier limits, measured in production.** Gemini TTS allows ~15 calls/day,

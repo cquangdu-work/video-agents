@@ -3,6 +3,12 @@
     # tải bản gốc (một lần): admin 0 countries 1:50m
     curl -L -o ne_50m.geojson https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson
     python tools/build_world_map.py ne_50m.geojson assets/geo/world.json
+    python tools/build_world_map.py ne_50m.geojson assets/geo/world_ko.json --view ko   # kênh tiếng Hàn
+
+GÓC NHÌN (--view, 20/11/2026): vn (mặc định, kênh Việt) dùng cột ADM0_A3_VN + tên tiếng Việt; ko (kênh Hàn) dùng
+ADM0_A3_KO + tên tiếng Hàn (NAME_KO, sửa thành tên thường dùng theo tools/build_names_ko.SHORT). Đo 20/11 trên
+Natural Earth 1:50m: hai cột chỉ khác ở Kosovo (Hàn Quốc công nhận Kosovo, Việt Nam thì không). Dokdo / 동해 do
+src/render/geo.py tự vẽ (Natural Earth 1:50m không có đảo đó), như Hoàng Sa / Trường Sa của kênh Việt.
 
 Việc script làm:
 1. Theo GÓC NHÌN CỦA VIỆT NAM: Natural Earth có cột ADM0_A3_VN cho biết mỗi vùng thuộc nước
@@ -31,6 +37,7 @@ TOLERANCE = 0.15                         # độ (~0,5 điểm ảnh ở tỷ l�
 MIN_RING_POINTS = 4
 MIN_ISLAND_DEG = 0.6                     # đảo nhỏ hơn chừng này (đường chéo, độ) thì bỏ...
 DROP = {"ATA"}                           # châu Nam Cực
+WB_CODES = {"KOS": "XKX"}               # Kosovo (chỉ có ở góc nhìn Hàn Quốc): World Bank ghi mã XKX
 
 
 def iso_of(props: dict) -> str:
@@ -57,15 +64,24 @@ def rings_of(geometry: dict, tol: float, digits: int) -> list:
     return rings
 
 
-def build(data: dict) -> dict:
+def _name(props: dict, code: str, view: str) -> str:
+    if view == "ko":
+        from build_names_ko import SHORT
+        return SHORT.get(code) or props.get("NAME_KO") or props.get("NAME")
+    return PREFERRED_NAMES.get(code) or props.get("NAME_VI") or props.get("NAME")
+
+
+def build(data: dict, view: str = "vn") -> dict:
     feats = data["features"]
+    col = f"ADM0_A3_{view.upper()}"
     # mã ADM0_A3 của nước chủ quyền -> mã ISO, để vùng gộp vào đúng mã của nước đó
     adm_to_iso = {f["properties"]["ADM0_A3"]: iso_of(f["properties"]) for f in feats}
     countries = {}
     for feat in feats:
         props = feat["properties"]
-        owner_adm = props.get("ADM0_A3_VN") or props["ADM0_A3"]
+        owner_adm = props.get(col) or props["ADM0_A3"]
         code = adm_to_iso.get(owner_adm, owner_adm)
+        code = WB_CODES.get(code, code)
         if code in DROP or props["ADM0_A3"] in DROP:
             continue
         # Nước nhỏ (Singapore, Bahrain, Malta...) bị giảm điểm mất hết -> dựng lại mịn hơn:
@@ -80,21 +96,22 @@ def build(data: dict) -> dict:
         # đặt tên khi chưa có, còn đối tượng có ADM0_A3 trùng mã thì luôn thắng. Ca thật 18/11:
         # Úc bị ghi tên "Quần đảo Ashmore và Cartier" trên mọi bản đồ và cuộc đua.
         if owner_adm == props["ADM0_A3"] and (entry["name"] is None or props["ADM0_A3"] == code):
-            entry["name"] = PREFERRED_NAMES.get(code) or props.get("NAME_VI") or props.get("NAME")
-            entry["aliases"] = sorted({a for a in (props.get("NAME_VI"), props.get("NAME"),
+            entry["name"] = _name(props, code, view)
+            entry["aliases"] = sorted({a for a in (props.get("NAME_VI"), props.get("NAME_KO"), props.get("NAME"),
                                                    props.get("NAME_LONG")) if a} - {entry["name"]})
     for code, c in countries.items():
         # đảo nhỏ li ti: bỏ, trừ khi đó là toàn bộ nước (đảo quốc nhỏ vẫn phải có trên bản đồ)
         big = [r for r in c["rings"] if ring_size(r) >= MIN_ISLAND_DEG]
         c["rings"] = big or sorted(c["rings"], key=ring_size)[-1:]
         c["name"] = c["name"] or code
+    view_name = {"vn": "Việt Nam", "ko": "Hàn Quốc"}.get(view, view)
     return {"source": "Made with Natural Earth — 1:50m admin 0 countries (public domain),"
-                      " ranh giới theo góc nhìn Việt Nam (ADM0_A3_VN)",
+                      f" ranh giới theo góc nhìn {view_name} ({col})",
             "projection": "equal_earth", "bbox": list(BBOX), "countries": countries}
 
 
-def main(src: str, dst: str):
-    out = build(json.load(open(src, encoding="utf-8")))
+def main(src: str, dst: str, view: str = "vn"):
+    out = build(json.load(open(src, encoding="utf-8")), view)
     with open(dst, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
     points = sum(len(r) for c in out["countries"].values() for r in c["rings"])
@@ -104,4 +121,10 @@ def main(src: str, dst: str):
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):      # console Windows (cp949) không in được tiếng Việt
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    main(sys.argv[1], sys.argv[2])
+    args = sys.argv[1:]
+    view = "vn"
+    if "--view" in args:
+        i = args.index("--view")
+        view = args[i + 1]
+        del args[i:i + 2]
+    main(args[0], args[1], view)

@@ -12,6 +12,7 @@ colors:
   accent:     "#FFB703"     # vàng hổ phách — SỐ LIỆU CHÍNH, điểm nhấn duy nhất
   vietnam:    "#E63946"     # đỏ — chuỗi dữ liệu Việt Nam
   korea:      "#457B9D"     # xanh — chuỗi dữ liệu Hàn Quốc
+  japan:      "#E63946"     # đỏ — Nhật Bản, nước so sánh của kênh tiếng Hàn (kênh Hàn không tô đỏ Việt Nam)
   good:       "#2A9D8F"     # xanh ngọc — tăng/tốt
   bad:        "#E76F51"     # cam đất — giảm/xấu
 
@@ -44,7 +45,7 @@ signature:
 intro:
   seconds: 1.0
   text: "THẾ GIỚI QUA CON SỐ"
-  text_ko: "숫자로 보는 세계"     # kênh tiếng Hàn (src/render/web.brand_props)
+  text_ko: "숫자세계"     # kênh tiếng Hàn (src/render/web.brand_props)
   style: "đếm số 0→1 kèm logo chữ, nền background, chữ accent"
 
 # Nhịp dựng (theo file công thức + CLAUDE.md)

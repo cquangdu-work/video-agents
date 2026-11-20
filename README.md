@@ -357,7 +357,7 @@ DB chính thức nằm trên VM (`~/video-agents/data/pipeline.db`); DB trên la
 ### Kênh thứ hai: tiếng Hàn (từ 20/11/2026)
 
 Cùng bộ code, mỗi kênh một file cấu hình (`config/channel.yaml` = kênh Việt, `config/channel_ko.yaml` = kênh
-Hàn "숫자로 보는 세계"), chọn bằng biến `CHANNEL_CONFIG` trong `.env` (không đặt = kênh Việt). `src/lang.py`
+Hàn "숫자세계"), chọn bằng biến `CHANNEL_CONFIG` trong `.env` (không đặt = kênh Việt). `src/lang.py`
 quyết định ngôn ngữ: kiểu viết số (1.234,5 / 1,234.5), số lớn (triệu / 만·억), trợ từ tiếng Hàn, tên nước
 (`assets/geo/names_ko.json`), cổng kiểm tra câu chữ (`src/claims_ko.py`), phông chữ và chữ trên hình (Remotion
 đọc `props.lang`). Tin duyệt của kênh Hàn kèm bản dịch tiếng Việt.

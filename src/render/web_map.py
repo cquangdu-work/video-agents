@@ -51,8 +51,11 @@ INSET = dict(cx=872, cy=1170, size=320)                 # ô phóng to Biển Đ
 
 def map_props(p: dict, colors: dict) -> dict:
     from ..sources.datatable import ranks_desc
-    from .geo import (INSET_BBOX, LABEL_AT, LEAD_TO, VN_ISLANDS, clip_ring, code_of, country_box,
-                      display_name, load_map, projector)
+    from .geo import (LEAD_TO, clip_ring, code_of, country_box, display_name, focus_countries, inset_bbox,
+                      islands, label_at, load_map, projector, sea_labels)
+    ISLANDS, INSET_BBOX, LABEL_AT = islands(), inset_bbox(), label_at()     # theo góc nhìn của kênh
+    FOCUS = focus_countries()                    # [(mã, khoá màu)]: Việt+Hàn (kênh Việt) | Hàn+Nhật (kênh Hàn)
+    anchor, anchor_key = FOCUS[0]
     dec = int(p.get("decimals", 0) or 0)
     region = "world" if p.get("region") == "world" else "asia"
     data, given = {}, {}
@@ -67,7 +70,7 @@ def map_props(p: dict, colors: dict) -> dict:
     n = len(order)
     low, high = colors["surface"], colors["accent"]
     shade = {k: _mix(low, high, 0.15 + 0.85 * r / max(n - 1, 1)) for r, k in enumerate(order)}
-    vn_color = shade.get("VNM", colors["muted"])
+    vn_color = shade.get(anchor, colors["muted"])         # màu đảo tự vẽ = màu nước "ta"
     fmt = lambda v: fmt_num(v, label_decimals(v, dec))
 
     box = WORLD_BOX if region == "world" else ASIA_BOX
@@ -91,24 +94,28 @@ def map_props(p: dict, colors: dict) -> dict:
         fills.append(f)
     fills.sort(key=lambda f: f["k"])
 
-    # Hoàng Sa, Trường Sa: LUÔN vẽ (Natural Earth không có), cùng màu Việt Nam
-    islands = [list(_px(to_xy(lon, lat))) for _, spots, _, _ in VN_ISLANDS for lon, lat in spots]
+    # Hoàng Sa, Trường Sa (kênh Việt) / Dokdo (kênh Hàn): LUÔN vẽ (Natural Earth không có), cùng màu nước "ta"
+    island_pts = [list(_px(to_xy(lon, lat))) for _, spots, _, _ in ISLANDS for lon, lat in spots]
     island_labels = []
     if region == "asia":
         # cỡ 19: bản đồ châu Á ~12,5 điểm ảnh/độ kinh -> "Hoàng Sa" dài ~85 điểm ảnh, dừng ở ~119,9°E
         # sát bờ Luzon; cỡ 23 thì chữ đè lên Philippines (đo 16/11/2026)
-        for name, _, (lab_lon, lab_lat), align in VN_ISLANDS:
+        for name, _, (lab_lon, lab_lat), align in ISLANDS:
             x, y = _px(to_xy(lab_lon, lab_lat))
             island_labels.append({"text": name, "x": x, "y": y, "anchor": "start" if align == "left" else "middle",
-                                  "size": 19, "color": colors["vietnam"] if "VNM" in data else colors["muted"]})
+                                  "size": 19, "color": colors[anchor_key] if anchor in data else colors["muted"]})
+        for name, (lon, lat) in sea_labels():                  # tên biển theo góc nhìn của kênh (동해)
+            x, y = _px(to_xy(lon, lat))
+            island_labels.append({"text": name, "x": x, "y": y, "anchor": "middle", "size": 19,
+                                  "color": colors["muted"]})
 
     marks = []
-    for code, key in (("VNM", "vietnam"), ("KOR", "korea")):
+    for code, key in FOCUS:
         if code in data:
             marks.append({"d": _path(countries[code]["rings"], to_xy), "color": colors[key]})
 
     out = {"region": region, "title": str(p.get("title", "")), "outline": " ".join(outline), "fills": fills,
-           "islands": islands, "islandColor": vn_color, "islandLabels": island_labels, "marks": marks}
+           "islands": island_pts, "islandColor": vn_color, "islandLabels": island_labels, "marks": marks}
 
     # thang màu thấp -> cao
     if order:
@@ -119,7 +126,7 @@ def map_props(p: dict, colors: dict) -> dict:
 
     if region == "asia":
         callouts = []
-        for code, key in (("VNM", "vietnam"), ("KOR", "korea")):
+        for code, key in FOCUS:
             if code not in data:
                 continue
             b = country_box(code)
@@ -143,25 +150,28 @@ def map_props(p: dict, colors: dict) -> dict:
             continue
         filled = code in data
         inset_shapes.append({
-            "d": _path(rings, to_in), "fill": shade.get(code), "vn": code == "VNM",
-            "stroke": colors["vietnam"] if code == "VNM" else colors["background"] if filled else colors["muted"]})
-    inset_islands = [list(_px(to_in(lon, lat))) for _, spots, _, _ in VN_ISLANDS for lon, lat in spots]
+            "d": _path(rings, to_in), "fill": shade.get(code), "vn": code == anchor,
+            "stroke": colors[anchor_key] if code == anchor else colors["background"] if filled else colors["muted"]})
+    inset_islands = [list(_px(to_in(lon, lat))) for _, spots, _, _ in ISLANDS for lon, lat in spots]
     inset_labels = []
-    for name, _, (lab_lon, lab_lat), align in VN_ISLANDS:
+    for name, (lon, lat) in sea_labels():
+        x, y = _px(to_in(lon, lat))
+        inset_labels.append({"text": name, "x": x, "y": y, "anchor": "middle", "size": 20, "color": colors["muted"]})
+    for name, _, (lab_lon, lab_lat), align in ISLANDS:
         x, y = _px(to_in(lab_lon, lab_lat))
         size = 20
-        anchor = "start" if align == "left" else "middle"
-        right = x + (_label_width(name, size) if anchor == "start" else _label_width(name, size) / 2)
+        text_anchor = "start" if align == "left" else "middle"
+        right = x + (_label_width(name, size) if text_anchor == "start" else _label_width(name, size) / 2)
         x -= max(0.0, right - (frame[1][0] - 8))                   # chữ không chạm mép ô
-        inset_labels.append({"text": name, "x": round(x, 1), "y": y, "anchor": anchor, "size": size,
-                             "color": colors["vietnam"]})
+        inset_labels.append({"text": name, "x": round(x, 1), "y": y, "anchor": text_anchor, "size": size,
+                             "color": colors[anchor_key]})
     mark = [_px(to_xy(lon0, lat1)), _px(to_xy(lon1, lat0))]
     total = int(p.get("total") or n)
     rows = []
-    for code, key in (("VNM", "vietnam"), ("KOR", "korea")):
+    for code, key in FOCUS:
         if code in data:
             rows.append((data[code][0], data[code][1], colors[key], rank[code]))
-    if order and order[-1] not in ("VNM", "KOR"):
+    if order and order[-1] not in [c for c, _ in FOCUS]:
         top = order[-1]
         rows.append((lang.pick(vi="Cao nhất: ", ko="1위: ") + display_name(top), data[top][1], colors["accent"],
                      rank[top]))
@@ -169,7 +179,7 @@ def map_props(p: dict, colors: dict) -> dict:
     for label, value, color, r in rows:
         # nửa dưới bảng nói "thấp thứ 2/214" (khớp tóm tắt), không "cao thứ 213/214"
         from_bottom = 1 + sum(1 for _, v in data.values() if v < value)
-        pos = (lang.pick(vi=f"cao thứ {r}/{total}", ko=f"{total}개국 중 {r}위") if r <= total / 2
+        pos = (lang.pick(vi=f"cao thứ {r}/{total}", ko=f"{total}곳 중 {r}위") if r <= total / 2
                else lang.pick(vi=f"thấp thứ {from_bottom}/{total}", ko=f"하위 {from_bottom}위/{total}"))
         ranks_shown += [r, from_bottom, total]
         panel.append({"label": label, "value": fmt(value), "color": color, "pos": pos})

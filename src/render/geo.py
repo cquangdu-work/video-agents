@@ -75,13 +75,68 @@ LEAD_TO = {"VNM": (107.2, 12.6)}
 INSET_BBOX = (101.0, 6.0, 120.0, 24.0)       # đông tới 120 cho chữ "Hoàng Sa" đủ chỗ
 
 
-@lru_cache(maxsize=4)
+# ------------------------------------------------ KÊNH TIẾNG HÀN: bản đồ theo GÓC NHÌN HÀN QUỐC (Du chốt 20/11/2026)
+# world_ko.json (tools/build_world_map.py --view ko): ranh giới theo cột ADM0_A3_KO, tên tiếng Hàn. Dokdo (독도) quá
+# nhỏ, Natural Earth 1:50m không vẽ -> tự vẽ như Hoàng Sa/Trường Sa, cùng màu Hàn Quốc, có tên; vùng biển giữa Hàn
+# và Nhật ghi "동해" (cách gọi của Hàn Quốc). Kênh Hàn KHÔNG vẽ Hoàng Sa/Trường Sa (luật bản đồ của Việt Nam là
+# cho kênh Việt; bản đồ kênh Hàn trung lập ở Biển Đông).
+KO_ISLANDS = [("독도", [(131.87, 37.24)], (132.25, 37.24), "left")]
+KO_SEAS = [("동해", (131.0, 40.2))]
+KO_INSET_BBOX = (124.0, 32.5, 134.0, 43.0)       # bán đảo Hàn + 동해 (đủ chỗ cho chữ "독도")
+LABEL_AT_KO = {"KOR": (138.5, 24.5), "JPN": (141.0, 14.5)}
+
+
+def _map_path(name: str) -> Path:
+    """File bản đồ theo góc nhìn của kênh: kênh Hàn dùng <tên>_ko.json nếu có (hiện chỉ có world_ko.json; bản đồ
+    châu Á dựng theo ranh giới gốc của Natural Earth nên dùng chung)."""
+    from .. import lang
+    if lang.code() == "ko":
+        ko = GEO_DIR / f"{name}_ko.json"
+        if ko.exists():
+            return ko
+    return MAPS[name]
+
+
+@lru_cache(maxsize=8)
+def _load(path: str) -> dict:
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
 def load_map(name: str = "asia") -> dict:
-    return json.loads(MAPS[name].read_text(encoding="utf-8"))
+    return _load(str(_map_path(name)))
 
 
 def has_map(name: str) -> bool:
-    return MAPS.get(name) is not None and MAPS[name].exists()
+    return MAPS.get(name) is not None and _map_path(name).exists()
+
+
+def islands() -> list:
+    """Đảo bản đồ phải tự vẽ theo góc nhìn của kênh: Hoàng Sa + Trường Sa (Việt) | Dokdo (Hàn)."""
+    from .. import lang
+    return KO_ISLANDS if lang.code() == "ko" else VN_ISLANDS
+
+
+def sea_labels() -> list:
+    """[(tên, (kinh độ, vĩ độ))] tên biển phải ghi theo góc nhìn của kênh (kênh Hàn: 동해)."""
+    from .. import lang
+    return KO_SEAS if lang.code() == "ko" else []
+
+
+def inset_bbox() -> tuple:
+    """Ô phóng to trên bản đồ thế giới: Biển Đông (kênh Việt) | bán đảo Hàn + 동해 (kênh Hàn)."""
+    from .. import lang
+    return KO_INSET_BBOX if lang.code() == "ko" else INSET_BBOX
+
+
+def focus_countries() -> list:
+    """[(mã nước, khoá màu)] hai nước được nhấn trên bản đồ: Việt + Hàn | Hàn + Nhật."""
+    from .. import lang
+    return [("KOR", "korea"), ("JPN", "japan")] if lang.code() == "ko" else [("VNM", "vietnam"), ("KOR", "korea")]
+
+
+def label_at() -> dict:
+    from .. import lang
+    return LABEL_AT_KO if lang.code() == "ko" else LABEL_AT
 
 
 NAMES_KO = GEO_DIR / "names_ko.json"       # tên nước tiếng Hàn (tools/build_names_ko.py, Natural Earth NAME_KO)

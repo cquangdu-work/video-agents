@@ -140,7 +140,8 @@ class Versus(BrandScene):
         self.wait(self.seconds * 0.35)
 
 
-COUNTRY_COLORS = {"việt nam": "vietnam", "vn": "vietnam", "hàn quốc": "korea", "kr": "korea"}
+COUNTRY_COLORS = {"việt nam": "vietnam", "vn": "vietnam", "hàn quốc": "korea", "kr": "korea",
+                  "한국": "korea", "대한민국": "korea", "일본": "japan"}          # kênh tiếng Hàn
 
 
 def country_color_key(label) -> str:
@@ -436,7 +437,11 @@ class MapScene(BrandScene):
         """Thế giới + ô phóng to Việt Nam/Biển Đông (đủ chỗ ghi tên Hoàng Sa, Trường Sa) +
         khung số: Việt Nam, Hàn Quốc (giá trị, thứ hạng) và nơi cao nhất."""
         from manim import Polygon, LaggedStart
-        from .geo import INSET_BBOX, VN_ISLANDS, clip_ring, display_name, load_map, projector
+        from .. import lang
+        from .geo import clip_ring, display_name, focus_countries, inset_bbox, islands, load_map, projector, sea_labels
+        # theo góc nhìn của kênh: Hoàng Sa/Trường Sa + Biển Đông (Việt) | Dokdo + 동해 (Hàn)
+        VN_ISLANDS, INSET_BBOX, FOCUS = islands(), inset_bbox(), focus_countries()
+        anchor, anchor_key = FOCUS[0]
         p, c, dec = self.params, self.b["colors"], self.params.get("decimals", 0)
         to_xy = projector(self.WORLD_W, self.WORLD_H, self.WORLD_CENTER, "world")
         world = load_map("world")["countries"]
@@ -463,8 +468,8 @@ class MapScene(BrandScene):
             if max(xs) - min(xs) < 1.5 and max(ys) - min(ys) < 1.5:   # nhỏ quá: thêm chấm
                 band.add(Dot(to_xy((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2),
                              radius=0.035, color=shade[code]))
-        vn_color = shade.get("VNM", c["muted"])
-        for _, spots, _, _ in VN_ISLANDS:            # hai quần đảo luôn có, cùng màu Việt Nam
+        vn_color = shade.get(anchor, c["muted"])
+        for _, spots, _, _ in VN_ISLANDS:            # đảo tự vẽ luôn có, cùng màu nước "ta"
             base.add(*[Dot(to_xy(lon, lat), radius=0.012, color=vn_color) for lon, lat in spots])
 
         # Ô phóng to: vẽ từ bản đồ châu Á (chi tiết hơn), cắt đa giác theo khung ô
@@ -478,7 +483,7 @@ class MapScene(BrandScene):
             if not rings:
                 continue
             filled = code in data
-            edge = (c["vietnam"], 2) if code == "VNM" else (c["background"], 1) if filled else (c["muted"], 0.8)
+            edge = (c[anchor_key], 2) if code == anchor else (c["background"], 1) if filled else (c["muted"], 0.8)
             inset.add(VGroup(*[Polygon(*[to_in(lon, lat) for lon, lat in ring],
                                        stroke_color=edge[0], stroke_width=edge[1],
                                        stroke_opacity=1 if filled else 0.5,
@@ -486,12 +491,14 @@ class MapScene(BrandScene):
                                        fill_opacity=1 if filled else 0) for ring in rings]))
         for name, spots, (lab_lon, lab_lat), align in VN_ISLANDS:
             inset.add(*[Dot(to_in(lon, lat), radius=0.03, color=vn_color) for lon, lat in spots])
-            label = Text(name, font=pick_font(), font_size=14, color=c["vietnam"])
+            label = Text(name, font=pick_font(), font_size=14, color=c[anchor_key])
             label.move_to(to_in(lab_lon, lab_lat), aligned_edge=LEFT if align == "left" else ORIGIN)
             overflow = label.get_right()[0] - (frame_pts[1][0] - 0.06)   # chữ không chạm mép ô
             if overflow > 0:
                 label.shift(LEFT * overflow)
             inset.add(label)
+        for name, (lon, lat) in sea_labels():          # tên biển theo góc nhìn của kênh (동해)
+            inset.add(Text(name, font=pick_font(), font_size=14, color=c["muted"]).move_to(to_in(lon, lat)))
         # khung nhỏ trên bản đồ thế giới + hai tia nối xuống ô phóng to
         mark = [to_xy(lon0, lat0), to_xy(lon1, lat0), to_xy(lon1, lat1), to_xy(lon0, lat1)]
         zoom = VGroup(Polygon(*mark, stroke_color=c["text"], stroke_width=1.5, fill_opacity=0),
@@ -500,15 +507,16 @@ class MapScene(BrandScene):
 
         # Viền Việt Nam, Hàn Quốc trên bản đồ thế giới + khung số bên trái
         outlines, rows = VGroup(), []
-        for code, key in (("VNM", "vietnam"), ("KOR", "korea")):
+        for code, key in FOCUS:
             if code not in data:
                 continue
             outlines.add(shapes(world[code]["rings"], to_xy, stroke_color=c[key], stroke_width=2.5,
                                 fill_opacity=0))
             rows.append((data[code][0], data[code][1], c[key], self.rank[code]))
-        if order and order[-1] not in ("VNM", "KOR"):
+        if order and order[-1] not in [k for k, _ in FOCUS]:
             top = order[-1]
-            rows.append((f"Cao nhất: {display_name(top)}", data[top][1], c["accent"], self.rank[top]))
+            rows.append((lang.pick(vi="Cao nhất: ", ko="1위: ") + display_name(top), data[top][1], c["accent"],
+                         self.rank[top]))
         n = int(p.get("total") or n)
         panel = VGroup()
         for label, value, color, rank in rows:
@@ -518,7 +526,8 @@ class MapScene(BrandScene):
                        font_size=36, color=color, weight="BOLD")
             # nửa dưới bảng nói "thấp thứ 2/214" (khớp tóm tắt), không "cao thứ 213/214"
             from_bottom = 1 + sum(1 for _, v in data.values() if v < value)
-            pos = Text(f"cao thứ {rank}/{n}" if rank <= n / 2 else f"thấp thứ {from_bottom}/{n}",
+            pos = Text(lang.pick(vi=f"cao thứ {rank}/{n}", ko=f"{n}곳 중 {rank}위") if rank <= n / 2
+                       else lang.pick(vi=f"thấp thứ {from_bottom}/{n}", ko=f"하위 {from_bottom}위/{n}"),
                        font=pick_font(), font_size=20, color=c["text"])
             panel.add(VGroup(head, VGroup(num, pos).arrange(RIGHT, buff=0.2, aligned_edge=DOWN))
                       .arrange(DOWN, aligned_edge=LEFT, buff=0.08))
@@ -557,14 +566,19 @@ class MapScene(BrandScene):
                     marks.append(Dot(to_xy((box[0] + box[2]) / 2, (box[1] + box[3]) / 2),
                                      radius=0.07, color=shade[code]))
         # Hoàng Sa, Trường Sa của Việt Nam (geo.VN_ISLANDS): luôn vẽ, cùng màu với Việt Nam
-        from .geo import VN_ISLANDS
-        isle_color = shade.get("VNM", c["muted"])
+        # (kênh Hàn: Dokdo + chữ 동해 — geo.islands()/sea_labels() theo góc nhìn của kênh)
+        from .geo import focus_countries, islands as own_islands, sea_labels
+        FOCUS = focus_countries()
+        anchor, anchor_key = FOCUS[0]
+        isle_color = shade.get(anchor, c["muted"])
         islands = VGroup()
-        for name, spots, (lab_lon, lab_lat), align in VN_ISLANDS:
+        for name, spots, (lab_lon, lab_lat), align in own_islands():
             islands.add(*[Dot(to_xy(lon, lat), radius=0.028, color=isle_color) for lon, lat in spots])
             islands.add(Text(name, font=pick_font(), font_size=12,
-                             color=c["vietnam"] if "VNM" in data else c["muted"])
+                             color=c[anchor_key] if anchor in data else c["muted"])
                         .move_to(to_xy(lab_lon, lab_lat), aligned_edge=LEFT if align == "left" else ORIGIN))
+        for name, (lon, lat) in sea_labels():
+            islands.add(Text(name, font=pick_font(), font_size=12, color=c["muted"]).move_to(to_xy(lon, lat)))
         base.add(islands)
         self.play(FadeIn(base), run_time=0.5)
         fills.sort(key=lambda f: f[0])                   # tô từ thấp lên cao: mắt theo được thứ hạng
@@ -573,7 +587,7 @@ class MapScene(BrandScene):
                               lag_ratio=0.25), run_time=fill_time)
 
         callouts = VGroup()
-        for code, key in (("VNM", "vietnam"), ("KOR", "korea")):
+        for code, key in FOCUS:
             if code not in data:
                 continue
             box = country_box(code)
@@ -586,7 +600,8 @@ class MapScene(BrandScene):
                               font_size=32, color=c[key], weight="BOLD")).arrange(DOWN, buff=0.06)
             # Nhãn đặt ở vùng biển trống (geo.LABEL_AT), có đường dẫn về nước đó, và luôn nằm
             # trong khung (bản đầu: nhãn Hàn Quốc tràn mép phải, đè lên Nhật Bản)
-            from .geo import LABEL_AT, LEAD_TO
+            from .geo import LEAD_TO, label_at
+            LABEL_AT = label_at()
             centre = to_xy(*LEAD_TO.get(code, ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2)))
             if code in LABEL_AT:
                 tag.move_to(to_xy(*LABEL_AT[code]))

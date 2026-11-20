@@ -19,13 +19,19 @@ SHORT = {"KOR": "한국", "PRK": "북한", "CHN": "중국", "TWN": "대만", "US
 
 def build(ne_path: Path, out_path: Path) -> dict:
     ne = json.loads(Path(ne_path).read_text(encoding="utf-8"))
-    world = json.loads((ROOT / "assets" / "geo" / "world.json").read_text(encoding="utf-8"))["countries"]
+    world = {}
+    for f in ("world.json", "world_ko.json"):           # bản đồ góc nhìn Hàn có thêm Kosovo (XKX)
+        path = ROOT / "assets" / "geo" / f
+        if path.exists():
+            world.update(json.loads(path.read_text(encoding="utf-8"))["countries"])
     ko = {}
     for f in ne["features"]:
         p = f["properties"]
         for key in (p.get("ADM0_A3"), p.get("ISO_A3"), p.get("ISO_A3_EH")):
             if key and key != "-99" and p.get("NAME_KO") and key not in ko:
                 ko[key] = p["NAME_KO"]
+    if "KOS" in ko:
+        ko.setdefault("XKX", ko["KOS"])
     names = {c: SHORT.get(c) or ko[c] for c in sorted(world) if c in ko or c in SHORT}
     missing = sorted(set(world) - set(names))
     if missing:

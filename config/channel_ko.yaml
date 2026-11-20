@@ -1,5 +1,5 @@
 # ============================================================
-# Cấu hình kênh TIẾNG HÀN "숫자로 보는 세계" (Thế giới qua con số — bản Hàn), Du chốt mở 20/11/2026.
+# Cấu hình kênh TIẾNG HÀN "숫자세계" (Thế giới qua con số — bản Hàn), Du chốt mở 20/11/2026.
 # Chạy bằng thư mục riêng trên VM (~/video-agents-ko) với CHANNEL_CONFIG=config/channel_ko.yaml trong .env
 # của thư mục đó (src/lang.py). Dữ liệu, token, video, lịch chạy đều riêng — kênh Việt không bị ảnh hưởng.
 # Mã kỳ hạn (`period`: tháng/tuần/ngày) và `per` giữ chữ Việt: đó là MÃ cho code, chữ hiện ra do code dịch.
@@ -15,7 +15,7 @@ qc:
   max_seconds: 70
 
 channel:
-  name: "숫자로 보는 세계"
+  name: "숫자세계"
   language: ko
   description: >
     데이터로 세상을 설명하는 채널: 코드로 만든 움직이는 그래프, 지도, 순위 경쟁.
@@ -91,12 +91,15 @@ sources:
         - {code: EG.USE.ELEC.KH.PC, name: "1인당 전력 소비량",       unit: "kWh"}
         - {code: NY.GDP.MKTP.CD,    name: "GDP 규모",              unit: "억 달러", scale: 100000000}
         - {code: SP.URB.TOTL.IN.ZS, name: "도시 인구 비율",          unit: "%"}
-    # Bản đồ thế giới: TẮT cho tới khi bản đồ có tên nước tiếng Hàn + góc nhìn của Hàn Quốc (giai đoạn 4).
+    # Bản đồ thế giới THEO GÓC NHÌN HÀN QUỐC (Du chốt 20/11/2026): assets/geo/world_ko.json, Dokdo + 동해 tự vẽ
+    # (src/render/geo.py). "한국은 세계 몇 위", so với Nhật Bản và trong OECD.
     world:
-      per_day: 0
+      per_day: 1
       start_year: 1990
       focus: [KOR, JPN]
-      indicators: [SP.DYN.LE00.IN, NY.GDP.PCAP.CD, SP.DYN.TFRT.IN]
+      indicators: [SP.DYN.LE00.IN, NY.GDP.PCAP.CD, SP.DYN.TFRT.IN, IT.NET.USER.ZS, SP.POP.65UP.TO.ZS,
+                   SP.URB.TOTL.IN.ZS, EG.USE.ELEC.KH.PC, SP.DYN.IMRT.IN, AG.LND.FRST.ZS, SL.TLF.CACT.FE.ZS,
+                   SH.XPD.CHEX.GD.ZS, GB.XPD.RSDV.GD.ZS]
 
   # KOSIS: người nước ngoài cư trú tại Hàn Quốc theo quốc tịch (cuộc đua). Bảng "người Việt theo visa" của
   # kênh Việt không hợp khán giả Hàn nên không dùng.
@@ -107,23 +110,35 @@ sources:
          org_name: "법무부", unit: "명", focus: [],
          name: "국적별 국내 체류 외국인"}
 
-  # Our World in Data — chỉ dạng cuộc đua (race) cho tới khi bản đồ có tên tiếng Hàn.
+  # Our World in Data — cuộc đua (race) và bản đồ thế giới (map, góc nhìn Hàn Quốc). Mỗi ngày 2 dòng liền nhau,
+  # xếp xen kẽ map / race.
   owid:
-    per_day: 1
+    per_day: 2
     focus: [KOR]
     groups:
       major: [USA, CHN, JPN, DEU, GBR, FRA, IND, BRA, KOR, VNM]
     charts:
+      - {slug: co-emissions-per-capita, kind: map, name: "1인당 이산화탄소 배출량", unit: "톤",
+         origin: "Global Carbon Budget"}
       - {slug: electric-car-sales-share, kind: race, group: major, start_year: 2015, year_step: 2,
          name: "신차 판매 중 전기차 비율", unit: "%", origin: "국제에너지기구(IEA)", per: xe mới bán}
+      - {slug: meat-supply-per-person, kind: map, name: "1인당 연간 육류 공급량", unit: "kg", origin: "FAO",
+         period: tuần}
       - {slug: annual-working-hours-per-worker, kind: race, group: major,
          name: "근로자 1인당 연간 근로시간", unit: "시간", origin: "Penn World Table", period: tuần}
+      - {slug: share-electricity-renewables, kind: map, name: "재생에너지 발전 비율", unit: "%",
+         origin: "Ember, Energy Institute", per: số điện}
       - {slug: installed-solar-pv-capacity, kind: race, group: top, start_year: 2010,
          name: "태양광 발전 설비 용량", unit: "GW", origin: "IRENA"}
+      - {slug: median-age, kind: map, name: "인구 중위연령", unit: "세", origin: "유엔 세계인구전망"}
       - {slug: annual-co2-emissions-per-country, kind: race, group: top, scale: 1000000,
          name: "연간 이산화탄소 배출량", unit: "백만 톤", origin: "Global Carbon Budget"}
+      - {slug: pm25-air-pollution, kind: map, name: "연평균 초미세먼지(PM2.5) 농도", unit: "㎍/㎥",
+         origin: "워싱턴대학교(세인트루이스)"}
       - {slug: per-capita-energy-use, kind: race, group: major,
          name: "1인당 에너지 소비량", unit: "kWh", origin: "Energy Institute", period: ngày}
+      - {slug: share-of-adults-who-smoke, kind: map, name: "성인 흡연율", unit: "%",
+         origin: "세계보건기구(WHO)", per: người trưởng thành}
       - {slug: coffee-bean-production, kind: race, group: top, scale: 1000,
          name: "커피 생산량", unit: "천 톤", origin: "FAO"}
 
@@ -238,6 +253,6 @@ publish:
     enabled: false              # bật khi có tài khoản TikTok tiếng Hàn
   facebook:
     enabled: false              # người Hàn ít dùng Facebook — để kênh Việt dùng Trang Facebook
-  hashtags_fixed: ["#숫자로보는세계", "#Shorts"]
+  hashtags_fixed: ["#숫자세계", "#Shorts"]
   max_hashtags: 5
   disclosure: "AI 음성으로 제작했습니다. 모든 수치는 게시 전에 출처와 대조했습니다."

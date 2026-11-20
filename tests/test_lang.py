@@ -129,5 +129,46 @@ class KoreanSummaryTest(unittest.TestCase):
             self.assertEqual(geo.display_name("KOR"), "Hàn Quốc")
 
 
+class KoreanMapTest(unittest.TestCase):
+    """Bản đồ kênh Hàn theo GÓC NHÌN HÀN QUỐC (Du chốt 20/11/2026): Dokdo + 동해, không Hoàng Sa/Trường Sa;
+    kênh Việt giữ nguyên Hoàng Sa/Trường Sa (luật bản đồ Việt Nam)."""
+    COLORS = {"surface": "#1D2D44", "accent": "#FFB703", "muted": "#748CAB", "background": "#0D1321",
+              "text": "#F0EBD8", "vietnam": "#E63946", "korea": "#457B9D", "japan": "#E63946"}
+
+    def props(self, region):
+        from src.render.web_map import map_props
+        items = [{"label": "x", "code": c, "value": v} for c, v in
+                 (("KOR", 83.6), ("JPN", 84.0), ("VNM", 74.7), ("CHN", 78.0), ("USA", 79.0), ("XKX", 76.0))]
+        return map_props({"title": "t", "items": items, "region": region, "unit": "세"}, self.COLORS)
+
+    def texts(self, mp):
+        return [l["text"] for l in mp.get("islandLabels", []) + (mp.get("inset") or {}).get("labels", [])]
+
+    def test_korean_view(self):
+        from src.render import geo
+        with lang.using("ko"):
+            self.assertEqual(geo._map_path("world").name, "world_ko.json")
+            self.assertIn("XKX", geo.load_map("world")["countries"])            # Hàn Quốc công nhận Kosovo
+            for region in ("world", "asia"):
+                t = self.texts(self.props(region))
+                self.assertIn("독도", t, region)
+                self.assertIn("동해", t, region)
+                self.assertNotIn("Hoàng Sa", t, region)
+            panel = [r["label"] for r in self.props("world")["panel"]]
+            self.assertEqual(panel[:2], ["x", "x"])                             # Hàn, Nhật đứng đầu khung số
+            self.assertEqual(self.props("world")["panel"][0]["color"], self.COLORS["korea"])
+
+    def test_vietnamese_view_unchanged(self):
+        from src.render import geo
+        with lang.using("vi"):
+            self.assertEqual(geo._map_path("world").name, "world.json")
+            self.assertNotIn("XKX", geo.load_map("world")["countries"])
+            for region in ("world", "asia"):
+                t = self.texts(self.props(region))
+                self.assertIn("Hoàng Sa", t)
+                self.assertIn("Trường Sa", t)
+                self.assertNotIn("독도", t)
+
+
 if __name__ == "__main__":
     unittest.main()
