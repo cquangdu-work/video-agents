@@ -144,6 +144,9 @@ class WeeklyRunTest(unittest.TestCase):
         self.msgs = []
         p = mock.patch.object(tg, "send_message", side_effect=lambda t, **k: self.msgs.append(t) or 1)
         p.start(); self.addCleanup(p.stop)
+        # agent Hiểu YouTube / Tin YouTube gọi mạng thật (Analytics, RSS) — có test riêng (test_yt_agents)
+        for target in ("src.yt_news.fetch_feeds", "src.yt_insights.update"):
+            p = mock.patch(target, return_value=[]); p.start(); self.addCleanup(p.stop)
         self.root, self.con = root, db.connect()
         self.addCleanup(self.con.close)
 

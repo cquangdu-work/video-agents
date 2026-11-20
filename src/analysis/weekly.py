@@ -16,6 +16,8 @@ Việc nó làm:
      đề), tự dời khung khi một mức thắng rõ, học loại cảnh nào giữ chân; báo cáo mục "Học cách dựng".
   7. Agent Tăng trưởng (src/growth.py): đo cả kênh + tiến độ YPP, video đột biến -> ưu tiên làm tiếp;
      kèm tóm tắt agent Cộng đồng (bình luận) và các chủ đề được yêu cầu (src/topics.py).
+  8. Agent Hiểu YouTube (src/yt_insights.py): YouTube phân phối video của kênh qua đâu, người xem gõ gì để
+     tìm ra kênh, mỗi video được đẩy bao lâu; agent Tin YouTube (src/yt_news.py): YouTube vừa đổi gì.
 
 Thành thật về thống kê: vài video đầu KHÔNG đủ để kết luận gì. Vì vậy có ngưỡng tối
 thiểu, mỗi tuần chỉ nhích trọng số 0.1, và báo cáo luôn ghi dựa trên bao nhiêu video.
@@ -399,19 +401,30 @@ def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
         except Exception as exc:
             log.warning("LLM rút bài học lỗi: %s", exc)
 
-    from .. import community, growth, learning, style, topics
-    style_notes, growth_lines = [], []
+    from .. import community, growth, learning, style, topics, yt_insights, yt_news
+    style_notes, growth_lines, insight_lines = [], [], []
     if not dry_run:
+        from ..publish import youtube
+        try:
+            token = youtube.access_token()
+        except Exception:
+            token = None
         try:
             # AGENT TĂNG TRƯỞNG: đo cả kênh, tiến độ YPP, video đột biến -> ưu tiên + xếp hàng làm tiếp
-            from ..publish import youtube
-            try:
-                token = youtube.access_token()
-            except Exception:
-                token = None
             growth_lines = growth.update(con, cfg, rows, now, token)
         except Exception as exc:
             log.warning("Agent Tăng trưởng lỗi: %s", exc)
+        try:
+            # AGENT HIỂU YOUTUBE: nguồn lượt xem, từ khoá tìm kiếm, vòng đời video, kênh hàng xóm
+            insight_lines = yt_insights.update(con, cfg, token, now)
+        except Exception as exc:
+            log.warning("Agent Hiểu YouTube lỗi: %s", exc)
+        try:
+            yt_news.run(con, now)              # AGENT TIN YOUTUBE: tin ảnh hưởng lớn báo Du ngay
+        except Exception as exc:
+            log.warning("Agent Tin YouTube lỗi: %s", exc)
+    else:
+        insight_lines = yt_insights.report_lines(yt_insights._data().get("latest") or {})
         try:
             # TỰ HỌC từ người xem: kiểu mở đầu / mảng / dạng video nào giữ chân tốt -> learned.yaml,
             # daily và máy chọn hook đọc lại. Gọi TRƯỚC load_learned bên dưới để không ghi đè mất.
@@ -426,6 +439,8 @@ def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
 
     report = format_report(rows, len(videos), source, weight_notes, insights)
     for part, what in ((lambda: growth_lines, "tăng trưởng"),
+                       (lambda: insight_lines, "hiểu YouTube"),
+                       (lambda: yt_news.report_lines(con, now), "tin YouTube"),
                        (lambda: learning.weekly_lines(con, now), "tự học"),
                        (lambda: style.weekly_lines(con, now, style_notes), "học cách dựng"),
                        (lambda: community.weekly_lines(con, now), "cộng đồng"),

@@ -141,6 +141,15 @@ def find_outliers(channel: dict, recent_n: int = 30, ratio_threshold: float = 5.
 def run_scan(cfg: dict) -> dict:
     ca = cfg["competitor_analysis"]
     channels = find_candidate_channels(ca["seed_queries"], ca["months_back"])
+    # Kênh mà CHÍNH YOUTUBE đặt video của mình bên cạnh (agent Hiểu YouTube, nguồn "video đề xuất"):
+    # YouTube coi là cùng nhóm người xem -> đáng học hơn kênh tìm thấy bằng từ khoá
+    try:
+        from ..yt_insights import neighbor_channels
+        for cid, title in neighbor_channels().items():
+            channels.setdefault(cid, {"channel_id": cid, "title": title, "lang": "vi",
+                                      "found_via": "YouTube đặt cạnh video của kênh"})
+    except Exception as exc:
+        log.warning("Không đọc được kênh hàng xóm: %s", exc)
     kept = filter_channels(channels, ca["min_subs"], ca["max_subs"])
     log.info("Giữ %d/%d kênh cỡ %d-%d subs", len(kept), len(channels),
              ca["min_subs"], ca["max_subs"])

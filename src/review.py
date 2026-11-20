@@ -569,6 +569,12 @@ def _handle_growth(con, text: str) -> bool:
     if t == "/kenh":
         tg.send_message(growth.status_text(load_config()))
         return True
+    if t == "/youtube":                      # agent Hiểu YouTube + agent Tin YouTube
+        from . import yt_insights, yt_news
+        news = yt_news.latest_lines(con)
+        tg.send_message("\n".join([yt_insights.status_text()]
+                                  + (["", "📰 Tin YouTube gần nhất liên quan tới kênh:"] + news if news else []))[:3900])
+        return True
     words = text.split()
     if t.startswith("/chude"):
         query = " ".join(words[1:])

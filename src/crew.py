@@ -1135,6 +1135,11 @@ Yêu cầu:
   KHÔNG ghi nguồn, KHÔNG ghi hashtag (hệ thống tự thêm).
 - "hashtags": 3 hashtag chủ đề, không dấu, viết liền (vd "#khihau").
 - "tags": 8-12 từ khoá tìm kiếm tiếng Việt có dấu (vd "biến đổi khí hậu")."""
+    try:
+        from .yt_insights import metadata_block    # từ khoá người xem thật sự gõ (agent Hiểu YouTube)
+        description += metadata_block()
+    except Exception as exc:
+        log.warning("Không đọc được từ khoá tìm kiếm đã học: %s", exc)
     if feedback:
         description += f"\n\nBẢN TRƯỚC BỊ TRẢ LẠI vì: {feedback}"
     out = _run_single_task(

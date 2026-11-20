@@ -119,6 +119,18 @@ CREATE TABLE IF NOT EXISTS comments (   -- bình luận người xem (agent Cộ
     posted_id    TEXT,               -- id câu trả lời đã đăng
     posted_at    TEXT
 );
+CREATE TABLE IF NOT EXISTS yt_news (   -- tin chính thức của YouTube đã đọc (agent Tin YouTube, src/yt_news.py)
+    id        TEXT PRIMARY KEY,   -- link bài / video
+    source    TEXT,
+    title     TEXT,
+    link      TEXT,
+    published TEXT,
+    relevant  INTEGER,            -- 1 = ảnh hưởng tới kênh (model lọc)
+    impact    TEXT,               -- cao | vua | thap
+    summary   TEXT,
+    action    TEXT,
+    seen_at   TEXT
+);
 CREATE TABLE IF NOT EXISTS state (   -- ô nhớ nhỏ: vị trí đọc Telegram, v.v.
     key   TEXT PRIMARY KEY,
     value TEXT

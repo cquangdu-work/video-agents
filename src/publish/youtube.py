@@ -454,6 +454,35 @@ def channel_stats(token: str) -> dict:
             "videos": int(st.get("videoCount", 0))}
 
 
+def report_rows(token: str, start: str, end: str, metrics: str, dimensions: str = None, **extra) -> list:
+    """Một báo cáo Analytics của cả kênh -> [{tên cột: giá trị}] (agent Hiểu YouTube)."""
+    params = dict(startDate=start, endDate=end, metrics=metrics, **extra)
+    if dimensions:
+        params["dimensions"] = dimensions
+    data = _report(token, **params)
+    names = [h["name"] for h in data.get("columnHeaders") or []]
+    return [dict(zip(names, row)) for row in data.get("rows") or []]
+
+
+def video_channels(video_ids: list, token: str = None, api_key: str = None) -> dict:
+    """{id video: {"channel_id", "channel", "title"}} — kênh của các video (Data API, 1 đơn vị/50 video)."""
+    out = {}
+    for i in range(0, len(video_ids), 50):
+        params = {"part": "snippet", "id": ",".join(video_ids[i:i + 50])}
+        headers = {}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        else:
+            params["key"] = api_key
+        r = requests.get(f"{API_URL}/videos", params=params, headers=headers, timeout=30)
+        r.raise_for_status()
+        for item in r.json().get("items", []):
+            sn = item.get("snippet", {})
+            out[item["id"]] = {"channel_id": sn.get("channelId", ""), "channel": sn.get("channelTitle", ""),
+                               "title": sn.get("title", "")}
+    return out
+
+
 def channel_report(token: str, start: str, end: str) -> dict:
     """Số liệu cả kênh trong khoảng ngày, tách Shorts / video dài (chiều creatorContentType):
     {"shorts": {...}, "long": {...}, "all": {...}} với views, minutes, subs_gained, subs_lost.
