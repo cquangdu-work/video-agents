@@ -137,7 +137,7 @@ def weekly_lines(con, now: datetime = None) -> list:
                        (since,)).fetchall()
     if not rows:
         return []
-    origin = {"viewer": "người xem", "du": "Du", "breakout": "video đột biến"}
+    origin = {"viewer": "người xem", "du": "Du", "breakout": "video đột biến", "big_channel": "kênh lớn đột biến"}
     lines = ["", "🗳 Chủ đề được yêu cầu tuần này:"]
     for r in rows:
         where = {"wish": "CHƯA CÓ NGUỒN số liệu — thêm chỉ số mới vào config nếu đáng làm",

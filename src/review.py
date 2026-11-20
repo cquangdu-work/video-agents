@@ -569,6 +569,20 @@ def _handle_growth(con, text: str) -> bool:
     if t == "/kenh":
         tg.send_message(growth.status_text(load_config()))
         return True
+    if t.startswith("/kenhlon"):             # agent Học kênh lớn: xem sổ tay / thêm kênh muốn học
+        from .analysis import big_channels
+        parts = text.split(maxsplit=2)
+        if len(parts) >= 3 and _fold(parts[1]) in ("them", "add"):
+            try:
+                info = big_channels.add_channel(parts[2])
+            except Exception as exc:
+                tg.send_message(f"⚠️ Chưa thêm được kênh: {exc}")
+                return True
+            tg.send_message(f"🏆 Đã thêm kênh “{info['title']}” ({info['subs']:,} người đăng ký) — agent Học kênh"
+                            " lớn quét từ lượt Phân tích Chủ nhật tới.".replace(",", "."))
+        else:
+            tg.send_message(big_channels.status_text())
+        return True
     if t == "/youtube":                      # agent Hiểu YouTube + agent Tin YouTube
         from . import yt_insights, yt_news
         news = yt_news.latest_lines(con)

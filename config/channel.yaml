@@ -270,6 +270,24 @@ growth:
   # ngưỡng YPP từ 1/2/2027 (CLAUDE.md): 1.000 sub + 8.000 giờ xem video dài/năm HOẶC 20 triệu lượt Shorts/90 ngày
   ypp: {subs: 1000, watch_hours: 8000, shorts_views_90d: 20000000}
 
+# ---------- Agent Học kênh lớn (src/analysis/big_channels.py, lượt Phân tích Chủ nhật) ----------
+big_channels:
+  min_subs: 300000       # "kênh lớn"
+  max_channels: 12       # chỉ giữ kênh ĐÚNG NGÁCH (≥ 30% tiêu đề Shorts nói chuyện số liệu / quốc gia / xếp hạng)
+  outlier_ratio: 3.0     # video đột biến = lượt xem ≥ 3 lần trung vị của chính kênh đó
+  watch_per_week: 4      # số video đột biến cho Gemini xem mỗi tuần (~2.700 token mỗi video)
+  rediscover_days: 28    # tìm lại danh sách kênh mỗi 4 tuần (mỗi từ khoá tốn 100 đơn vị quota)
+  seed_channels: []      # id kênh (UC...) muốn học thêm; Du cũng thêm được bằng /kenhlon them @tên
+  queries:
+    - {q: "country comparison", lang: en}
+    - {q: "population comparison", lang: en}
+    - {q: "richest countries ranking", lang: en}
+    - {q: "data visualization", lang: en}
+    - {q: "so sánh các nước", lang: vi}
+    - {q: "dân số các nước", lang: vi}
+    - {q: "국가 비교", lang: ko}
+    - {q: "나라별 순위", lang: ko}
+
 # ---------- Phân tích đối thủ (python -m src.analysis.competitors) ----------
 competitor_analysis:
   months_back: 6          # chỉ xét video 6 tháng gần đây

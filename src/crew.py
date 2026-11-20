@@ -1141,8 +1141,10 @@ Yêu cầu:
     try:
         from .yt_insights import metadata_block    # từ khoá người xem thật sự gõ (agent Hiểu YouTube)
         description += metadata_block()
+        from .analysis.big_channels import metadata_block as big_titles   # tiêu đề đột biến của kênh lớn
+        description += big_titles()
     except Exception as exc:
-        log.warning("Không đọc được từ khoá tìm kiếm đã học: %s", exc)
+        log.warning("Không đọc được từ khoá tìm kiếm / sổ tay kênh lớn đã học: %s", exc)
     if feedback:
         description += f"\n\nBẢN TRƯỚC BỊ TRẢ LẠI vì: {feedback}"
     out = _run_single_task(

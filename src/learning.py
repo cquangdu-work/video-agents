@@ -456,8 +456,10 @@ def exemplar_block(con, idea: dict, cfg: dict) -> str:
 
 def writer_lessons(con, idea: dict, cfg: dict) -> str:
     """Toàn bộ "bài học" đưa cho Biên kịch trước khi viết một ý tưởng (phần nào lỗi thì bỏ phần đó)."""
+    from .analysis import big_channels
     parts = [("lỗi hay mắc", lambda: mistakes_block(con)), ("luật Du", lambda: du_block(con)),
-             ("sở thích người xem", viewer_block), ("kịch bản mẫu", lambda: exemplar_block(con, idea, cfg))]
+             ("sở thích người xem", viewer_block), ("kịch bản mẫu", lambda: exemplar_block(con, idea, cfg)),
+             ("sổ tay kênh lớn", big_channels.writer_block)]
     return "".join(_safe(fn, "", what) for what, fn in parts)
 
 

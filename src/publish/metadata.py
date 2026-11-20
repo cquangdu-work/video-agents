@@ -92,6 +92,14 @@ def finalize(raw: dict, idea: dict, scenes: list, cfg: dict, music_credit: str =
     if title and unit:
         warnings.append(f"Tiêu đề bỏ mất đơn vị '{unit}': số liệu là tỷ lệ/bình quân, đọc tiêu đề sẽ"
                         f" hiểu thành số tổng — phải nói rõ (vd '{unit}', '% GDP', 'tỷ lệ')")
+    try:          # học từ kênh lớn nhưng KHÔNG chép (src/analysis/big_channels.py)
+        from ..analysis.big_channels import too_similar
+        copied = too_similar(title) if title else ""
+    except Exception:
+        copied = ""
+    if copied:
+        warnings.append(f"Tiêu đề quá giống tiêu đề video của kênh khác (“{copied[:80]}”) — viết khác đi:"
+                        " YouTube không trả tiền cho nội dung sao chép")
 
     # --- Hashtag: cố định của kênh trước, rồi của LLM; bỏ trùng; giới hạn số lượng
     tags_seen, hashtags = set(), []
