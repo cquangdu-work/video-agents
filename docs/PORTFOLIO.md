@@ -5,7 +5,7 @@ data-driven short video every day (Vietnamese, YouTube Shorts + TikTok), plus a 
 long-form compilation. A human approves every video from Telegram (~5 min/day); everything else
 is automated. It runs on an Oracle Cloud free-tier ARM64 VM using only free-tier APIs.
 
-**Numbers:** ~14.5k lines of Python/TypeScript (+6.3k lines of tests) · 427 unit tests ·
+**Numbers:** ~15k lines of Python/TypeScript (+6.5k lines of tests) · 439 unit tests ·
 ~120 commits · one 45–60 s video in ~15 min end-to-end on a 4-core ARM VM · $0/month model cost.
 
 ## Pipeline
@@ -109,6 +109,17 @@ channels over RSS; a small model filters and summarises, and code re-checks ever
 against the original post (the model once flagged a TV co-viewing change as urgent). Neither changes any
 rule of the system on its own.
 
+**Learning from big channels without copying them** (`src/analysis/big_channels.py`). Weekly, the agent
+finds large channels in the niche (search by view count, then a code filter: ≥ 30% of recent Shorts titles
+must be about data/countries/rankings — the first live run surfaced a 48.8M-subscriber cooking channel
+that slipped through on "vs" titles), finds each channel's outliers (≥ 3× its own median), and has Gemini
+*watch* the outlier videos through the API's YouTube-URL input (~2.7k tokens per Short on the free tier)
+against a fixed schema — opening line, hook type, cuts, on-screen text, ending. Code, not the model,
+aggregates the "playbook" (measured: outliers run ~31 s with a cut every ~1.4 s). The writer and title
+agents read structure, never wording, and a similarity gate sends back any title too close to a big
+channel's. Matching outlier topics to the channel's own data catalog had to move from single Vietnamese
+syllables to two-syllable compounds after live false matches ("quốc gia" vs "tham gia").
+
 **Designed around free-tier limits, measured in production.** Gemini TTS allows ~15 calls/day,
 so the whole script is voiced in one call and split per sentence with forced alignment
 (`audio/batch.py`); Whisper only supplies timestamps while subtitles use the script's own words
@@ -149,6 +160,7 @@ Posting API · Telegram Bot API · systemd · Oracle Cloud ARM64.
 | Self-learning | `src/learning.py`, `src/style.py`, `tests/test_learning.py`, `tests/test_style.py` |
 | Channel growth | `src/community.py`, `src/growth.py`, `src/topics.py`, `tests/test_channel_agents.py` |
 | Platform analysis | `src/yt_insights.py`, `src/yt_news.py`, `tests/test_yt_agents.py` |
+| Learning from big channels | `src/analysis/big_channels.py`, `tests/test_big_channels.py` |
 | Audio | `src/audio/tts.py`, `src/audio/batch.py`, `src/audio/subtitles.py`, `src/audio/music.py` |
 | Rendering | `src/render/web.py`, `src/render/web_map.py`, `render-web/src/` |
 | QC and publishing | `src/qc.py`, `src/review.py`, `src/publish/` |
