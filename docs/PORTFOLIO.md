@@ -5,7 +5,7 @@ data-driven short video every day (Vietnamese, YouTube Shorts + TikTok), plus a 
 long-form compilation. A human approves every video from Telegram (~5 min/day); everything else
 is automated. It runs on an Oracle Cloud free-tier ARM64 VM using only free-tier APIs.
 
-**Numbers:** ~14k lines of Python/TypeScript (+6k lines of tests) · 418 unit tests ·
+**Numbers:** ~14.5k lines of Python/TypeScript (+6.3k lines of tests) · 427 unit tests ·
 ~120 commits · one 45–60 s video in ~15 min end-to-end on a 4-core ARM VM · $0/month model cost.
 
 ## Pipeline
@@ -99,6 +99,16 @@ buttons, replying to that message turns the owner's text into a new draft that s
 post happens exactly once (atomic `new → posting` transition). The `force-ssl` scope this needs was
 added only after the owner agreed — YouTube has no narrower scope for posting comments.
 
+**Agents that study the platform itself** (`src/yt_insights.py`, `src/yt_news.py`). One reads how YouTube
+distributes the channel — traffic sources (measured: 98.6% of views come from the Shorts feed, so the
+first seconds decide everything), the search terms viewers actually typed (filtered to on-topic terms by
+matching the data catalog; "gdp việt nam" kept, lottery queries dropped) which then feed the title/tag
+writer, per-video lifecycle (share of views in the first two days), and the channels YouTube places the
+channel next to, which feed the competitor scan. The other reads YouTube's official blog and creator
+channels over RSS; a small model filters and summarises, and code re-checks every "high impact" verdict
+against the original post (the model once flagged a TV co-viewing change as urgent). Neither changes any
+rule of the system on its own.
+
 **Designed around free-tier limits, measured in production.** Gemini TTS allows ~15 calls/day,
 so the whole script is voiced in one call and split per sentence with forced alignment
 (`audio/batch.py`); Whisper only supplies timestamps while subtitles use the script's own words
@@ -138,6 +148,7 @@ Posting API · Telegram Bot API · systemd · Oracle Cloud ARM64.
 | Agents and gates | `src/crew.py`, `src/story.py`, `src/claims.py`, `src/second_source.py` |
 | Self-learning | `src/learning.py`, `src/style.py`, `tests/test_learning.py`, `tests/test_style.py` |
 | Channel growth | `src/community.py`, `src/growth.py`, `src/topics.py`, `tests/test_channel_agents.py` |
+| Platform analysis | `src/yt_insights.py`, `src/yt_news.py`, `tests/test_yt_agents.py` |
 | Audio | `src/audio/tts.py`, `src/audio/batch.py`, `src/audio/subtitles.py`, `src/audio/music.py` |
 | Rendering | `src/render/web.py`, `src/render/web_map.py`, `render-web/src/` |
 | QC and publishing | `src/qc.py`, `src/review.py`, `src/publish/` |

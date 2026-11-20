@@ -172,6 +172,16 @@ class NewsTest(Case):
         self.assertEqual(self.con.execute("SELECT COUNT(*) FROM yt_news").fetchone()[0], 0)
         self.assertEqual(self.sent, [])
 
+    def test_high_impact_needs_the_original_post_to_be_about_something_big(self):
+        # thử thật 20/11: model chấm "cao" cho tin lượt xem chung trên TV -> code hạ xuống "vừa"
+        items = [{"source": "Creator Insider", "title": "New! Co-Views Included in Public YouTube View Counts",
+                  "summary": ""},
+                 {"source": "Blog", "title": "Updates to the YouTube Partner Program", "summary": "monetization"}]
+        verdicts = yt_news.classify(items, run=lambda **kw: json.dumps(
+            [{"i": 1, "relevant": True, "impact": "cao", "summary": "Tính lượt xem chung trên TV."},
+             {"i": 2, "relevant": True, "impact": "cao", "summary": "YPP đổi điều kiện."}]))
+        self.assertEqual([v["impact"] for v in verdicts], ["vua", "cao"])
+
     def test_bad_model_answers_mean_nothing_is_flagged(self):
         items = [{"source": "s", "title": "t", "summary": "x"}]
         self.assertEqual(yt_news.classify(items, run=lambda **kw: "không phải JSON")[0]["relevant"], False)

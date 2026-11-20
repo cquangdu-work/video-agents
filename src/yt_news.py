@@ -25,6 +25,11 @@ FEEDS = [("YouTube Official Blog", "https://blog.youtube/rss/"),
 FRESH_DAYS = 30          # tin cũ hơn chừng này (lần chạy đầu có cả trăm tin) chỉ đánh dấu đã đọc
 MAX_PER_RUN = 25
 IMPACTS = ("cao", "vua", "thap")
+# Mức "cao" (báo Du ngay) chỉ giữ khi CHÍNH bài gốc nói về những chuyện này — model nhỏ hay báo động nhầm
+# (thử thật 20/11: chấm "cao" cho tin YouTube tính thêm lượt xem chung trên TV vào số lượt xem công khai)
+HIGH_IMPACT = re.compile(r"monetiz|partner program|\bypp\b|polic|guideline|revenue|strike|copyright|synthetic|"
+                         r"altered|\bai\b|artificial intelligence|disclos|inauthentic|reused|repetitive|"
+                         r"mass[- ]produced|\bapi\b|quota|terms of service|community guidelines", re.I)
 PROFILE = ("kênh YouTube Shorts tiếng Việt giải thích SỐ LIỆU bằng biểu đồ / bản đồ dựng bằng code, giọng đọc"
            " AI, phụ đề tự động, đăng qua YouTube Data API theo lịch, kèm video dài tổng hợp hằng tuần; CHƯA bật"
            " kiếm tiền, đang nhắm điều kiện YouTube Partner Program; chủ kênh duyệt từng video")
@@ -102,8 +107,11 @@ Dưới đây là các bài / video mới từ kênh tin CHÍNH THỨC của You
         except (TypeError, ValueError):
             continue
         if 0 <= k < len(items) and str(d.get("summary") or "").strip():
+            impact = d.get("impact") if d.get("impact") in IMPACTS else "thap"
+            if impact == "cao" and not HIGH_IMPACT.search(f"{items[k]['title']} {items[k]['summary']}"):
+                impact = "vua"                     # code soát lại: bài gốc không nói chuyện ảnh hưởng lớn
             out[k] = {"relevant": d.get("relevant") is True or str(d.get("relevant")).lower() == "true",
-                      "impact": d.get("impact") if d.get("impact") in IMPACTS else "thap",
+                      "impact": impact,
                       "summary": str(d["summary"]).strip()[:400], "action": str(d.get("action") or "").strip()[:200]}
     return out
 

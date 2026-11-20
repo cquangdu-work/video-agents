@@ -56,6 +56,8 @@ python -m src.main             # bản đầy đủ (cần thêm bot Telegram)
 | `src/analysis/learned.py` | Đọc/ghi `data/learned.yaml` — thứ kênh tự học được; Biên tập và Biên kịch đọc file này. |
 | `src/community.py` | **Agent Cộng đồng** (mỗi sáng, bước cuối của daily): đọc bình luận mới (API key), phân loại, báo Du khi người xem nói sai số liệu, nháp trả lời bằng số liệu của video (Du tự đăng), đề xuất chủ đề → link video đã có hoặc xếp hàng ưu tiên. |
 | `src/growth.py` | **Agent Tăng trưởng** (Chủ nhật): người đăng ký, Shorts / video dài, tiến độ YPP; video nào kéo người đăng ký (vào điểm sở thích người xem); video đột biến → ưu tiên mảng + dạng 10 ngày và làm tiếp chỉ số đó. |
+| `src/yt_insights.py` | **Agent Hiểu YouTube** (Chủ nhật, chỉ đọc Analytics): nguồn lượt xem (luồng Shorts / tìm kiếm / đề xuất...), từ khoá người xem gõ (lọc đúng chủ đề → agent Đăng bài), mỗi video được đẩy bao lâu, kênh YouTube đặt cạnh (→ phân tích đối thủ), người xem ở đâu. |
+| `src/yt_news.py` | **Agent Tin YouTube** (Chủ nhật): đọc tin chính thức của YouTube (blog, Creator Insider, YouTube Creators), lọc điều ảnh hưởng tới kênh, báo Du ngay tin ảnh hưởng lớn — không tự đổi luật nào. |
 | `src/topics.py` | Hàng đợi chủ đề được yêu cầu (người xem, Du `/chude`, video đột biến): nguồn World Bank / OWID lấy trước xoay vòng; chưa có nguồn → danh sách mong muốn. |
 | `src/style.py` | **Học cách dựng**: mỗi video thử một tổ hợp "núm vặn" trong khung an toàn (tốc độ đọc, nhạc nền, nhịp đổi cảnh, cỡ phụ đề), Chủ nhật so % thời lượng được xem (Thompson sampling), khung tự dời về mức thắng rõ; học loại cảnh nào giữ chân / đuổi người xem cho agent Sản xuất; Du chỉnh bằng /nhac, /giong, /nhip, /chu. |
 | `src/learning.py` | **Bộ nhớ tự học** (bảng `learning_events` + `data/learned.yaml`): lỗi các cổng code bắt được (phân loại, Biên kịch và Sản xuất đọc "lỗi hay mắc 14 ngày" của chính mình), luật Du dạy qua Telegram, sở thích người xem (kiểu mở đầu / mảng / dạng video giữ chân tốt), kịch bản Du đã duyệt làm mẫu nhịp kể. Xem mục "Tự học" bên dưới. |
@@ -157,7 +159,9 @@ bot hỏi lại rồi mới đăng.
   Học video nào kéo người đăng ký (gộp vào điểm sở thích người xem). Video đột biến (lượt xem mỗi ngày
   ≥ 2,5× trung vị, ≥ 300 lượt) → ưu tiên mảng + dạng của nó 10 ngày, xếp hàng làm tiếp chỉ số đó.
 - **Telegram:** `/chude <từ khoá>` (Du yêu cầu làm sớm một chủ đề — khớp với chỉ số kênh đang có),
-  `/kenh` (tình trạng kênh lần đo gần nhất).
+  `/kenh` (tình trạng kênh lần đo gần nhất), `/youtube` (YouTube phân phối kênh thế nào + tin YouTube gần nhất).
+- **Hiểu YouTube / Tin YouTube** (từ 20/11/2026, trong lượt Phân tích Chủ nhật): xem bảng cấu trúc ở trên.
+  Chạy riêng: `python -m src.yt_insights` (lần đo gần nhất), `python -m src.yt_news --dry-run`.
 
 Hai chế độ đăng, đổi ở `config/channel.yaml` → `publish.youtube.mode`:
 
