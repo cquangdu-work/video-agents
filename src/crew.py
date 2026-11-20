@@ -211,7 +211,9 @@ def scene_budget(cfg: dict) -> tuple:
     """(ít nhất, nhiều nhất) số cảnh để Biên kịch nhắm tới: mỗi cảnh một câu ~12 từ. Trần tính
     sát trần số từ — đo 19/11: cho khoảng cảnh rộng (12-19) thì model viết 15 cảnh x 15 từ = 222 từ."""
     lo_words, hi_words = word_budget(cfg)
-    return max(SCRIPT_MIN_SCENES, -(-lo_words // 12)), min(SCRIPT_MAX_SCENES, hi_words // 12)
+    # video ngắn (thử nghiệm độ dài 30 giây, 20/11) cần ít cảnh hơn: sàn 6 thay vì 10
+    lo = max(6, -(-lo_words // 12))
+    return lo, max(lo, min(SCRIPT_MAX_SCENES, hi_words // 12))
 
 
 SCRIPT_MIN_NUMBERS = 4   # kênh "Thế giới qua con số" — lời đọc ít số là hỏng từ gốc
@@ -343,8 +345,9 @@ def script_problems(script: dict, cfg: dict, recent_openers=(), include_soft: bo
     lo_words, hi_words = word_budget(cfg)
     n, words, numbers = _script_stats(script)
     problems = []
-    if not SCRIPT_MIN_SCENES <= n <= SCRIPT_MAX_SCENES:
-        problems.append(f"{n} cảnh (cần {SCRIPT_MIN_SCENES}-{SCRIPT_MAX_SCENES})")
+    min_scenes = min(SCRIPT_MIN_SCENES, scene_budget(cfg)[0])     # video 30 giây: 7 cảnh là đủ
+    if not min_scenes <= n <= SCRIPT_MAX_SCENES:
+        problems.append(f"{n} cảnh (cần {min_scenes}-{SCRIPT_MAX_SCENES})")
     # Cho lệch quanh ngân sách từ: hụt 10% vẫn đủ dài; dư tới 5% thì assemble.fit_tempo đọc nhanh lên bù
     # (giọng chậm + khoảng lặng cuối câu ăn mất phần lớn biên đọc nhanh — xem WORDS_OVER)
     if not 0.9 * lo_words <= words <= WORDS_OVER * hi_words:

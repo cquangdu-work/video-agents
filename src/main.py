@@ -140,8 +140,13 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
         # TỰ HỌC (src/learning.py): lỗi hay mắc, luật Du dạy, sở thích người xem, kịch bản mẫu
         lessons = learning.writer_lessons(con, idea, cfg)
         remember = lambda problems, stage, iid=idea["id"]: learning.record_problems(con, problems, stage, iid)
+        # Thử nghiệm độ dài (src/style.py, Du xin 20/11 "thử video ngắn hơn"): mỗi kịch bản một mức 30/40/50
+        # giây — Biên kịch và cổng chuẩn đọc khung giây của mức đó
+        from . import style
+        length = style.choose_length(cfg, idea["id"])
+        cfg_i = style.with_length(cfg, length)
         try:
-            script, fc, status = _script_one(crew, idea, source_text, cfg, recent, lessons, remember)
+            script, fc, status = _script_one(crew, idea, source_text, cfg_i, recent, lessons, remember)
         except Exception as exc:
             # Một ý tưởng hỏng (LLM trả sai khuôn, mọi model quá tải...) không được kéo
             # sập cả khâu: ghi lại rồi sang ý tưởng kế tiếp.
@@ -156,6 +161,8 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
                              yaml.safe_dump(script["scenes"], allow_unicode=True),
                              factcheck=fc, status=status)
         db.set_status(con, idea["id"], "scripted")
+        if length:
+            style.preassign(con, sid, length=length)
         learning.record(con, "outcome", status, idea["title"], "final", idea["id"], sid)
 
         msg = format_script_message(idea, script, fc)

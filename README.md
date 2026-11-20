@@ -125,8 +125,9 @@ Mỗi video mới được gán một tổ hợp "núm vặn", mỗi núm 3 mứ
 |---|---|---|---|
 | Tốc độ đọc | ×1,00 / ×1,05 / ×1,10 | ×1,00–×1,12, video không ngắn hơn 45 giây | `assemble` (atempo) |
 | Nhạc nền | −3 / 0 / +3 dB | −9…+6 dB | `assemble` (trộn nhạc) |
-| Nhịp đổi cảnh | tối đa 3 / 3,5 / 4 giây mỗi hình | 2,5–5 giây | `produce` (agent Sản xuất, tách câu dài) |
+| Nhịp đổi cảnh | tối đa 2 / 2,5 / 3 giây mỗi hình (từ 20/11) | 2–5 giây | `produce` (agent Sản xuất, tách câu dài) |
 | Cỡ phụ đề | 80 / 88 / 96 px | 72–96 px | Remotion (`Captions.tsx`) |
+| Độ dài video (từ 20/11) | tối đa 30 / 40 / 50 giây | 30–60 giây | `main` (Biên kịch viết theo độ dài được gán), `assemble` |
 
 - **Chủ nhật** agent Phân tích so % thời lượng được xem giữa các mức; video nào dùng khác mức được gán
   (giọng hôm đó chậm phải đọc nhanh hơn, kho nhạc trống, Remotion lùi về Manim) không tính cho núm đó.

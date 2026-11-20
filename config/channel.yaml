@@ -15,7 +15,7 @@ render:
 qc:
   # Khung AN TOÀN, không phải độ dài mong muốn (độ dài mong muốn ở channel.video_seconds_*).
   # Trần 95 giây để kịch bản đời cũ (60-90 giây, viết trước 19/11) còn dựng được trong vài ngày chuyển đổi.
-  min_seconds: 35
+  min_seconds: 20        # 20/11: thử nghiệm độ dài có mức 30 giây (22,5-30 giây)
   max_seconds: 95
 
 channel:
@@ -232,7 +232,7 @@ daily:
   utc_offset_hours: 9   # "mỗi ngày" tính theo giờ nơi Du ở (Hàn Quốc = +9)
   max_attempts: 2       # kịch bản đầu dựng hỏng thì thử kịch bản kế, tối đa bấy nhiêu lần
   max_script_age_days: 3   # kịch bản cũ hơn thế thì bỏ (số liệu "mới" đã nguội)
-  min_script_words: 125    # lời đọc ít hơn thế (~37 giây) thì bỏ: video sẽ rớt Kiểm định độ dài
+  min_script_words: 70     # lời đọc ít hơn thế (~20 giây) thì bỏ (20/11: có kịch bản thử nghiệm 30 giây)
   min_script_numbers: 4    # lời đọc có ít con số hơn thế thì bỏ: video sẽ toàn cảnh chữ
 
 # ---------- Nhạc nền (src/audio/music.py) ----------

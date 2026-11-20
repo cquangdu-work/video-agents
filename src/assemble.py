@@ -347,13 +347,15 @@ def main():
     fixed =sum(float(spec[i].get("seconds") or 0) for r in runs if not _voice(spec[r[0]]) for i in r)
     raw_secs = [wav_duration(wavs[r[0]]) for r in voiced]
     total_at = lambda t: fixed + sum(run_seconds(d, len(r), t) for d, r in zip(raw_secs, voiced))
-    fit = fit_tempo(raw_secs, [len(r) for r in voiced], fixed,
-                    float(cfg["channel"].get("video_seconds_max", 90)))
-    tempo = styled_tempo(fit, st.get("tempo"), total_at, float(cfg["channel"].get("video_seconds_min", 0)))
+    # khung thời lượng: theo mức độ dài đang thử của kịch bản này (src/style.py), không có thì theo config
+    lo_secs, hi_secs = (style.length_bounds(st["length"]) if st.get("length") else
+                        (float(cfg["channel"].get("video_seconds_min", 0)),
+                         float(cfg["channel"].get("video_seconds_max", 90))))
+    fit = fit_tempo(raw_secs, [len(r) for r in voiced], fixed, hi_secs)
+    tempo = styled_tempo(fit, st.get("tempo"), total_at, lo_secs)
     if tempo > 1.0:
         log.info("Video sẽ dài %.1fs — đọc nhanh lên %.3f lần (%s)", total_at(1.0), tempo,
-                 "phong cách đang thử nghiệm" if tempo != fit
-                 else f"để vừa {cfg['channel'].get('video_seconds_max', 90)}s")
+                 "phong cách đang thử nghiệm" if tempo != fit else f"để vừa {hi_secs:g}s")
         for r in voiced:
             wavs[r[0]] = speed_up(wavs[r[0]], audio_dir / f"fit_{r[0]:02d}.wav", tempo)
 
@@ -462,9 +464,13 @@ def main():
     meta_path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
     # Giá trị THẬT đã dùng cho thử nghiệm phong cách (khác mức được gán -> video không tính cho núm đó:
     # giọng hôm nay chậm phải đọc nhanh hơn mức gán, kho nhạc trống, Remotion lùi về Manim...)
+    real_secs = ffprobe_duration(final)
     with_db(lambda c: style.record_applied(c, args.script_id, tempo=round(tempo, 3),
                                            music=st.get("music") if track else None,
-                                           captions=st.get("captions") if engine == "web" else None))
+                                           captions=st.get("captions") if engine == "web" else None,
+                                           # video dài quá mức được gán thì không tính cho núm độ dài
+                                           length=st.get("length") if st.get("length")
+                                           and real_secs <= 1.1 * float(st["length"]) else None))
     if track:
         assets_db.record_use(con, track["name"], final.name)
     for name in used or []:

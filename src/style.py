@@ -35,8 +35,12 @@ log = logging.getLogger("style")
 KNOBS = {
     "tempo": {"label": "Tốc độ đọc", "center": 1.05, "step": 0.05, "lo": 1.0, "hi": 1.12},
     "music": {"label": "Nhạc nền", "center": 0.0, "step": 3.0, "lo": -9.0, "hi": 6.0},
-    "pace": {"label": "Nhịp đổi cảnh", "center": 3.5, "step": 0.5, "lo": 2.5, "hi": 5.0},
+    # Du xin 20/11 "thử video ngắn hơn và đổi hình nhanh hơn" (kênh lớn cùng ngách: video đột biến ~31 giây,
+    # đổi hình ~1,4 giây/lần): nhịp từ 3/3,5/4 xuống 2/2,5/3 giây mỗi hình (sàn 2 giây = assemble.MIN_SCENE)
+    "pace": {"label": "Nhịp đổi cảnh", "center": 2.5, "step": 0.5, "lo": 2.0, "hi": 5.0},
     "captions": {"label": "Cỡ phụ đề", "center": 88.0, "step": 8.0, "lo": 72.0, "hi": 96.0},
+    # độ dài TỐI ĐA của video (giây); Biên kịch viết cho khoảng 0,75×..1× mức này. Gán lúc viết kịch bản (main)
+    "length": {"label": "Độ dài video", "center": 40.0, "step": 10.0, "lo": 30.0, "hi": 60.0},
 }
 METRIC = "avg_view_pct"     # mục tiêu của kênh là tỷ lệ xem hết -> % thời lượng được xem
 SHRINK = 3.0                # mỗi mức như có sẵn 3 video "trung bình": ít video thì không kết luận mạnh
@@ -58,7 +62,7 @@ def fmt(knob: str, v) -> str:
         return f"×{v:.2f}".replace(".", ",")
     if knob == "music":
         return "0 dB" if abs(v) < 1e-9 else f"{v:+.0f} dB"
-    if knob == "pace":
+    if knob in ("pace", "length"):
         return f"{v:g} giây".replace(".", ",")
     return f"{v:.0f} px"
 
@@ -137,21 +141,26 @@ def assign(con, script_id: int, cfg: dict = None, legacy_spec: bool = False) -> 
     Lỗi gì cũng trả {} (= dựng như mặc định) — thử nghiệm không được làm hỏng việc dựng."""
     try:
         row = get(con, script_id)
-        if row:
+        if row and all(k in row["assigned"] for k in KNOBS):
             return row["assigned"]
         data = _data()
         on = ((cfg or {}).get("style") or {}).get("experiments", True) and not data.get("paused")
         rng = random.Random(int(script_id) * 7919 + 17)        # cố định theo kịch bản: chạy lại vẫn vậy
-        out = {}
+        out = dict(row["assigned"]) if row else {}             # main đã gán sẵn độ dài lúc viết kịch bản
         for knob in KNOBS:
-            if knob == "pace" and legacy_spec:
-                out[knob] = None
+            if knob in out:
+                continue
+            if knob == "length" or (knob == "pace" and legacy_spec):
+                out[knob] = None        # độ dài chỉ gán được TRƯỚC khi viết (main); kịch bản cũ: không thử
             elif on:
                 out[knob] = choose(knob, data, rng)
             else:                                                  # tạm dừng thử: dùng tâm khung
                 out[knob] = round(float(window(knob, data)["center"]), 3)
-        con.execute("INSERT OR IGNORE INTO video_styles (script_id, assigned, applied, at) VALUES (?,?,?,?)",
-                    (script_id, json.dumps(out), "{}", _now()))
+        if row:
+            con.execute("UPDATE video_styles SET assigned = ? WHERE script_id = ?", (json.dumps(out), script_id))
+        else:
+            con.execute("INSERT OR IGNORE INTO video_styles (script_id, assigned, applied, at) VALUES (?,?,?,?)",
+                        (script_id, json.dumps(out), "{}", _now()))
         con.commit()
         log.info("Phong cách dựng #%s: %s", script_id,
                  ", ".join(f"{KNOBS[k]['label'].lower()} {fmt(k, v)}" for k, v in out.items() if v is not None))
@@ -174,6 +183,41 @@ def record_applied(con, script_id: int, **values) -> None:
         con.commit()
     except Exception as exc:
         log.warning("Phong cách dựng: không ghi được giá trị đã dùng của #%s: %s", script_id, exc)
+
+
+def choose_length(cfg: dict, seed: int):
+    """Độ dài tối đa (giây) cho kịch bản sắp viết — Thompson sampling như các núm khác; None nếu tắt thử."""
+    try:
+        data = _data()
+        if not ((cfg or {}).get("style") or {}).get("experiments", True) or data.get("paused"):
+            return None
+        return choose("length", data, random.Random(int(seed) * 104729 + 3))
+    except Exception as exc:
+        log.warning("Không chọn được độ dài thử nghiệm: %s", exc)
+        return None
+
+
+def length_bounds(length) -> tuple:
+    """(ngắn nhất, dài nhất) giây cho một mức độ dài: 30 -> 22,5-30; 40 -> 30-40; 50 -> 37,5-50."""
+    return round(0.75 * float(length), 1), float(length)
+
+
+def with_length(cfg: dict, length) -> dict:
+    """Bản sao cấu hình mà Biên kịch / cổng chuẩn đọc (channel.video_seconds_*) theo độ dài đang thử."""
+    if not length:
+        return cfg
+    lo, hi = length_bounds(length)
+    return {**cfg, "channel": {**cfg["channel"], "video_seconds_min": lo, "video_seconds_max": hi}}
+
+
+def preassign(con, script_id: int, **values) -> None:
+    """Ghi các mức đã quyết TRƯỚC khi dựng (độ dài, lúc viết kịch bản); các núm còn lại gán ở produce."""
+    try:
+        con.execute("INSERT OR IGNORE INTO video_styles (script_id, assigned, applied, at) VALUES (?,?,?,?)",
+                    (script_id, json.dumps(values), json.dumps(values), _now()))
+        con.commit()
+    except Exception as exc:
+        log.warning("Không ghi được độ dài thử nghiệm của #%s: %s", script_id, exc)
 
 
 def with_pacing(cfg: dict, st: dict) -> dict:
@@ -389,7 +433,8 @@ def status_text(data: dict = None) -> str:
                      + (f" — dẫn: {lead}" if lead else ""))
     if not (data.get("stats") or {}).get("based_on"):
         lines.append(f"(Chưa đủ số liệu: cần ≥ {MIN_SAMPLES} video dựng theo cách này có % xem.)")
-    lines.append("Chỉnh: /giong nhanh|cham · /nhac to|nho · /nhip nhanh|cham · /chu to|nho · /kieu tat|bat")
+    lines.append("Chỉnh: /giong nhanh|cham · /nhac to|nho · /nhip nhanh|cham · /chu to|nho · /video ngan|dai"
+                 " · /kieu tat|bat")
     return "\n".join(lines)
 
 

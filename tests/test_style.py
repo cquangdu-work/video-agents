@@ -40,7 +40,8 @@ class ArmsTest(StyleCase):
     def test_default_windows_keep_todays_look_as_one_of_the_arms(self):
         self.assertEqual(style.arms("tempo"), [1.0, 1.05, 1.1])
         self.assertEqual(style.arms("music"), [-3.0, 0.0, 3.0])
-        self.assertEqual(style.arms("pace"), [3.0, 3.5, 4.0])           # trước 19/11: tối đa 4 giây/hình
+        self.assertEqual(style.arms("pace"), [2.0, 2.5, 3.0])           # 20/11 Du xin đổi hình nhanh hơn
+        self.assertEqual(style.arms("length"), [30.0, 40.0, 50.0])      # 20/11 Du xin thử video ngắn hơn
         self.assertEqual(style.arms("captions"), [80.0, 88.0, 96.0])    # trước 19/11: phụ đề 80 px
         self.assertEqual(style.fmt("tempo", 1.05), "×1,05")
         self.assertEqual(style.fmt("music", -3), "-3 dB")
@@ -60,8 +61,10 @@ class AssignTest(StyleCase):
     def test_assigned_once_reproducible_and_inside_the_window(self):
         st = style.assign(self.con, 7)
         self.assertEqual(style.assign(self.con, 7), st)                 # dựng lại: y hệt
+        self.assertIsNone(st["length"])                                 # độ dài chỉ gán lúc viết kịch bản
         for knob, v in st.items():
-            self.assertIn(v, style.arms(knob))
+            if v is not None:
+                self.assertIn(v, style.arms(knob))
         self.assertEqual(style.get(self.con, 7)["applied"], {})
         legacy = style.assign(self.con, 8, legacy_spec=True)
         self.assertIsNone(legacy["pace"])                               # spec cũ: không thử nhịp cảnh
@@ -80,7 +83,7 @@ class AssignTest(StyleCase):
     def test_paused_or_disabled_uses_the_window_center(self):
         style.set_paused(True)
         self.assertEqual(style.assign(self.con, 1),
-                         {"tempo": 1.05, "music": 0.0, "pace": 3.5, "captions": 88.0})
+                         {"tempo": 1.05, "music": 0.0, "pace": 2.5, "captions": 88.0, "length": None})
         style.set_paused(False)
         off = {"style": {"experiments": False}}
         self.assertEqual(style.assign(self.con, 2, off)["captions"], 88.0)
@@ -124,6 +127,25 @@ class ProduceTest(StyleCase):
         self.assertIn(st["assigned"]["pace"], style.arms("pace"))
         self.assertEqual(seen["pace"], st["assigned"]["pace"])          # agent Sản xuất nhận đúng nhịp
         self.assertEqual(st["applied"]["pace"], st["assigned"]["pace"])  # và được ghi lại để so
+
+
+class LengthTest(StyleCase):
+    def test_length_is_chosen_before_writing_and_kept_through_production(self):
+        cfg = {"channel": {"name": "K", "video_seconds_min": 45, "video_seconds_max": 60}}
+        length = style.choose_length(cfg, 7)
+        self.assertIn(length, [30.0, 40.0, 50.0])
+        short = style.with_length(cfg, 30)
+        self.assertEqual((short["channel"]["video_seconds_min"], short["channel"]["video_seconds_max"]), (22.5, 30.0))
+        self.assertEqual(cfg["channel"]["video_seconds_max"], 60)                     # cấu hình gốc không đổi
+        self.assertIs(style.with_length(cfg, None), cfg)
+        style.preassign(self.con, 9, length=30.0)
+        st = style.assign(self.con, 9, cfg)                    # produce gán nốt các núm khác, giữ độ dài
+        self.assertEqual(st["length"], 30.0)
+        self.assertIn(st["pace"], style.arms("pace"))
+        self.assertIsNone(style.choose_length({"style": {"experiments": False}}, 7))
+        from src import crew
+        self.assertEqual(crew.word_budget({**short, "pacing": {"words_per_second": 3.4}}), (76, 102))
+        self.assertEqual(crew.scene_budget({**short, "pacing": {"words_per_second": 3.4}}), (7, 8))
 
 
 class TempoTest(unittest.TestCase):
@@ -228,7 +250,8 @@ class TelegramTest(StyleCase):
         self.assertIn("Phong cách dựng đang thử", self.say("/kieu"))
         self.assertIn("Nhạc nền: khung thử mới -6 dB · -3 dB · 0 dB", self.say("/Nhạc  nhỏ"))
         self.assertIn("khung thử mới ×1,05 · ×1,10 · ×1,12", self.say("/giong nhanh"))
-        self.assertIn("khung thử mới 2,5 giây · 3 giây · 3,5 giây", self.say("/nhịp nhanh"))
+        self.assertIn("khung thử mới 2 giây · 2,5 giây", self.say("/nhịp nhanh"))    # sàn cứng 2 giây
+        self.assertIn("Độ dài video: khung thử mới 30 giây · 40 giây", self.say("/video ngắn"))
         self.assertEqual(style.arms("music"), [-6.0, -3.0, 0.0])
         self.assertIn("Lệnh chỉnh cách dựng", self.say("/nhac"))
         self.assertIn("Tạm dừng thử nghiệm", self.say("/kiểu tắt"))

@@ -22,6 +22,7 @@ CFG = {
     "dedup": {"title_similarity_threshold": 0.55,
               "youtube_check": {"max_popular_allowed": 3}},
     "scoring_weights": {"min_total": 17},
+    "style": {"experiments": False},     # thử nghiệm độ dài (src/style.py) không xen vào test dây chuyền
 }
 
 

@@ -515,7 +515,8 @@ STYLE_COMMANDS = {("nhac", "to"): ("music", 1), ("nhac", "lon"): ("music", 1),
                   ("giong", "nhanh"): ("tempo", 1), ("giong", "cham"): ("tempo", -1),
                   ("nhip", "nhanh"): ("pace", -1), ("nhip", "cham"): ("pace", 1),   # nhanh = ít giây mỗi hình
                   ("chu", "to"): ("captions", 1), ("chu", "lon"): ("captions", 1),
-                  ("chu", "nho"): ("captions", -1), ("chu", "be"): ("captions", -1)}
+                  ("chu", "nho"): ("captions", -1), ("chu", "be"): ("captions", -1),
+                  ("video", "ngan"): ("length", -1), ("video", "dai"): ("length", 1)}   # độ dài (20/11)
 
 
 def _fold(text: str) -> str:
@@ -530,7 +531,7 @@ def _handle_style(con, text: str) -> bool:
     from . import style
     t = _fold(text)
     parts = t.split()
-    if not parts or parts[0] not in ("/kieu", "/nhac", "/giong", "/nhip", "/chu"):
+    if not parts or parts[0] not in ("/kieu", "/nhac", "/giong", "/nhip", "/chu", "/video"):
         return False
     try:
         if t == "/kieu":
@@ -554,7 +555,7 @@ def _handle_style(con, text: str) -> bool:
                                 + (f"\nVideo gửi gần nhất dùng {style.fmt(knob, last)}." if last is not None else ""))
         else:
             tg.send_message("Lệnh chỉnh cách dựng: /giong nhanh|cham · /nhac to|nho · /nhip nhanh|cham ·"
-                            " /chu to|nho · /kieu (xem) · /kieu tat|bat")
+                            " /chu to|nho · /video ngan|dai · /kieu (xem) · /kieu tat|bat")
     except Exception as exc:                 # learned.yaml hỏng: báo chứ không ghi đè mất cái đã học
         tg.send_message(f"⚠️ Chưa chỉnh được ({exc}). Kiểm tra data/learned.yaml trên VM.")
     return True
