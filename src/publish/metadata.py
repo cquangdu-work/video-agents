@@ -47,9 +47,14 @@ RATIO_UNITS = [
     (r"(?:trên|/)\s*100\s*(?:dân|người)", "trên 100 dân"),
     (r"bình quân|đầu người", "bình quân đầu người"),
     (r"tỷ lệ|tỉ lệ", "tỷ lệ"),
+    # kênh tiếng Hàn (20/11/2026)
+    (r"gdp\s*대비", "GDP 대비"),
+    (r"1인당", "1인당"),
+    (r"비율|비중|률\b|율\b", "비율"),
 ]
 # Dấu hiệu tiêu đề CÓ nói rõ đó là tỷ lệ/bình quân
-RATIO_MARKERS = r"%|so với gdp|/\s*gdp|(?:trên|/)\s*100|bình quân|đầu người|tỷ lệ|tỉ lệ|mỗi người|mỗi 100"
+RATIO_MARKERS = (r"%|so với gdp|/\s*gdp|(?:trên|/)\s*100|bình quân|đầu người|tỷ lệ|tỉ lệ|mỗi người|mỗi 100|"
+                 r"대비|1인당|비율|비중|률|율|평균")
 
 
 def ratio_unit(idea: dict):

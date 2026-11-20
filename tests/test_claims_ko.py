@@ -139,6 +139,15 @@ class KoreanTopicTest(unittest.TestCase):
             self.assertEqual(topics.match(cfg, "영상 만들어 주세요"), [])
 
 
+class KoreanTitleUnitTest(unittest.TestCase):
+    def test_ratio_unit_must_stay_in_the_title(self):
+        from src.publish.metadata import title_drops_unit
+        idea = {"title": "세계 지도: 2024년 재생에너지 발전 비율 — 한국 194개국 중 149위"}
+        self.assertEqual(title_drops_unit("한국 재생에너지 꼴찌", idea), "비율")
+        self.assertIsNone(title_drops_unit("OECD 38개국 중 재생에너지 비율 꼴찌", idea))
+        self.assertIsNone(title_drops_unit("한국 재생에너지 9.71%로 꼴찌", idea))
+
+
 class KoreanCommunityTest(unittest.TestCase):
     def test_cards_carry_a_vietnamese_translation(self):
         from src import community
