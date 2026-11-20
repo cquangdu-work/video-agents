@@ -127,7 +127,8 @@ def _match(cfg: dict, query: str, limit: int = 3, min_cover: float = 0.0) -> lis
     scored = []
     for key, name in catalog(cfg).items():
         # "Xuất khẩu so với GDP" nói về XUẤT KHẨU (GDP chỉ là mẫu số) -> phần sau "so với" không đem ra so
-        units = _units(re.split(r"\s+so với\s+", name)[0], keep, single)
+        # (kênh Hàn: "GDP 대비 연구개발비" — phần "GDP 대비" đứng TRƯỚC nên bỏ phần đầu)
+        units = _units(re.sub(r"^GDP\s*대비\s*", "", re.split(r"\s+so với\s+", name)[0]), keep, single)
         score = len(want & units)
         if score:
             # ngang điểm thì chỉ số mà phần khớp chiếm nhiều tên hơn đứng trước ("GDP" -> "Quy mô GDP" trước
