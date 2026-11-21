@@ -320,3 +320,122 @@ class InstagramAgentTest(DbCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class IgPostTest(DbCase):
+    """Bài viết Instagram mỗi ngày ngoài Reel (kênh Hàn, Du xin 21/11/2026): soạn lúc gửi duyệt, ✅ là duyệt cả bài,
+    bot đăng khi tới giờ 12:30 giờ Hàn, mỗi video một lần, mỗi khung giờ một bài."""
+
+    def setUp(self):
+        super().setUp()
+        self.sent = []
+        for name in ("send_message", "send_video", "send_photo", "send_document", "answer_callback",
+                     "clear_buttons"):
+            p = mock.patch.object(tg, name, side_effect=lambda *a, _n=name, **k: self.sent.append((_n, a, k)) or 88)
+            p.start(); self.addCleanup(p.stop)
+        p = mock.patch.dict(os.environ, {"TIKTOK_CLIENT_KEY": ""}); p.start(); self.addCleanup(p.stop)
+        facebook._save({"id": "123", "name": "Trang", "access_token": "PAGE"},
+                       permissions=list(facebook.NEEDED) + list(instagram.NEEDED))
+        self.vid = self.new_video()
+        self.img = self.root / "ig.jpg"; self.img.write_bytes(b"x")
+        self.cfg = json.loads(json.dumps(CFG))
+        self.cfg["publish"].update(
+            facebook={"enabled": False}, tiktok={"enabled": False}, hashtags_fixed=["#숫자세계", "#Shorts"],
+            instagram={"enabled": True, "publish_time_local": "19:00", "utc_offset_hours": 9,
+                       "posts": {"enabled": True, "post_time_local": "12:30"}})
+
+    def msgs(self):
+        return [c[1][0] for c in self.sent if c[0] == "send_message"]
+
+    def test_prepare_edit_schedule_and_publish_once(self):
+        with mock.patch.object(fb_post, "draft", return_value="본문 첫 줄") as d, \
+                mock.patch.object(fb_post, "image_4x5", return_value=self.img), \
+                mock.patch("src.crew.translate_for_review", return_value="bản dịch"):
+            review.prepare_ig_post(self.con, self.vid, 6, {"title": "t", "summary": "s"}, [{"voice": "v"}], self.cfg,
+                                   50, tags=["재생 에너지", "OECD"])
+        self.assertEqual(d.call_args.kwargs["platform"], "instagram")
+        v = db.get_video(self.con, self.vid)
+        self.assertTrue(v["ig_post"].startswith("본문 첫 줄"))
+        self.assertIn("#숫자세계 #재생에너지 #OECD", v["ig_post"])               # cố định + chủ đề, bỏ #Shorts
+        self.assertNotIn("#Shorts", v["ig_post"])
+        self.assertIn("send_photo", [c[0] for c in self.sent])
+        # Du trả lời tin xem trước bằng câu khác -> thành nội dung bài
+        review.handle_update(self.con, text("Du viết lại", reply_to=v["ig_post_msg"]), self.cfg)
+        self.assertTrue(db.get_video(self.con, self.vid)["ig_post"].startswith("Du viết lại"))
+        review.handle_update(self.con, cb(f"ok:{self.vid}"), self.cfg)              # ✅ -> hẹn giờ
+        v = db.get_video(self.con, self.vid)
+        due = datetime.fromisoformat(v["ig_post_due"].replace("Z", "+00:00"))
+        self.assertEqual((due.hour, due.minute), (3, 30))                           # 12:30 giờ Hàn
+        self.assertTrue(any("Bài viết Instagram" in m and "12:30" in m for m in self.msgs()))
+        with mock.patch.object(instagram, "post_image", return_value={"id": "IGP", "url": "https://ig/p/1"}) as pi:
+            self.assertEqual(review.publish_ig_posts_due(self.con, self.cfg, due - timedelta(minutes=5)), [])
+            self.assertEqual(review.publish_ig_posts_due(self.con, self.cfg, due + timedelta(minutes=1)), [self.vid])
+            self.assertEqual(review.publish_ig_posts_due(self.con, self.cfg, due + timedelta(hours=1)), [])
+        self.assertEqual(pi.call_count, 1)
+        self.assertTrue(pi.call_args.args[1].startswith("Du viết lại"))
+        self.assertEqual(db.get_video(self.con, self.vid)["ig_post_id"], "IGP")
+
+    def test_disabled_or_gate_failure_means_no_post(self):
+        self.cfg["publish"]["instagram"]["posts"]["enabled"] = False
+        with mock.patch.object(fb_post, "draft") as d:
+            review.prepare_ig_post(self.con, self.vid, 6, {}, [], self.cfg, 50)
+        d.assert_not_called()
+        self.cfg["publish"]["instagram"]["posts"]["enabled"] = True
+        with mock.patch.object(fb_post, "draft", return_value=""), mock.patch.object(fb_post, "image_4x5") as im:
+            review.prepare_ig_post(self.con, self.vid, 6, {}, [], self.cfg, 50)
+        im.assert_not_called()
+        self.assertIn("chỉ đăng Reel", self.msgs()[-1])
+
+    def test_failure_offers_retry_button_that_posts_now(self):
+        db.update_video(self.con, self.vid, ig_post="bài", ig_post_image=str(self.img),
+                        ig_post_due="2026-11-21T03:30:00Z")
+        db.transition_video(self.con, self.vid, "pending_review", "approved")
+        now = datetime(2026, 11, 21, 4, tzinfo=timezone.utc)
+        with mock.patch.object(instagram, "post_image", side_effect=RuntimeError("503")):
+            review.publish_ig_posts_due(self.con, self.cfg, now)
+        self.assertIsNone(db.get_video(self.con, self.vid)["ig_post_due"])         # không tự thử lại liên tục
+        self.assertEqual(self.sent[-1][2]["buttons"][0][0][1], f"ip:{self.vid}")
+        with mock.patch.object(instagram, "post_image", return_value={"id": "IGP2", "url": "u"}) as pi:
+            review.handle_update(self.con, cb(f"ip:{self.vid}"), self.cfg)
+        self.assertEqual(pi.call_count, 1)
+        self.assertEqual(db.get_video(self.con, self.vid)["ig_post_id"], "IGP2")
+
+    def test_one_post_per_slot(self):
+        db.update_video(self.con, self.vid, ig_post_due="2026-11-22T03:30:00Z")
+        with mock.patch("src.review.datetime") as dt:
+            dt.now.return_value = datetime(2026, 11, 21, 12, tzinfo=timezone.utc)
+            dt.fromisoformat = datetime.fromisoformat
+            self.assertEqual(review._taken_times(self.con, "ig_post"), {"2026-11-22T03:30:00Z"})
+
+
+class IgImageTest(unittest.TestCase):
+    def test_crop_is_4x5_from_the_top(self):
+        from PIL import Image
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            full = Path(d) / "f.jpg"
+            im = Image.new("RGB", (1080, 1920), "black")
+            im.paste((255, 0, 0), (0, 0, 1080, 60))                                  # dải đỏ: phải bị cắt bỏ
+            im.save(full)
+
+            def fake_image(sid, out):
+                Path(out).write_bytes(full.read_bytes())
+                return Path(out)
+            with mock.patch.object(fb_post, "image", side_effect=fake_image):
+                out = fb_post.image_4x5(6, Path(d) / "ig.jpg")
+            got = Image.open(out)
+            self.assertEqual(got.size, (1080, 1350))
+            self.assertLess(got.getpixel((540, 5))[0], 60)                           # dải đỏ ở đỉnh đã bị bỏ
+            self.assertFalse((Path(d) / "ig_full.jpg").exists())
+
+    def test_korean_instagram_prompt_asks_for_korean_source_line(self):
+        from src import lang
+        seen = []
+        cfg = {"channel": {"name": "숫자세계", "description": "kênh dữ liệu"}, "policy_rules": ""}
+        with lang.using("ko"):
+            fb_post.draft({"summary": "s"}, ["v"], cfg, run=lambda **k: seen.append(k["description"]) or "",
+                          platform="instagram")
+        self.assertIn("INSTAGRAM", seen[0])
+        self.assertIn("출처:", seen[0])
+        self.assertIn("TIẾNG HÀN", seen[0])
+        self.assertNotIn('"Nguồn:', seen[0])

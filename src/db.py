@@ -166,7 +166,11 @@ _ADDED_COLUMNS = [("video_stats", "engaged_views", "INTEGER"),       # 19/11/202
                   ("videos", "fb_post", "TEXT"), ("videos", "fb_post_image", "TEXT"),
                   ("videos", "fb_post_msg", "INTEGER"), ("videos", "fb_post_id", "TEXT"),
                   # Instagram Reels (kênh Hàn): id bài + giờ hẹn đăng
-                  ("videos", "instagram_id", "TEXT"), ("videos", "instagram_due", "TEXT")]
+                  ("videos", "instagram_id", "TEXT"), ("videos", "instagram_due", "TEXT"),
+                  # bài viết Instagram kèm video (kênh Hàn, 21/11/2026): chữ, ảnh 4:5, tin xem trước, id bài, giờ hẹn
+                  ("videos", "ig_post", "TEXT"), ("videos", "ig_post_image", "TEXT"),
+                  ("videos", "ig_post_msg", "INTEGER"), ("videos", "ig_post_id", "TEXT"),
+                  ("videos", "ig_post_due", "TEXT")]
 
 
 def connect() -> sqlite3.Connection:
@@ -274,6 +278,7 @@ _VIDEO_FIELDS = {
     "tg_message_id", "youtube_id", "youtube_url", "youtube_privacy",
     "decided_at", "published_at", "facebook_id", "facebook_at", "facebook_slot",
     "fb_post", "fb_post_image", "fb_post_msg", "fb_post_id", "instagram_id", "instagram_due",
+    "ig_post", "ig_post_image", "ig_post_msg", "ig_post_id", "ig_post_due",
 }
 
 

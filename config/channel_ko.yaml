@@ -276,6 +276,11 @@ publish:
     publish_time_local: "19:00" # giờ Hàn — API không hẹn giờ được, bot tự đăng khi tới giờ
     utc_offset_hours: 9
     ai_generated: true          # nhãn AI của Meta (giọng đọc AI)
+    # BÀI VIẾT (ảnh 4:5 + chữ) mỗi ngày ngoài Reel (Du xin 21/11/2026): soạn lúc gửi duyệt (src/fb_post.py, cùng các
+    # cổng kiểm số), xem trước dưới video, ✅ ở video là duyệt cả bài; bot đăng khi tới giờ.
+    posts:
+      enabled: true
+      post_time_local: "12:30"  # giờ Hàn — giờ nghỉ trưa, lệch Reel 19:00 để trang có hai lần xuất hiện mỗi ngày
   hashtags_fixed: ["#숫자세계", "#Shorts"]
   max_hashtags: 5
   disclosure: "AI 음성으로 제작했습니다. 모든 수치는 게시 전에 출처와 대조했습니다."
