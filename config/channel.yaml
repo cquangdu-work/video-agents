@@ -343,6 +343,23 @@ publish:
     # giới hạn token 7 ngày của chế độ Testing. Quay lại Testing thì đặt 7 để bot nhắc gia hạn.
     # Token hỏng vì lý do khác: bot tự gửi gói tự đăng và nhắc gửi /capquyen.
     oauth_token_days: null
+    # DANH SÁCH PHÁT tự động theo dạng video (src/publish/playlists.py, 21/11/2026). Xoá mục này = tắt.
+    playlists:
+      ban-do:
+        title: "Việt Nam đứng thứ mấy thế giới? — Bản đồ số liệu"
+        description: "Bản đồ thế giới tô theo số liệu thật: Việt Nam đứng ở đâu so với các nước khác."
+      cuoc-dua:
+        title: "Cuộc đua số liệu"
+        description: "Các nước thay nhau vượt lên qua từng năm — cuộc đua dựng từ số liệu gốc."
+      bieu-do:
+        title: "Việt Nam và Hàn Quốc qua con số"
+        description: "Hai nước, cùng một chỉ số, mấy chục năm thay đổi — so sánh bằng số liệu của World Bank và KOSIS."
+      bai-bao:
+        title: "Khoa học qua con số"
+        description: "Những phát hiện mới từ các nghiên cứu đã công bố, kể bằng số liệu."
+      tong-hop:
+        title: "Tuần qua con số — video tổng hợp"
+        description: "Mỗi cuối tuần: các câu chuyện số liệu của cả tuần trong một video, chia chương."
   tiktok:
     # Đẩy video đã duyệt vào HỘP THƯ TikTok (bản nháp) — Du mở app, chạm thông báo, dán chú thích,
     # bật "Nội dung do AI tạo" rồi đăng. Cần TIKTOK_CLIENT_KEY/SECRET trong .env + gửi /tiktok cho bot
@@ -368,3 +385,32 @@ publish:
   hashtags_fixed: ["#thegioiquaconso", "#Shorts"]   # luôn có ở mọi video
   max_hashtags: 5               # YouTube bỏ qua toàn bộ hashtag nếu nhét quá nhiều
   disclosure: "Giọng đọc được tạo bằng AI. Số liệu được đối chiếu với nguồn trước khi đăng."
+
+# ---------- Hồ sơ kênh trên các nền tảng (Du xin 21/11/2026: "hoàn thành các kênh và mạng xã hội một cách chuyên nghiệp") ----------
+# Nguồn DUY NHẤT của chữ trên ảnh bìa (src/brand_kit.py) và phần giới thiệu kênh (src/channel_profile.py: áp lên YouTube +
+# Trang Facebook qua API; Instagram/TikTok không có API sửa hồ sơ -> bot gửi Du bản chạm-để-copy). Sửa ở đây rồi chạy
+# lại hai lệnh đó. Repo công khai: không ghi thông tin cá nhân của Du.
+profile:
+  contact_email: null           # Gmail riêng của kênh (Du tạo) -> có thì tự thêm dòng liên hệ vào mọi phần giới thiệu
+  banner:
+    title: ["THẾ GIỚI", "QUA CON SỐ"]
+    accent: "CON SỐ"            # tô vàng hổ phách — màu của SỐ LIỆU trong mọi video
+    tagline: "Bản đồ, biểu đồ, cuộc đua số liệu về Việt Nam và thế giới"
+    chip: "VIDEO MỚI MỖI NGÀY · 19:00"
+    sources: "Dữ liệu: World Bank · Our World in Data · KOSIS"
+  youtube:
+    language: vi
+    country: KR                 # nơi Du cư trú (CLAUDE.md: kênh đặt quốc gia Hàn Quốc)
+    description: |-
+      Thế giới qua con số — mỗi ngày một câu chuyện về Việt Nam và thế giới, kể bằng số liệu thật.
+
+      Mỗi video là một bản đồ, biểu đồ hoặc cuộc đua số liệu dựng bằng code từ dữ liệu mở: Việt Nam đứng thứ mấy thế giới, Việt Nam và Hàn Quốc khác nhau ra sao, thế giới đã đổi thay thế nào qua vài chục năm.
+
+      📊 Nguồn: World Bank Open Data, Our World in Data, KOSIS (Thống kê Hàn Quốc) — ghi ngay trên hình và trong mô tả từng video.
+      ✅ Mọi con số được đối chiếu với bảng số gốc trước khi dựng video.
+      🤖 Giọng đọc do AI tạo. Kịch bản soạn với sự hỗ trợ của AI; chủ kênh duyệt từng video trước khi đăng.
+      🕖 Video mới mỗi ngày lúc 19:00 (giờ Việt Nam), video tổng hợp mỗi cuối tuần.
+    keywords: ["số liệu", "thế giới qua con số", "Việt Nam", "Hàn Quốc", "bản đồ", "biểu đồ", "thống kê", "dữ liệu",
+               "kinh tế", "so sánh các nước", "xếp hạng thế giới", "infographic"]
+  facebook_about: "Mỗi ngày một câu chuyện về Việt Nam và thế giới, kể bằng bản đồ, biểu đồ và số liệu thật."
+  tiktok_bio: "Thế giới kể bằng bản đồ, biểu đồ và số liệu thật 📊 Video mới mỗi ngày"

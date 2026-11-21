@@ -300,6 +300,12 @@ def run_daily(skip_ideas: bool = False, dry_run: bool = False, runner=run_step) 
         log.warning("Đang có một lượt daily khác chạy (%s) — lượt này thoát.", LOCK)
         return 0
     cfg, con = load_config(), db.connect()
+    if not dry_run:
+        try:
+            from . import backup
+            backup.snapshot()              # bản chụp DB mỗi ngày trên VM (giữ 14 bản) — src/backup.py
+        except Exception as exc:
+            log.warning("Sao lưu DB lỗi: %s", exc)
     try:
         return _run_daily(cfg, con, skip_ideas, dry_run, runner)
     finally:

@@ -175,9 +175,9 @@ def _publish_api(con, video: dict, cfg: dict) -> None:
         return
     try:
         # mỗi khung giờ một video: khung đã có video khác hẹn thì lùi sang ngày kế tiếp (_taken_times)
+        taken = _taken_times(con, "youtube", long=not video.get("script_id"))
         res = youtube.upload(ROOT / video["file"], video["title"], video["description"],
-                             video["tags"], yt,
-                             publish_at=youtube.compute_publish_at(yt, taken=_taken_times(con, "youtube")))
+                             video["tags"], yt, publish_at=youtube.compute_publish_at(yt, taken=taken))
     except youtube.YouTubeAuthError as exc:
         # Chưa cấp quyền / token hết hạn: thử lại cũng vô ích -> gửi gói để Du tự đăng hôm nay,
         # kèm cách sửa. Video về lại 'approved' nên nút "Đã đăng xong" của gói vẫn dùng được.
@@ -213,15 +213,25 @@ def _publish_api(con, video: dict, cfg: dict) -> None:
     elif res["privacy"] == "private" and not res["publish_at"]:
         msg += "\nVideo đang RIÊNG TƯ — vào YouTube Studio chuyển Công khai khi sẵn sàng."
     tg.send_message(msg)
+    try:
+        from .publish import playlists      # danh sách phát theo dạng video; lỗi không ảnh hưởng việc đăng
+        playlists.add(con, db.get_video(con, video["id"]), cfg)
+    except Exception as exc:
+        log.warning("Chưa thêm video #%s vào danh sách phát: %s", video["id"], exc)
 
 
-def _taken_times(con, kind: str, now: datetime = None) -> set:
+def _taken_times(con, kind: str, now: datetime = None, long: bool = False) -> set:
     """Các giờ (UTC "…Z") đã có video hẹn đăng trong TƯƠNG LAI trên một nền tảng — để video sau không hẹn trùng khung
-    (compute_publish_at lùi sang ngày kế tiếp). Ca thật 21/11: hai video kênh Hàn duyệt cùng lúc, cùng hẹn 19:00."""
+    (compute_publish_at lùi sang ngày kế tiếp). Ca thật 21/11: hai video kênh Hàn duyệt cùng lúc, cùng hẹn 19:00.
+
+    YouTube: Shorts chỉ tránh Shorts, video dài (script_id rỗng, `long`) chỉ tránh video dài — hai loại nằm ở hai kệ
+    khác nhau nên không giành người xem; cho video dài thứ Bảy chiếm khung 19:00 thì mọi Shorts sau đó lùi một ngày."""
     now = now or datetime.now(timezone.utc)
     z = lambda v: datetime.fromisoformat(str(v).replace("Z", "+00:00")).astimezone(timezone.utc)
     if kind == "youtube":
-        vals = [v for (v,) in con.execute("SELECT value FROM state WHERE key LIKE 'yt_publish_at_%'")]
+        rows = con.execute("SELECT s.value, v.id, v.script_id FROM state s LEFT JOIN videos v"
+                           " ON s.key = 'yt_publish_at_' || v.id WHERE s.key LIKE 'yt_publish_at_%'").fetchall()
+        vals = [v for v, vid, sid in rows if vid is None or (sid is None) == bool(long)]
     elif kind == "fb_post":
         vals = [v for (v,) in con.execute("SELECT value FROM state WHERE key LIKE 'fbpost_at_%'")]
     elif kind == "instagram":
@@ -242,6 +252,8 @@ def _taken_times(con, kind: str, now: datetime = None) -> set:
 def _local_times(utc_iso: str, yt: dict) -> str:
     """'2026-11-13T12:00:00Z' -> '19:00 13/11 giờ Việt Nam (21:00 giờ Hàn)'."""
     t = datetime.fromisoformat(utc_iso.replace("Z", "+00:00"))
+    if lang.code() == "ko":                  # kênh Hàn hẹn theo giờ Hàn (utc_offset_hours 9) — không ghi "giờ Việt Nam"
+        return f"{t + timedelta(hours=9):%H:%M %d/%m} giờ Hàn"
     vn = t + timedelta(hours=float(yt.get("utc_offset_hours", 7)))
     return f"{vn:%H:%M %d/%m} giờ Việt Nam ({t + timedelta(hours=9):%H:%M} giờ Hàn)"
 

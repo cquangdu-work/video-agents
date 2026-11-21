@@ -1,0 +1,186 @@
+"""Hồ sơ kênh (src/channel_profile.py), danh sách phát (src/publish/playlists.py), sao lưu (src/backup.py) — không
+gọi mạng thật: mọi lệnh HTTP đi qua hàm giả."""
+import json
+import sqlite3
+import zipfile
+from datetime import datetime, timezone
+from pathlib import Path
+from unittest import mock
+
+import yaml
+
+from src import backup, channel_profile as cp, db, lang
+from src import telegram_bot as tg
+from src.publish import facebook, playlists
+from tests.test_phase4 import DbCase
+
+ROOT = Path(__file__).resolve().parent.parent
+VI = yaml.safe_load((ROOT / "config" / "channel.yaml").read_text(encoding="utf-8"))
+KO = yaml.safe_load((ROOT / "config" / "channel_ko.yaml").read_text(encoding="utf-8"))
+
+
+class Resp:
+    def __init__(self, body=None, status=200):
+        self.status_code, self._body = status, body or {}
+        self.text = json.dumps(self._body)
+
+    def json(self):
+        return self._body
+
+
+class YouTubeProfileTest(DbCase):
+    CH = {"id": "UC1", "snippet": {"title": "K", "customUrl": "@숫자세계"},
+          "brandingSettings": {"channel": {"title": "K", "country": "KR"}}}
+
+    def test_plan_quotes_multiword_keywords_and_adds_contact_only_when_set(self):
+        plan = cp.youtube_plan(VI)
+        self.assertIn('"số liệu"', plan["keywords"])
+        self.assertIn(" infographic", plan["keywords"])
+        self.assertEqual((plan["defaultLanguage"], plan["country"]), ("vi", "KR"))
+        self.assertNotIn("📩", plan["description"])
+        cfg = json.loads(json.dumps(VI)); cfg["profile"]["contact_email"] = "kenh@example.com"
+        self.assertTrue(cp.youtube_plan(cfg)["description"].endswith("📩 Liên hệ hợp tác: kenh@example.com"))
+
+    def test_apply_keeps_existing_fields_uploads_banner_once(self):
+        sent = {}
+        get = lambda url, **kw: Resp({"items": [self.CH]})
+        post = lambda url, **kw: (sent.setdefault("banner", url), Resp({"url": "https://yt3/banner"}))[1]
+        put = lambda url, **kw: (sent.setdefault("body", kw["json"]), Resp({}))[1]
+        dry = cp.apply_youtube(self.con, VI, apply=False, token="T", get=get, post=post, put=put)
+        self.assertIn("YouTube: ảnh bìa", dry)
+        self.assertNotIn("body", sent)                                       # xem trước: không gửi gì
+        cp.apply_youtube(self.con, VI, apply=True, token="T", get=get, post=post, put=put)
+        ch = sent["body"]["brandingSettings"]["channel"]
+        self.assertEqual(ch["title"], "K")                                    # giữ trường đang có
+        self.assertEqual(ch["defaultLanguage"], "vi")
+        self.assertEqual(sent["body"]["brandingSettings"]["image"]["bannerExternalUrl"], "https://yt3/banner")
+        # lần sau: ảnh bìa đã có + cùng file -> không tải lại
+        self.CH = json.loads(json.dumps(self.CH))
+        self.CH["brandingSettings"].update(channel={**ch}, image={"bannerExternalUrl": "https://yt3/banner"})
+        get2 = lambda url, **kw: Resp({"items": [self.CH]})
+        self.assertEqual(cp.apply_youtube(self.con, VI, apply=False, token="T", get=get2), [])
+
+    def test_channel_url_encodes_korean_handle(self):
+        self.assertEqual(cp.channel_url(self.CH), "https://www.youtube.com/@%EC%88%AB%EC%9E%90%EC%84%B8%EA%B3%84")
+
+
+class FacebookProfileTest(DbCase):
+    def test_about_website_and_cover(self):
+        facebook._save({"id": "123", "name": "Trang", "access_token": "PAGE"},
+                       permissions=["pages_manage_metadata"])
+        calls = []
+
+        def get(url, params=None, **kw):
+            return Resp({"id": "123"})                                       # chưa có giới thiệu, chưa có ảnh bìa
+
+        def post(url, data=None, files=None, **kw):
+            calls.append((url.rsplit("/", 1)[-1], dict(data or {})))
+            return Resp({"id": "PHOTO9"} if url.endswith("/photos") else {"success": True})
+        changes = cp.apply_facebook(self.con, VI, "https://www.youtube.com/@thegioiquaconso", apply=True,
+                                    get=get, post=post)
+        self.assertIn("Facebook: ảnh bìa", changes)
+        self.assertEqual(calls[0][0], "photos")
+        self.assertEqual(calls[0][1]["published"], "false")                  # ảnh bìa không lên dòng thời gian
+        page = calls[1][1]
+        self.assertEqual(page["about"], VI["profile"]["facebook_about"])
+        self.assertEqual(page["website"], "https://www.youtube.com/@thegioiquaconso")
+        self.assertEqual((page["cover"], page["no_feed_story"]), ("PHOTO9", "true"))
+
+    def test_not_connected_does_nothing(self):
+        self.assertEqual(cp.apply_facebook(self.con, VI, None, apply=True), [])
+
+
+class KitTest(DbCase):
+    def test_vietnamese_kit(self):
+        with lang.using("vi"):
+            text = cp.kit_text(VI, "https://www.youtube.com/@thegioiquaconso", "https://www.facebook.com/1472",
+                               None, {"madeForKids": False, "longUploadsStatus": "allowed"})
+        self.assertIn(VI["profile"]["tiktok_bio"], text)
+        self.assertIn("@thegioiquaconso", text)                              # gợi ý tên người dùng cho Trang
+        self.assertIn("Gmail riêng", text)
+        self.assertNotIn("trẻ em", text)                                     # kênh Việt đã đặt
+
+    def test_korean_kit(self):
+        with lang.using("ko"):
+            text = cp.kit_text(KO, "https://www.youtube.com/@x", "https://www.facebook.com/1419", "sujaworld_du",
+                               {"longUploadsStatus": "eligible"})
+        self.assertIn("instagram.com/sujaworld_du", text)
+        self.assertIn("숫자세계 | 데이터로 보는 세계", text)
+        self.assertIn("không dành cho trẻ em", text)
+        self.assertIn("số điện thoại", text)
+        self.assertNotIn("TikTok", text)
+        self.assertNotIn("tên người dùng", text)                             # Trang kênh Hàn chỉ để liên kết
+
+
+class PlaylistTest(DbCase):
+    def setUp(self):
+        super().setUp()
+        self.con.execute("UPDATE ideas SET title='Bản đồ thế giới: điện', source_name='World Bank Open Data'")
+        self.con.commit()
+        self.vid = self.new_video()
+        db.update_video(self.con, self.vid, youtube_id="abc123")
+        self.cfg = {"publish": {"youtube": {"playlists": VI["publish"]["youtube"]["playlists"]}}}
+
+    def http(self, existing=()):
+        calls = []
+
+        class H:
+            @staticmethod
+            def get(url, params=None, **kw):
+                calls.append(("get", url, params))
+                return Resp({"items": [{"id": i, "snippet": {"title": t}} for i, t in existing]})
+
+            @staticmethod
+            def post(url, params=None, json=None, **kw):
+                calls.append(("post", url, json))
+                return Resp({"id": "PLnew"} if url.endswith("/playlists") else {"id": "item"})
+        return H, calls
+
+    def test_kind_and_creation_and_no_duplicates(self):
+        with mock.patch("src.learning.video_kind", return_value="ban-do"):
+            self.assertEqual(playlists.kind_of(self.con, db.get_video(self.con, self.vid)), "ban-do")
+            h, calls = self.http()
+            pid = playlists.add(self.con, db.get_video(self.con, self.vid), self.cfg, "T", h)
+            self.assertEqual(pid, "PLnew")
+            made = [c for c in calls if c[0] == "post" and c[1].endswith("/playlists")][0][2]
+            self.assertEqual(made["status"]["privacyStatus"], "public")
+            self.assertTrue(made["snippet"]["title"].startswith("Việt Nam đứng thứ mấy"))
+            item = [c for c in calls if c[1].endswith("/playlistItems")][0][2]["snippet"]
+            self.assertEqual((item["playlistId"], item["position"], item["resourceId"]["videoId"]), ("PLnew", 0, "abc123"))
+            n = len(calls)
+            playlists.add(self.con, db.get_video(self.con, self.vid), self.cfg, "T", h)   # lần hai: không gọi gì
+            self.assertEqual(len(calls), n)
+            self.assertEqual(playlists.pending(self.con), [])
+
+    def test_reuses_playlist_with_same_title(self):
+        title = self.cfg["publish"]["youtube"]["playlists"]["bieu-do"]["title"]
+        with mock.patch("src.learning.video_kind", return_value="bieu-do"):
+            h, calls = self.http(existing=[("PLold", title)])
+            self.assertEqual(playlists.add(self.con, db.get_video(self.con, self.vid), self.cfg, "T", h), "PLold")
+        self.assertFalse([c for c in calls if c[1].endswith("/playlists") and c[0] == "post"])
+
+    def test_long_video_and_disabled(self):
+        long_id = db.upsert_video(self.con, None, "output/long.mp4", "Tuần", "D", [], [])
+        self.assertEqual(playlists.kind_of(self.con, db.get_video(self.con, long_id)), playlists.LONG)
+        self.assertIsNone(playlists.add(self.con, db.get_video(self.con, self.vid), {"publish": {}}, "T"))
+        self.assertEqual(playlists.backfill(self.con, {"publish": {}}), 0)
+
+
+class BackupTest(DbCase):
+    def test_snapshot_rotates_and_weekly_bundle_is_sent(self):
+        for day in range(1, 18):
+            backup.snapshot(datetime(2026, 11, day, tzinfo=timezone.utc))
+        snaps = sorted(backup.backup_dir().glob("pipeline-*.db"))
+        self.assertEqual(len(snaps), backup.KEEP)
+        self.assertEqual(snaps[-1].name, "pipeline-20261117.db")
+        con = sqlite3.connect(snaps[-1])
+        self.assertEqual(con.execute("SELECT count(*) FROM scripts").fetchone()[0], 1)    # bản chụp đọc được
+        con.close()
+        from src.analysis import learned
+        Path(learned.LEARNED_PATH).write_text("x: 1\n", encoding="utf-8")
+        with mock.patch.object(tg, "send_document", return_value=1) as send:
+            self.assertTrue(backup.send_weekly(datetime(2026, 11, 22, tzinfo=timezone.utc)))
+        path = send.call_args[0][0]
+        with zipfile.ZipFile(path) as z:
+            self.assertEqual(sorted(z.namelist()), ["learned.yaml", "pipeline.db"])
+        self.assertNotIn(".secrets", str(path))

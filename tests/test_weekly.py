@@ -146,7 +146,8 @@ class WeeklyRunTest(unittest.TestCase):
         p.start(); self.addCleanup(p.stop)
         # agent Hiểu YouTube / Tin YouTube gọi mạng thật (Analytics, RSS) — có test riêng (test_yt_agents)
         for target in ("src.yt_news.fetch_feeds", "src.yt_insights.update", "src.analysis.big_channels.update",
-                       "src.fb_insights.update", "src.ig_insights.update"):
+                       "src.fb_insights.update", "src.ig_insights.update", "src.backup.send_weekly",
+                       "src.publish.playlists.backfill"):
             p = mock.patch(target, return_value=[]); p.start(); self.addCleanup(p.stop)
         self.root, self.con = root, db.connect()
         self.addCleanup(self.con.close)

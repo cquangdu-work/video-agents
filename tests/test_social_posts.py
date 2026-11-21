@@ -234,6 +234,19 @@ class SlotCollisionTest(DbCase):
         self.assertEqual(review._taken_times(self.con, "instagram"), {z(future)})
         self.assertEqual(review._taken_times(self.con, "facebook"), {z(future)})
 
+    def test_long_video_does_not_take_a_shorts_slot(self):
+        """Video dài thứ Bảy (script_id rỗng) chiếm 19:00 thì Shorts hôm đó vẫn đăng 19:00 — không thì mọi Shorts sau
+        đó lùi một ngày."""
+        z = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+        at1 = z((datetime.now(timezone.utc) + timedelta(days=1)).replace(microsecond=0))
+        at2 = z((datetime.now(timezone.utc) + timedelta(days=2)).replace(microsecond=0))
+        short = self.new_video()                                              # Shorts (có script_id)
+        long_id = db.upsert_video(self.con, None, "output/long_1.mp4", "Tuần qua", "Mô tả", [], [])
+        db.set_state(self.con, f"yt_publish_at_{short}", at1)
+        db.set_state(self.con, f"yt_publish_at_{long_id}", at2)
+        self.assertEqual(review._taken_times(self.con, "youtube"), {at1})
+        self.assertEqual(review._taken_times(self.con, "youtube", long=True), {at2})
+
 
 class FacebookAccessReminderTest(DbCase):
     def test_expiry_is_saved_and_reminded_once_a_day_in_the_last_week(self):

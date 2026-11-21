@@ -441,6 +441,17 @@ def _run_weekly(cfg, con, dry_run, use_telegram, now) -> str:
             fb_lines += ig_insights.update(con, cfg, now)      # AGENT INSTAGRAM (kênh Hàn, src/ig_insights.py)
         except Exception as exc:
             log.warning("Agent Instagram lỗi: %s", exc)
+        try:
+            from ..publish import playlists        # video đăng tay / lỗi lúc đăng: bổ sung vào danh sách phát
+            playlists.backfill(con, cfg, token)
+        except Exception as exc:
+            log.warning("Danh sách phát lỗi: %s", exc)
+        if use_telegram:
+            try:
+                from .. import backup              # SAO LƯU ra ngoài VM: DB + learned.yaml vào Telegram của Du
+                backup.send_weekly(now)
+            except Exception as exc:
+                log.warning("Sao lưu tuần lỗi: %s", exc)
         # Hai bước dưới PHẢI nằm trong nhánh chạy thật (không phải dry_run) — 20/11 từng lọt vào nhánh
         # else khi thêm agent Hiểu YouTube nên lượt Chủ nhật thật không cập nhật gì (test chốt chặn)
         try:
