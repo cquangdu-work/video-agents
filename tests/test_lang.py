@@ -36,7 +36,11 @@ class ChannelTest(unittest.TestCase):
         self.assertEqual(set(vi) - set(ko), set())
         self.assertEqual(ko["sources"]["worldbank"]["countries"][0]["iso3"], "KOR")
         self.assertEqual(ko["publish"]["youtube"]["utc_offset_hours"], 9)
-        self.assertFalse(ko["publish"]["facebook"]["enabled"])
+        # Trang Facebook kênh Hàn: Du bật 21/11/2026 (Reel + bài viết), mọi giờ theo giờ Hàn
+        fb = ko["publish"]["facebook"]
+        self.assertTrue(fb["enabled"] and fb["posts"]["enabled"])
+        self.assertEqual(fb["utc_offset_hours"], 9)
+        self.assertFalse(ko["publish"]["tiktok"]["enabled"])
 
     def test_unknown_language_is_refused(self):
         with self.assertRaises(ValueError):

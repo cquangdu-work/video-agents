@@ -268,7 +268,19 @@ publish:
   tiktok:
     enabled: false              # bật khi có tài khoản TikTok tiếng Hàn
   facebook:
-    enabled: false              # không đăng lên Trang: Trang chỉ để LIÊN KẾT tài khoản Instagram (src/publish/instagram.py)
+    # Trang 숫자세계: Reel + bài viết mỗi ngày (Du bật 21/11/2026 — trước đó Trang chỉ để liên kết Instagram). Bài viết
+    # DÙNG CHUNG với Instagram (một lần viết, một bản xem trước — review.prepare_ig_post).
+    enabled: true
+    page_id: null
+    video_state: SCHEDULED      # hẹn giờ theo khung dưới đây
+    publish_time_local: "19:00" # giờ dự phòng (giờ Hàn)
+    # agent Facebook (src/fb_insights.py) THỬ các khung (giờ Hàn), Chủ nhật đo lượt phát/ngày, khung tốt dùng nhiều hơn
+    slots: ["12:00", "19:00", "21:00"]
+    utc_offset_hours: 9
+    ai_generated: true          # nhãn "AI info" của Meta (giọng đọc AI)
+    posts:
+      enabled: true
+      post_time_local: "11:30"  # giờ Hàn — trước bài Instagram 12:30
   instagram:
     # Reels lên Instagram (Du xin 20/11/2026), chỉ sau ✅. Kết nối: "/facebook <token>" cho bot kênh Hàn với Trang đã
     # liên kết tài khoản Instagram chuyên nghiệp, tích instagram_basic + instagram_content_publish.

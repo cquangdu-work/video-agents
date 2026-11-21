@@ -313,11 +313,21 @@ def prepare_fb_post(con, video_id: int, script_id: int, row: dict, scenes: list,
                         " đăng Reel.", reply_to=reply_to)
         return
     text = fb_post.with_hashtags(text, cfg)
-    img = fb_post.image(script_id)
+    # ảnh 4:5 (21/11/2026): bảng tin Facebook hiện ảnh dọc tối đa 4:5 — ảnh 9:16 bị cắt giữa, mất tiêu đề. Cùng ảnh với
+    # bài viết Instagram (kênh có cả hai nền tảng dùng chung ảnh + chữ, xem prepare_ig_post)
+    img = fb_post.image_4x5(script_id)
+    both = bool(_ig_post_cfg(cfg))
     if img:
-        tg.send_photo(img, caption="📝 Ảnh của bài viết Facebook (đăng kèm video khi bấm ✅)", reply_to=reply_to)
-    msg = tg.send_message("📝 Bài viết Facebook sẽ đăng kèm (bấm ✅ ở video là duyệt cả bài này; TRẢ LỜI tin này bằng"
+        tg.send_photo(img, caption="📝 Ảnh của bài viết Facebook" + (" + Instagram" if both else "")
+                      + " (đăng kèm video khi bấm ✅)", reply_to=reply_to)
+    msg = tg.send_message("📝 Bài viết Facebook" + (" + Instagram (chung một bài)" if both else "")
+                          + " sẽ đăng kèm (bấm ✅ ở video là duyệt cả bài này; TRẢ LỜI tin này bằng"
                           " nội dung khác để sửa):\n\n" + text, reply_to=reply_to)
+    if lang.code() != "vi":                      # bản dịch để Du hiểu bài (máy dịch; số đã được code đối chiếu)
+        from .crew import translate_for_review
+        tr = translate_for_review([l for l in text.splitlines() if l.strip()])
+        if tr:
+            tg.send_message("🇻🇳 Dịch bài viết (máy dịch, chỉ để hiểu):\n\n" + tr[:3500], reply_to=msg)
     db.update_video(con, video_id, fb_post=text, fb_post_image=str(img) if img else None, fb_post_msg=msg)
 
 
@@ -427,6 +437,15 @@ def prepare_ig_post(con, video_id: int, script_id: int, row: dict, scenes: list,
     from .publish import instagram
     if not _ig_post_cfg(cfg) or not instagram.ready():
         return
+    topic = ["#" + re.sub(r"\s+", "", str(t)) for t in tags if str(t).strip()]
+    shared = db.get_video(con, video_id) or {}
+    if shared.get("fb_post") and shared.get("fb_post_image"):
+        # Kênh có cả Trang Facebook (Du bật cho kênh Hàn 21/11/2026): DÙNG CHUNG bài viết Facebook vừa soạn — một lần
+        # gọi model, một bản xem trước; trả lời tin xem trước đó là sửa cả hai (cùng ig_post_msg = fb_post_msg)
+        text = fb_post.with_hashtags(fb_post.strip_hashtags(shared["fb_post"]), cfg, topic, limit=4)
+        db.update_video(con, video_id, ig_post=text, ig_post_image=shared["fb_post_image"],
+                        ig_post_msg=shared.get("fb_post_msg"))
+        return
     voices = [str(s.get("voice") or "") for s in scenes if isinstance(s, dict) and s.get("voice")]
     idea = {k: row.get(k) for k in ("title", "summary", "source_url", "source_name")}
     text = fb_post.draft(idea, voices, cfg, platform="instagram")
@@ -438,7 +457,6 @@ def prepare_ig_post(con, video_id: int, script_id: int, row: dict, scenes: list,
     if not img:                                  # Instagram không đăng bài chữ không ảnh
         tg.send_message("ℹ️ Không vẽ được ảnh cho bài viết Instagram — chỉ đăng Reel.", reply_to=reply_to)
         return
-    topic = ["#" + re.sub(r"\s+", "", str(t)) for t in tags if str(t).strip()]
     text = fb_post.with_hashtags(text, cfg, topic, limit=4)
     tg.send_photo(img, caption="📸 Ảnh của bài viết Instagram (đăng kèm khi bấm ✅)", reply_to=reply_to)
     msg = tg.send_message("📸 Bài viết Instagram sẽ đăng kèm (bấm ✅ ở video là duyệt cả bài này; TRẢ LỜI tin này bằng"
@@ -1069,26 +1087,27 @@ def _handle_message(con, msg: dict) -> None:
     if reply_mid:
         # trả lời TIN CỦA MỘT BÌNH LUẬN (agent Cộng đồng) = câu Du muốn kênh đăng — xét TRƯỚC link YouTube:
         # câu trả lời có thể chứa link video mà không được hiểu thành "gắn link cho video"
-        post_of = con.execute("SELECT id, status FROM videos WHERE fb_post_msg=?", (reply_mid,)).fetchone()
-        if post_of:                          # Du sửa bài viết Facebook đi kèm video (src/fb_post.py)
-            if post_of["status"] not in ("pending_review", "approved"):
+        post_of = con.execute("SELECT id, status, fb_post_msg, ig_post_msg, ig_post, ig_post_id FROM videos"
+                              " WHERE fb_post_msg=? OR ig_post_msg=?", (reply_mid, reply_mid)).fetchone()
+        if post_of:                          # Du sửa bài viết Facebook / Instagram đi kèm video (src/fb_post.py)
+            from . import fb_post
+            now_cfg, changed = load_config(), []
+            # Facebook: bài được gửi sang Facebook (hẹn giờ) ngay lúc ✅ -> chỉ sửa được trước đó
+            if post_of["fb_post_msg"] == reply_mid and post_of["status"] in ("pending_review", "approved"):
+                db.update_video(con, post_of["id"], fb_post=fb_post.with_hashtags(text.strip(), now_cfg))
+                changed.append("Facebook")
+            # Instagram: bot đăng lúc tới giờ hẹn -> sửa được tới khi đăng; giữ bộ hashtag riêng của Instagram
+            if post_of["ig_post_msg"] == reply_mid and not post_of["ig_post_id"] \
+                    and post_of["status"] in ("pending_review", "approved", "published"):
+                tags = [l.strip() for l in str(post_of["ig_post"] or "").splitlines() if l.strip().startswith("#")]
+                new = text.strip() + ("\n\n" + tags[-1] if tags else "")
+                db.update_video(con, post_of["id"], ig_post=new if tags else fb_post.with_hashtags(text.strip(), now_cfg))
+                changed.append("Instagram")
+            if not changed:
                 tg.send_message("Bài viết này đã đăng hoặc video đã bị loại — không sửa được nữa.")
                 return
-            from . import fb_post
-            new = fb_post.with_hashtags(text.strip(), load_config())
-            db.update_video(con, post_of["id"], fb_post=new)
-            tg.send_message(f"✏️ Đã thay nội dung bài viết Facebook của video #{post_of['id']} bằng câu của Du"
-                            " (đăng khi video được ✅).")
-            return
-        ig_of = con.execute("SELECT id, status, ig_post_id FROM videos WHERE ig_post_msg=?", (reply_mid,)).fetchone()
-        if ig_of:                            # Du sửa bài viết Instagram đi kèm video
-            if ig_of["ig_post_id"] or ig_of["status"] not in ("pending_review", "approved", "published"):
-                tg.send_message("Bài viết này đã đăng hoặc video đã bị loại — không sửa được nữa.")
-                return
-            from . import fb_post
-            db.update_video(con, ig_of["id"], ig_post=fb_post.with_hashtags(text.strip(), load_config()))
-            tg.send_message(f"✏️ Đã thay nội dung bài viết Instagram của video #{ig_of['id']} bằng câu của Du"
-                            " (bot đăng khi tới giờ hẹn).")
+            tg.send_message(f"✏️ Đã thay nội dung bài viết {' + '.join(changed)} của video #{post_of['id']} bằng câu"
+                            " của Du (đăng khi video được ✅ / tới giờ hẹn).")
             return
         card = con.execute("SELECT id, status FROM comments WHERE tg_message_id=?", (reply_mid,)).fetchone()
         if card:

@@ -109,7 +109,7 @@ class BotPostTest(DbCase):
 
     def test_preview_edit_and_publish_once(self):
         with mock.patch.object(fb_post, "draft", return_value="Bài gốc"), \
-                mock.patch.object(fb_post, "image", return_value=self.img):
+                mock.patch.object(fb_post, "image_4x5", return_value=self.img):
             review.prepare_fb_post(self.con, self.vid, 6, {"title": "t", "summary": "s"}, [{"voice": "v"}], self.cfg, 50)
         v = db.get_video(self.con, self.vid)
         self.assertTrue(v["fb_post"].startswith("Bài gốc"))
@@ -134,10 +134,34 @@ class BotPostTest(DbCase):
             review.prepare_fb_post(self.con, self.vid, 6, {}, [], self.cfg, 50)
         d.assert_not_called()
         self.cfg["publish"]["facebook"]["posts"]["enabled"] = True
-        with mock.patch.object(fb_post, "draft", return_value=""), mock.patch.object(fb_post, "image") as im:
+        with mock.patch.object(fb_post, "draft", return_value=""), mock.patch.object(fb_post, "image_4x5") as im:
             review.prepare_fb_post(self.con, self.vid, 6, {}, [], self.cfg, 50)
         im.assert_not_called()
         self.assertIn("chỉ đăng Reel", self.msgs()[-1])
+
+    def test_facebook_and_instagram_share_one_post(self):
+        """Kênh Hàn bật cả Trang Facebook (21/11/2026): một lần viết, một bản xem trước, một lần trả lời sửa cả hai;
+        Instagram giữ bộ hashtag riêng (thêm hashtag chủ đề)."""
+        facebook._save({"id": "123", "name": "Kênh", "access_token": "PAGE"},
+                       permissions=list(facebook.NEEDED) + list(instagram.NEEDED))
+        self.cfg["publish"]["instagram"] = {"enabled": True, "publish_time_local": "19:00", "utc_offset_hours": 9,
+                                            "posts": {"enabled": True, "post_time_local": "12:30"}}
+        with mock.patch.object(fb_post, "draft", return_value="Bài chung") as d, \
+                mock.patch.object(fb_post, "image_4x5", return_value=self.img) as im:
+            review.prepare_fb_post(self.con, self.vid, 6, {"title": "t", "summary": "s"}, [{"voice": "v"}], self.cfg, 50)
+            review.prepare_ig_post(self.con, self.vid, 6, {"title": "t", "summary": "s"}, [{"voice": "v"}], self.cfg,
+                                   50, tags=["điện tái tạo"])
+        self.assertEqual((d.call_count, im.call_count), (1, 1))                     # một lần viết, một ảnh
+        v = db.get_video(self.con, self.vid)
+        self.assertEqual(v["ig_post_msg"], v["fb_post_msg"])
+        self.assertEqual(v["ig_post_image"], v["fb_post_image"])
+        self.assertIn("#điệntáitạo", v["ig_post"])
+        self.assertNotIn("#điệntáitạo", v["fb_post"])
+        review.handle_update(self.con, text("Du viết lại", reply_to=v["fb_post_msg"]), self.cfg)
+        v = db.get_video(self.con, self.vid)
+        self.assertTrue(v["fb_post"].startswith("Du viết lại") and v["ig_post"].startswith("Du viết lại"))
+        self.assertIn("#điệntáitạo", v["ig_post"])                                  # hashtag Instagram còn nguyên
+        self.assertIn("Facebook + Instagram", self.msgs()[-1])
 
 
 class InstagramTest(DbCase):

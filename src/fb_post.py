@@ -103,6 +103,11 @@ Luật chính sách: {cfg.get('policy_rules', '')}"""
     return ""
 
 
+def strip_hashtags(text: str) -> str:
+    """Bỏ các dòng chỉ gồm hashtag (with_hashtags gắn ở cuối) — để gắn bộ hashtag khác cho nền tảng khác."""
+    return re.sub(r"(?m)^\s*#\S+(\s+#\S+)*\s*$", "", str(text or "")).strip()
+
+
 def with_hashtags(text: str, cfg: dict, tags=(), limit: int = 2) -> str:
     """Thêm hashtag cố định của kênh (bỏ #Shorts — chỉ YouTube dùng) + tối đa `limit` hashtag chủ đề."""
     fixed = [h for h in (cfg.get("publish") or {}).get("hashtags_fixed", []) if h.lower() != "#shorts"]
