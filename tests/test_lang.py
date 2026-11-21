@@ -40,7 +40,9 @@ class ChannelTest(unittest.TestCase):
         fb = ko["publish"]["facebook"]
         self.assertTrue(fb["enabled"] and fb["posts"]["enabled"])
         self.assertEqual(fb["utc_offset_hours"], 9)
-        self.assertFalse(ko["publish"]["tiktok"]["enabled"])
+        # TikTok (tài khoản đăng ký ở Hàn) chuyển từ kênh Việt sang kênh Hàn 21/11/2026 — chỉ MỘT kênh dùng token
+        self.assertTrue(ko["publish"]["tiktok"]["enabled"])
+        self.assertFalse(vi["publish"]["tiktok"]["enabled"])
 
     def test_unknown_language_is_refused(self):
         with self.assertRaises(ValueError):

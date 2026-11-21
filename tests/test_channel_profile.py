@@ -95,7 +95,7 @@ class KitTest(DbCase):
         with lang.using("vi"):
             text = cp.kit_text(VI, "https://www.youtube.com/@thegioiquaconso", "https://www.facebook.com/1472",
                                None, {"madeForKids": False, "longUploadsStatus": "allowed"})
-        self.assertIn(VI["profile"]["tiktok_bio"], text)
+        self.assertNotIn("TikTok", text)                                     # TikTok chuyển sang kênh Hàn 21/11
         self.assertIn("@thegioiquaconso", text)                              # gợi ý tên người dùng cho Trang
         self.assertIn("Gmail riêng", text)
         self.assertNotIn("trẻ em", text)                                     # kênh Việt đã đặt
@@ -107,8 +107,9 @@ class KitTest(DbCase):
         self.assertIn("instagram.com/sujaworld_du", text)
         self.assertIn("숫자세계 | 데이터로 보는 세계", text)
         self.assertIn("không dành cho trẻ em", text)
-        self.assertNotIn("TikTok", text)
-        self.assertNotIn("tên người dùng", text)                             # Trang kênh Hàn chỉ để liên kết
+        self.assertIn(KO["profile"]["tiktok_bio"], text)                     # TikTok chuyển sang kênh Hàn 21/11
+        self.assertIn("facebook.com/1419", text)                             # Trang Hàn đã bật -> link trên YouTube
+        self.assertNotIn("tên người dùng", text)
         # ca thật 21/11: chỉ có Shorts -> không đòi xác minh số điện thoại (số của Du đã dùng đủ 2 kênh/năm)
         self.assertNotIn("số điện thoại", text)
         with lang.using("ko"):

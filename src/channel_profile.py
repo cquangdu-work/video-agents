@@ -205,13 +205,15 @@ def kit_text(cfg: dict, yt_url: str = None, fb_link: str = None, ig_username: st
     mỗi số mỗi năm), kênh Hàn chỉ có Shorts nên không cần bước này."""
     p = profile(cfg)
     ko = lang.code() == "ko"
+    pub = cfg.get("publish") or {}
+    has_tiktok = bool((pub.get("tiktok") or {}).get("enabled"))      # 21/11/2026: TikTok chuyển sang kênh Hàn
     steps = []
     links = []
-    if fb_link and not ko:
+    if fb_link and (not ko or (pub.get("facebook") or {}).get("enabled")):
         links.append(f"• Facebook: {_pre(fb_link)}")
     if ig_username:
         links.append(f"• Instagram: {_pre('https://www.instagram.com/' + ig_username)}")
-    if not ko:
+    if has_tiktok:
         links.append("• TikTok: link hồ sơ TikTok của kênh")
     if links:
         steps.append("YouTube Studio → <b>Tuỳ chỉnh</b> → <b>Thông tin cơ bản</b> → <b>Đường liên kết</b> → thêm:\n"
@@ -233,7 +235,7 @@ def kit_text(cfg: dict, yt_url: str = None, fb_link: str = None, ig_username: st
         if yt_url:
             ig.append(f"• Liên kết (YouTube): {_pre(yt_url)}")
         steps.append("\n".join(ig))
-    if p.get("tiktok_bio"):
+    if has_tiktok and p.get("tiktok_bio"):
         steps.append(f"TikTok → <b>Sửa hồ sơ</b> → Tiểu sử: {_pre(p['tiktok_bio'])}")
     tail = (fb_link or "").rstrip("/").split("/")[-1]
     if fb_link and not ko and ("profile.php" in fb_link or tail.isdigit()):    # Trang kênh Hàn chỉ để liên kết

@@ -266,7 +266,10 @@ publish:
         title: "숫자로 본 한 주"
         description: "한 주 동안의 데이터 이야기를 챕터별로 모은 영상."
   tiktok:
-    enabled: false              # bật khi có tài khoản TikTok tiếng Hàn
+    # BẬT 21/11/2026 (Du: "đổi luôn"): tài khoản TikTok của Du (đăng ký ở Hàn, Target user của app Sandbox) chuyển từ
+    # kênh Việt sang kênh Hàn. Vẫn là hộp thư: bot đẩy bản nháp, Du mở app dán chú thích + bật "AI" rồi đăng.
+    # Token ở .secrets/tiktok_token.json của THƯ MỤC KÊNH HÀN (đã CHUYỂN từ kênh Việt, không chép — refresh token xoay vòng).
+    enabled: true
   facebook:
     # Trang 숫자세계: Reel + bài viết mỗi ngày (Du bật 21/11/2026 — trước đó Trang chỉ để liên kết Instagram). Bài viết
     # DÙNG CHUNG với Instagram (một lần viết, một bản xem trước — review.prepare_ig_post).
@@ -321,6 +324,7 @@ profile:
     keywords: ["숫자세계", "데이터", "통계", "세계 순위", "한국", "일본", "OECD", "지도", "그래프", "경제", "인구",
                "데이터 시각화", "인포그래픽"]
   facebook_about: "숫자로 보는 한국과 세계 — 지도와 그래프로 매일 한 편씩."
+  tiktok_bio: "숫자로 보는 한국과 세계 📊 지도·그래프·순위 레이스, 매일 새 영상"
   instagram_name: "숫자세계 | 데이터로 보는 세계"
   instagram_bio: "숫자로 보는 한국과 세계 📊\n지도·그래프·순위 레이스\n매일 저녁 7시 새 영상"
   # Bài giới thiệu ghim đầu trang Instagram (ảnh assets/brand/ko/instagram_intro.jpg — src/brand_kit.py), đăng MỘT lần

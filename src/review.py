@@ -632,6 +632,7 @@ def tiktok_caption(video: dict) -> str:
     lines = [l.strip() for l in str(video.get("description") or "").splitlines()]
     keep = [l for l in lines if l.startswith(("Nguồn:", "Nhạc nền:", "출처:", "배경음악:"))]
     tags = next((l for l in reversed(lines) if l.startswith("#")), "")
+    tags = " ".join(w for w in tags.split() if w.lower() != "#shorts")     # #Shorts là của YouTube
     return "\n".join(x for x in [video.get("title") or "", "", *keep, tags] if x is not None).strip()
 
 

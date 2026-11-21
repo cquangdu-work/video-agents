@@ -364,7 +364,9 @@ publish:
     # Đẩy video đã duyệt vào HỘP THƯ TikTok (bản nháp) — Du mở app, chạm thông báo, dán chú thích,
     # bật "Nội dung do AI tạo" rồi đăng. Cần TIKTOK_CLIENT_KEY/SECRET trong .env + gửi /tiktok cho bot
     # để kết nối; chưa có khoá thì bỏ qua trong im lặng.
-    enabled: true
+    # TẮT từ 21/11/2026: Du chuyển tài khoản TikTok (đăng ký ở Hàn) sang nội dung kênh Hàn — Creator Rewards chỉ tính
+    # lượt xem từ nước có chương trình (có Hàn, không có Việt Nam), và tài khoản ở Hàn được đẩy tới người xem Hàn trước.
+    enabled: false
   facebook:
     # Đăng Reels lên Trang Facebook của kênh (src/publish/facebook.py), chỉ sau khi Du bấm ✅. Cần
     # FACEBOOK_APP_ID/SECRET trong .env + gửi "/facebook <token>" cho bot; chưa có khoá thì bỏ qua im lặng.
