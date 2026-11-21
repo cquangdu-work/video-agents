@@ -58,14 +58,16 @@ export const RemotionRoot: React.FC = () => (
       defaultProps={artEmpty}
       calculateMetadata={({ props }) => ({ width: props.width, height: props.height })}
     />
-    {/* Hình thu nhỏ video dài hằng tuần (src/longform.py) */}
+    {/* Hình thu nhỏ video dài hằng tuần (src/longform.py). Ảnh tĩnh nhưng durationInFrames DÀI: Remotion ép số khung
+        về [0, durationInFrames-1] kể cả bên trong <Freeze> — bản đầu dài 1 khung nên mọi Shorts bị dừng ở khung 0
+        (số đếm còn "0", bản đồ chưa tô). */}
     <Composition
       id="Thumb"
       component={Thumb}
       width={1280}
       height={720}
       fps={30}
-      durationInFrames={1}
+      durationInFrames={9000}
       defaultProps={{ brand: empty.brand, series: "TUẦN QUA CON SỐ", count: 5, label: ["CÂU CHUYỆN", "QUA CON SỐ"],
         span: "", cards: [] } as ThumbProps}
     />
