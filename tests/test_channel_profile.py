@@ -107,9 +107,13 @@ class KitTest(DbCase):
         self.assertIn("instagram.com/sujaworld_du", text)
         self.assertIn("숫자세계 | 데이터로 보는 세계", text)
         self.assertIn("không dành cho trẻ em", text)
-        self.assertIn("số điện thoại", text)
         self.assertNotIn("TikTok", text)
         self.assertNotIn("tên người dùng", text)                             # Trang kênh Hàn chỉ để liên kết
+        # ca thật 21/11: chỉ có Shorts -> không đòi xác minh số điện thoại (số của Du đã dùng đủ 2 kênh/năm)
+        self.assertNotIn("số điện thoại", text)
+        with lang.using("ko"):
+            text = cp.kit_text(KO, None, None, None, {"longUploadsStatus": "eligible"}, long_videos=True)
+        self.assertIn("số điện thoại", text)
 
 
 class PlaylistTest(DbCase):

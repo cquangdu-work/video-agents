@@ -176,8 +176,12 @@ def _pre(text: str) -> str:
 
 
 def kit_text(cfg: dict, yt_url: str = None, fb_link: str = None, ig_username: str = None,
-             yt_settings: dict = None) -> str:
-    """Tin Telegram: những việc API không làm được, kèm chữ chạm-để-copy. Không có việc nào -> ""."""
+             yt_settings: dict = None, long_videos: bool = False) -> str:
+    """Tin Telegram: những việc API không làm được, kèm chữ chạm-để-copy. Không có việc nào -> "".
+
+    Xác minh số điện thoại chỉ nhắc khi kênh CÓ video dài (`long_videos`): nó mở hình thu nhỏ tự chọn / video trên 15
+    phút — Shorts không cần. Ca thật 21/11: số điện thoại Hàn của Du đã xác minh đủ 2 kênh (YouTube giới hạn 2 kênh
+    mỗi số mỗi năm), kênh Hàn chỉ có Shorts nên không cần bước này."""
     p = profile(cfg)
     ko = lang.code() == "ko"
     steps = []
@@ -195,9 +199,10 @@ def kit_text(cfg: dict, yt_url: str = None, fb_link: str = None, ig_username: st
     if "madeForKids" not in st and "selfDeclaredMadeForKids" not in st:
         steps.append("YouTube Studio → <b>Cài đặt</b> → <b>Kênh</b> → <b>Cài đặt nâng cao</b> → Đối tượng người xem:"
                      " chọn <b>Không, kênh này không dành cho trẻ em</b> (kênh này chưa đặt).")
-    if st.get("longUploadsStatus") in ("eligible", "disallowed"):
+    if long_videos and st.get("longUploadsStatus") in ("eligible", "disallowed"):
         steps.append("YouTube Studio → <b>Cài đặt</b> → <b>Kênh</b> → <b>Điều kiện sử dụng tính năng</b> → xác minh"
-                     " số điện thoại (mở hình thu nhỏ tự chọn cho video dài, video trên 15 phút).")
+                     " số điện thoại (mở hình thu nhỏ tự chọn cho video dài, video trên 15 phút). Mỗi số chỉ xác minh"
+                     " được 2 kênh mỗi năm.")
     if ig_username or p.get("instagram_bio"):
         ig = ["Instagram → <b>Chỉnh sửa trang cá nhân</b>:"]
         if p.get("instagram_name"):
@@ -248,7 +253,12 @@ def send_kit(cfg: dict) -> bool:
                 ig = instagram.account().get("username")
             except Exception as exc:
                 log.warning("Chưa đọc được Instagram: %s", exc)
-    text = kit_text(cfg, yt_url, fb_link, ig, st)
+    con = db.connect()
+    try:                                        # kênh có video dài (script_id rỗng) chưa?
+        long_videos = con.execute("SELECT 1 FROM videos WHERE script_id IS NULL LIMIT 1").fetchone() is not None
+    finally:
+        con.close()
+    text = kit_text(cfg, yt_url, fb_link, ig, st, long_videos)
     return bool(text) and bool(tg.send_message(text, as_html=True))
 
 
