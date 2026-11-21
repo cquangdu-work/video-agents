@@ -229,11 +229,15 @@ def thumbnail_for(video: dict) -> Path:
     m_span = re.search(r"\d{1,2}[/.]\d{1,2}\s*[–-]\s*\d{1,2}[/.]\d{1,2}", title)
     if not (m_n and m_span):
         return None
+    made = datetime.fromisoformat(video["created_at"])
     con = db.connect()
     try:
-        week = week_videos(con, datetime.fromisoformat(video["created_at"]))
+        week = week_videos(con, made)
     finally:
         con.close()
+    # week_videos chỉ có mốc ĐẦU (lúc dựng thật thì chưa có gì mới hơn); dựng bổ sung cho video cũ phải bỏ Shorts
+    # đăng SAU video dài (ca thật 21/11: hình của tuần 13-17/11 lấy cả video điện tái tạo đăng ngày 20/11)
+    week = [v for v in week if datetime.fromisoformat(v["published_at"]) <= made]
     stories = []
     for v in week:
         f = RENDER / f"web_{v['script_id']}.props.json"

@@ -216,6 +216,16 @@ class LongThumbTest(DbCase):
                 mock.patch.object(longform, "thumbnail", return_value="T") as th:
             longform.thumbnail_for(v)
         self.assertEqual(th.call_args[0][1:3], (7, "15/11–21/11"))
+        # Shorts đăng SAU video dài không được vào hình của tuần đó
+        week = [{"script_id": 1, "published_at": "2026-11-20T10:00:00+00:00"},
+                {"script_id": 2, "published_at": "2026-11-22T10:00:00+00:00"}]
+        with mock.patch.object(longform, "week_videos", return_value=week), \
+                mock.patch.object(longform, "RENDER", self.root), \
+                mock.patch.object(longform, "thumbnail", return_value="T") as th:
+            for sid in (1, 2):
+                (self.root / f"web_{sid}.props.json").write_text(json.dumps({"id": sid}), encoding="utf-8")
+            longform.thumbnail_for(v)
+        self.assertEqual(th.call_args[0][0], [{"id": 1}])
         v["title"] = "숫자로 본 이번 주 이야기 7편 (11.15–11.21) | 한국과 세계"
         with mock.patch.object(longform, "week_videos", return_value=[]), \
                 mock.patch.object(longform, "thumbnail", return_value="T") as th:
