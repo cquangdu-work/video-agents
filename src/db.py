@@ -11,7 +11,7 @@ Vòng đời một video (bảng videos, giai đoạn 4):
 """
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from .utils import norm_title, similarity
@@ -224,6 +224,16 @@ def todays_raw(con, limit: int = 60):
     rows = con.execute(
         "SELECT * FROM ideas WHERE status='raw' ORDER BY id DESC LIMIT ?", (limit,)
     ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def stuck_candidates(con, max_age_days: float = 3, now: datetime = None) -> list:
+    """Ý tưởng đã được Săn ý tưởng chọn ('candidate') nhưng lượt chạy SẬP trước khi xử lý xong — lượt sau phải nhặt lại.
+    Ca thật 22/11/2026 kênh Hàn: khoá Gemini bị chặn NGAY SAU bước Săn ý tưởng -> 6 ứng viên kẹt ở 'candidate', lượt
+    chạy lại chỉ đọc ý tưởng 'raw' (đều đã xét) nên ra 0 kịch bản. Chỉ nhặt ứng viên trong `max_age_days` ngày."""
+    since = ((now or datetime.now(timezone.utc)) - timedelta(days=max_age_days)).isoformat(timespec="seconds")
+    rows = con.execute("SELECT * FROM ideas WHERE status='candidate' AND created_at >= ? ORDER BY id DESC",
+                       (since,)).fetchall()
     return [dict(r) for r in rows]
 
 

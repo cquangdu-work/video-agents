@@ -19,6 +19,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
@@ -254,6 +255,24 @@ def plan_steps(script_id: int) -> list:
     return steps
 
 
+# Lỗi đã biết -> câu giải thích + cách sửa cho tin Telegram (bản đầu chỉ báo "mã thoát 1", Du phải mở log mới biết
+# — ca thật 22/11/2026: khoá Gemini kênh Hàn bị Google chặn, tin chỉ ghi "Bước ý tưởng/kịch bản lỗi (mã thoát 1)")
+KNOWN_ERRORS = [
+    (re.compile(r"free tier is not available|PERMISSION_DENIED|has been denied access", re.I),
+     "Khoá Gemini (GEMINI_API_KEY trong .env) bị Google chặn — project không được dùng gói miễn phí. Cần đổi khoá"
+     " hoặc bật thanh toán cho project đó."),
+    (re.compile(r"API key not valid|API_KEY_INVALID", re.I),
+     "Khoá Gemini sai hoặc đã bị xoá (GEMINI_API_KEY trong .env)."),
+    (re.compile(r"RESOURCE_EXHAUSTED|\b429\b", re.I),
+     "Hết hạn mức Gemini miễn phí hôm nay — lượt chạy bù buổi chiều sẽ làm tiếp."),
+]
+
+
+def explain(tail: str) -> str:
+    """Câu giải thích cho lỗi đã biết trong mấy dòng log cuối; không nhận ra -> ""."""
+    return next((msg for rx, msg in KNOWN_ERRORS if rx.search(tail or "")), "")
+
+
 def run_step(name: str, key: str, args: list, log_file: Path) -> tuple:
     """Chạy một bước bằng tiến trình con. Trả về (thành công?, mấy dòng cuối để báo lỗi)."""
     log.info("▶ %s: python %s", name, " ".join(args))
@@ -329,7 +348,8 @@ def _run_daily(cfg, con, skip_ideas, dry_run, runner) -> int:
         ok, tail = runner("Săn ý tưởng + viết kịch bản", "ideas",
                           ["-m", "src.main", "--no-telegram"], log_file)
         if not ok:      # vẫn đi tiếp: có thể còn kịch bản tốt từ hôm trước
-            problems.append(f"Bước ý tưởng/kịch bản lỗi ({tail.splitlines()[0]})")
+            hint = explain(tail)
+            problems.append(f"Bước ý tưởng/kịch bản lỗi ({tail.splitlines()[0]})" + (f"\n→ {hint}" if hint else ""))
 
     candidates = pick_candidates(con, cfg)
     if dry_run:
@@ -352,7 +372,8 @@ def _run_daily(cfg, con, skip_ideas, dry_run, runner) -> int:
             ok, tail = runner(name, key, args, log_file)
             if not ok:
                 retry_later = tail.splitlines()[:1] == [f"mã thoát {EXIT_RETRY_LATER}"]
-                failed = f"Kịch bản #{c['id']} hỏng ở bước “{name}”: {tail}"
+                hint = explain(tail)
+                failed = f"Kịch bản #{c['id']} hỏng ở bước “{name}”: {tail}" + (f"\n→ {hint}" if hint else "")
                 break
         if retry_later:
             # Hết quota giọng đọc: KHÔNG phải lỗi của kịch bản -> không tính lần hỏng

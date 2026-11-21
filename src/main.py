@@ -54,14 +54,18 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
     from .telegram_bot import format_script_message, send_message
 
     raw = db.todays_raw(con, limit=60)
-    if not raw:
+    # ứng viên KẸT từ lượt trước sập giữa chừng (db.stuck_candidates) — đã có "góc", xét tiếp không cần săn lại
+    stuck = db.stuck_candidates(con)
+    if stuck:
+        log.info("Nhặt lại %d ứng viên kẹt từ lượt chạy trước", len(stuck))
+    if not raw and not stuck:
         log.warning("Kho không có ý tưởng thô mới — dừng.")
         return 0
 
     # --- Agent Săn ý tưởng: chọn ứng viên có "góc"
-    candidates = crew.hunt_ideas(raw, cfg)
+    candidates = crew.hunt_ideas(raw, cfg) if raw else []
     by_id = {i["id"]: i for i in raw}
-    enriched = []
+    enriched = [dict(i, keyword="") for i in stuck]
     for c in candidates:
         idea = by_id.get(c["id"])
         if not idea:

@@ -348,3 +348,63 @@ class SourcesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StuckCandidateTest(StandardGateTest):
+    """Ca thật 22/11/2026 kênh Hàn: lượt chạy sập (khoá Gemini bị chặn) NGAY SAU bước Săn ý tưởng -> các ý tưởng
+    nằm ở trạng thái 'candidate'; lượt chạy lại chỉ đọc ý tưởng 'raw' nên ra 0 kịch bản. Lượt sau phải nhặt lại."""
+
+    def test_rerun_picks_up_candidates_left_by_a_crashed_run(self):
+        a, b, c, d, e = self.ids
+        for i in (a, b):                                    # lượt trước: đã săn xong a, b rồi sập
+            db.set_status(self.con, i, "candidate", angle="góc cũ")
+        for i in (c, d, e):                                 # các ý tưởng thô khác đều đã xét từ trước
+            db.set_status(self.con, i, "rejected", reason="đã xét")
+        from src import main
+        hunted = []
+        orig = crew.hunt_ideas
+        with mock.patch.object(crew, "hunt_ideas", lambda raw, cfg: hunted.append(raw) or []):
+            written, statuses, _ = self.run_agents_no_hunt_patch(main)
+        self.assertEqual(hunted, [])                        # không còn ý tưởng thô: khỏi gọi Săn ý tưởng
+        self.assertEqual(sorted(written), sorted([a, b]))
+        self.assertEqual(sorted(s for _, s in statuses), ["verified", "verified"])
+
+    def test_old_candidates_are_left_alone(self):
+        a = self.ids[0]
+        db.set_status(self.con, a, "candidate", angle="góc")
+        self.con.execute("UPDATE ideas SET created_at='2026-01-01T00:00:00+00:00' WHERE id=?", (a,))
+        self.con.commit()
+        self.assertEqual(db.stuck_candidates(self.con), [])
+
+    def run_agents_no_hunt_patch(self, main):
+        """Như run_agents của lớp cha nhưng giữ hunt_ideas do test tự đặt."""
+        from src import page_text
+        written = []
+
+        def write(idea, cfg, feedback=None, source_text="", recent_hooks=None, **learned):
+            written.append(idea["id"])
+            return script(numbers=6)
+        patches = [
+            mock.patch.object(crew, "score_ideas", lambda ideas, cfg: [
+                {"id": i["id"], "total": 30} for i in ideas]),
+            mock.patch.object(crew, "write_script", write),
+            mock.patch.object(crew, "fact_check", lambda *a: {"pass": True, "verdicts": []}),
+            mock.patch.object(page_text, "fetch_page_text", lambda url: self.SOURCE),
+            mock.patch.object(main, "count_popular_vietnamese_videos", lambda *a: None),
+            mock.patch("builtins.print"),
+        ]
+        for p in patches:
+            p.start(); self.addCleanup(p.stop)
+        main.run_agents(CFG, self.con, use_telegram=False)
+        rows = self.con.execute("SELECT idea_id, status, factcheck FROM scripts ORDER BY id").fetchall()
+        return written, [(r["idea_id"], r["status"]) for r in rows], rows
+
+
+class ExplainErrorTest(unittest.TestCase):
+    def test_known_errors_get_a_plain_explanation(self):
+        from src import daily
+        self.assertIn("bị Google chặn", daily.explain(
+            "google.genai.errors.ClientError: 403 PERMISSION_DENIED. {'error': {'message': 'The Gemini API free tier"
+            " is not available for this project.'}}"))
+        self.assertIn("Hết hạn mức", daily.explain("429 RESOURCE_EXHAUSTED"))
+        self.assertEqual(daily.explain("mã thoát 1\nTraceback ... KeyError: 'x'"), "")
