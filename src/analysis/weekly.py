@@ -376,6 +376,12 @@ def format_report(rows: list, total_published: int, source: str, weight_notes: l
 def run_weekly(dry_run: bool = False, use_telegram: bool = True, now: datetime = None) -> str:
     cfg = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
     learned_mod.apply_learned(cfg)                  # bắt đầu từ trọng số đang dùng thật
+    if not dry_run and use_telegram:
+        try:
+            from .. import gemini_key               # khoá Gemini chính bị Google chặn -> chạy bằng khoá dự phòng
+            gemini_key.ensure()
+        except Exception as exc:
+            log.warning("Không kiểm được khoá Gemini: %s", exc)
     con = db.connect()
     try:
         return _run_weekly(cfg, con, dry_run, use_telegram, now)

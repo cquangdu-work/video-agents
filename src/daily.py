@@ -325,6 +325,11 @@ def run_daily(skip_ideas: bool = False, dry_run: bool = False, runner=run_step) 
             backup.snapshot()              # bản chụp DB mỗi ngày trên VM (giữ 14 bản) — src/backup.py
         except Exception as exc:
             log.warning("Sao lưu DB lỗi: %s", exc)
+        try:
+            from . import gemini_key       # khoá Gemini chính bị Google chặn -> chạy bằng khoá dự phòng
+            gemini_key.ensure()
+        except Exception as exc:
+            log.warning("Không kiểm được khoá Gemini: %s", exc)
     try:
         return _run_daily(cfg, con, skip_ideas, dry_run, runner)
     finally:

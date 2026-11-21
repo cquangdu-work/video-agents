@@ -1237,6 +1237,12 @@ HOUSEKEEPING_EVERY = 30 * 60    # giây
 def listen(once: bool = False) -> None:
     """Vòng lặp chờ sự kiện. Vị trí đã đọc lưu trong DB nên khởi động lại không xử lý lặp."""
     cfg, con = load_config(), db.connect()
+    if not once:
+        try:
+            from . import gemini_key        # bot cũng gọi Gemini (dịch, bài viết): khoá chính bị chặn -> dự phòng
+            gemini_key.ensure()
+        except Exception as exc:
+            log.warning("Không kiểm được khoá Gemini: %s", exc)
     last_housekeeping = 0.0
     try:
         offset = int(db.get_state(con, "tg_offset", "0"))
