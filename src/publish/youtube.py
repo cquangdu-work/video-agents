@@ -219,6 +219,20 @@ def compute_publish_at(yt_cfg: dict, now: datetime = None, taken=()):
     return at
 
 
+def set_thumbnail(video_id: str, path: Path, post=None) -> dict:
+    """Gắn hình thu nhỏ tự dựng (video dài hằng tuần). JPEG/PNG ≤ 2 MB; kênh phải xác minh số điện thoại (kênh Việt
+    đã có: longUploadsStatus=allowed). 50 đơn vị quota."""
+    path = Path(path)
+    kind = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+    r = (post or requests.post)("https://www.googleapis.com/upload/youtube/v3/thumbnails/set", timeout=120,
+                                params={"videoId": video_id, "uploadType": "media"},
+                                headers={"Authorization": f"Bearer {access_token()}", "Content-Type": kind},
+                                data=path.read_bytes())
+    if r.status_code != 200:
+        raise YouTubeUploadError(f"Không gắn được hình thu nhỏ ({r.status_code}): {r.text[:300]}")
+    return r.json()
+
+
 def reschedule(video_id: str, publish_at: str) -> dict:
     """Đổi giờ hẹn công khai của một video đang hẹn (giữ nguyên các thuộc tính trạng thái khác)."""
     cur = get_status(video_id)

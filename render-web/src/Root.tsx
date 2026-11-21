@@ -3,6 +3,7 @@ import { Composition } from "remotion";
 import { Story } from "./Story";
 import { Wide, WideProps } from "./Wide";
 import { BrandArt, BrandArtProps } from "./BrandArt";
+import { Thumb, ThumbProps } from "./Thumb";
 import { StoryProps } from "./types";
 
 // Props thật do Python truyền vào bằng --props=<file.json>; bản mặc định chỉ để mở Studio.
@@ -56,6 +57,17 @@ export const RemotionRoot: React.FC = () => (
       durationInFrames={1}
       defaultProps={artEmpty}
       calculateMetadata={({ props }) => ({ width: props.width, height: props.height })}
+    />
+    {/* Hình thu nhỏ video dài hằng tuần (src/longform.py) */}
+    <Composition
+      id="Thumb"
+      component={Thumb}
+      width={1280}
+      height={720}
+      fps={30}
+      durationInFrames={1}
+      defaultProps={{ brand: empty.brand, series: "TUẦN QUA CON SỐ", count: 5, label: ["CÂU CHUYỆN", "QUA CON SỐ"],
+        span: "", cards: [] } as ThumbProps}
     />
   </>
 );

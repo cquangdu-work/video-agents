@@ -193,15 +193,24 @@ def _publish_api(con, video: dict, cfg: dict) -> None:
         tg.send_message(f"⚠️ Upload video #{video['id']} lỗi:\n{exc}",
                         buttons=[[("🔁 Thử lại", f"retry:{video['id']}")]])
         return
+    thumb_note = ""
     if not video.get("script_id"):          # video dài (src/longform.py): không phải Shorts
         res["url"] = f"https://youtu.be/{res['id']}"
+        thumb = (ROOT / video["file"]).with_suffix(".thumb.jpg")      # longform.thumb_path
+        if thumb.exists():
+            try:
+                youtube.set_thumbnail(res["id"], thumb)
+                thumb_note = "\n🖼 Đã gắn hình thu nhỏ tự dựng"
+            except Exception as exc:
+                log.warning("Gắn hình thu nhỏ lỗi: %s", exc)
+                thumb_note = f"\n⚠️ Chưa gắn được hình thu nhỏ: {exc}"
     db.update_video(con, video["id"], youtube_id=res["id"], youtube_url=res["url"],
                     youtube_privacy=res["privacy"])
     db.transition_video(con, video["id"], "publishing", "published")
     log.info("Đã upload video #%d lên YouTube: %s (%s, hẹn %s)", video["id"], res["url"],
              res["privacy"], res["publish_at"] or "không")
 
-    msg = f"🚀 Đã upload video #{video['id']}:\n{res['url']}\nChế độ hiển thị: {res['privacy']}"
+    msg = f"🚀 Đã upload video #{video['id']}:\n{res['url']}\nChế độ hiển thị: {res['privacy']}{thumb_note}"
     if res["publish_at"]:
         # nhớ giờ hẹn: quá giờ mà video vẫn riêng tư (project chưa audit) thì bot báo Du
         db.set_state(con, f"yt_publish_at_{video['id']}", res["publish_at"])

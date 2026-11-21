@@ -184,3 +184,56 @@ class BackupTest(DbCase):
         with zipfile.ZipFile(path) as z:
             self.assertEqual(sorted(z.namelist()), ["learned.yaml", "pipeline.db"])
         self.assertNotIn(".secrets", str(path))
+
+
+class LongThumbTest(DbCase):
+    """Hình thu nhỏ video dài hằng tuần (src/longform.py + render-web/src/Thumb.tsx)."""
+
+    def test_cards_prefer_richest_scenes_and_strip_captions(self):
+        from src import longform
+        stories = [{"duration": 30, "words": [{"w": "x"}], "scenes": [{"kind": k, "start": 0, "end": 10}]}
+                   for k in ("big_number", "map", "statement", "bar_race", "line_solo")]
+        seen = {}
+
+        def run(cmd, **kw):
+            seen["props"] = json.loads(Path(cmd[[i for i, c in enumerate(cmd) if c.startswith("--props=")][0]]
+                                            .split("=", 1)[1]).read_text(encoding="utf-8"))
+        out = self.root / "w.thumb.jpg"
+        with mock.patch("src.longform.subprocess.run", side_effect=run), lang.using("vi"):
+            self.assertEqual(longform.thumbnail(stories, 5, "15/11–21/11", out), out)
+        p = seen["props"]
+        kinds = [c["story"]["scenes"][0]["kind"] for c in p["cards"]]
+        self.assertEqual(kinds, ["map", "bar_race", "line_solo"])            # giàu hình nhất trước, tối đa 3
+        self.assertTrue(all(c["story"]["words"] == [] for c in p["cards"]))   # không phụ đề
+        self.assertEqual((p["count"], p["span"], p["series"]), (5, "15/11–21/11", "TUẦN QUA CON SỐ"))
+        self.assertFalse(out.with_suffix(".props.json").exists())
+
+    def test_backfill_reads_count_and_span_from_title(self):
+        from src import longform
+        v = {"title": "7 câu chuyện qua con số tuần 15/11–21/11 | Việt Nam, Hàn Quốc và thế giới",
+             "created_at": "2026-11-21T01:00:00+00:00", "file": "output/weekly_2026-11-21.mp4"}
+        with mock.patch.object(longform, "week_videos", return_value=[]), \
+                mock.patch.object(longform, "thumbnail", return_value="T") as th:
+            longform.thumbnail_for(v)
+        self.assertEqual(th.call_args[0][1:3], (7, "15/11–21/11"))
+        v["title"] = "숫자로 본 이번 주 이야기 7편 (11.15–11.21) | 한국과 세계"
+        with mock.patch.object(longform, "week_videos", return_value=[]), \
+                mock.patch.object(longform, "thumbnail", return_value="T") as th:
+            longform.thumbnail_for(v)
+        self.assertEqual(th.call_args[0][1:3], (7, "11.15–11.21"))
+
+    def test_long_video_upload_attaches_thumbnail(self):
+        from src import review
+        from src.publish import youtube
+        long_id = db.upsert_video(self.con, None, "output/weekly_x.mp4", "Tuần", "D", [], [])
+        db.transition_video(self.con, long_id, "pending_review", "approved")
+        (self.root / "output").mkdir()
+        (self.root / "output" / "weekly_x.thumb.jpg").write_bytes(b"jpg")
+        res = {"id": "LONG1", "url": "u", "privacy": "private", "requested_privacy": "private", "publish_at": None}
+        cfg = {"publish": {"youtube": {"mode": "api"}}}
+        with mock.patch.object(review, "ROOT", self.root), mock.patch.object(youtube, "upload", return_value=res), \
+                mock.patch.object(youtube, "set_thumbnail") as st, \
+                mock.patch.object(tg, "send_message", return_value=1) as sm:
+            review._publish_api(self.con, db.get_video(self.con, long_id), cfg)
+        st.assert_called_once_with("LONG1", self.root / "output" / "weekly_x.thumb.jpg")
+        self.assertIn("hình thu nhỏ", sm.call_args[0][0])

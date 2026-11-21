@@ -152,9 +152,10 @@ def build(now: datetime = None, concurrency: int = 3) -> dict:
     series = lang.pick(vi=f"TUẦN QUA CON SỐ · {span}", ko=f"숫자로 본 한 주 · {span}")
     chapters = [v["title"] for v in videos]
     TMP.mkdir(parents=True, exist_ok=True)
-    parts, starts, t = [], [], 0.0
+    parts, starts, t, stories = [], [], 0.0, []
     for k, v in enumerate(videos, 1):
         story, audio = chapter_source(v["script_id"])
+        stories.append(story)
         wide = {"story": story, "chapter": k, "chapters": chapters, "series": series}
         if lang.code() != "vi":                # Wide.tsx đọc props.lang ở cấp ngoài để chọn phông + kiểu số
             wide["lang"] = lang.code()
@@ -173,9 +174,72 @@ def build(now: datetime = None, concurrency: int = 3) -> dict:
     final = OUTPUT / f"weekly_{d1:%Y-%m-%d}.mp4"
     ff("-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", "-movflags", "+faststart", final)
     title, desc, tags = build_text(videos, starts, span, cfg)
+    thumb = thumbnail(stories, len(videos), span, final.with_suffix(".thumb.jpg"))
     log.info("VIDEO DÀI: %s (%.0f giây, %d chương)", final, ffprobe_duration(final), len(videos))
     return {"file": final, "title": title, "description": desc, "tags": tags, "chapters": chapters,
-            "starts": starts, "video_ids": [v["id"] for v in videos]}
+            "starts": starts, "video_ids": [v["id"] for v in videos], "thumb": thumb}
+
+
+def thumb_path(video_file) -> Path:
+    """Hình thu nhỏ nằm cạnh file video: output/weekly_2026-11-21.mp4 -> output/weekly_2026-11-21.thumb.jpg."""
+    return (ROOT / video_file).with_suffix(".thumb.jpg")
+
+
+def thumbnail(stories: list, count: int, span: str, out: Path) -> Path:
+    """Hình thu nhỏ 1280x720 (render-web/src/Thumb.tsx): số câu chuyện + khoảng ngày + 3 khung hình THẬT của các
+    Shorts trong tuần (cảnh giàu hình nhất: bản đồ > cuộc đua > biểu đồ, cùng cách chọn khung với ảnh bài viết
+    Facebook). Lỗi -> None (video vẫn đăng, YouTube tự chọn hình)."""
+    from .fb_post import IMAGE_KINDS, pick_frame
+    from .render import web
+    picked = []
+    for p in stories:
+        frame, kind = pick_frame(p)
+        if frame is not None:
+            rank = IMAGE_KINDS.index(kind) if kind in IMAGE_KINDS else len(IMAGE_KINDS)
+            picked.append((rank, len(picked), {"story": {**p, "words": [], "sfx": []}, "frame": frame}))
+    cards = [c for _, _, c in sorted(picked, key=lambda x: x[:2])[:3]]
+    if not cards:
+        return None
+    props = {"brand": web.brand_props(), "count": int(count), "span": span, "cards": cards,
+             "series": lang.pick(vi="TUẦN QUA CON SỐ", ko="숫자로 본 한 주"),
+             "label": lang.pick(vi=["CÂU CHUYỆN", "QUA CON SỐ"], ko=["편의", "숫자 이야기"])}
+    if lang.code() != "vi":
+        props["lang"] = lang.code()
+    pf = out.with_suffix(".props.json")
+    pf.write_text(json.dumps(props, ensure_ascii=False), encoding="utf-8")
+    npx, env = web.node_env()
+    try:
+        subprocess.run([npx, "remotion", "still", "src/index.ts", "Thumb", str(out.resolve()), f"--props={pf.resolve()}",
+                        "--image-format=jpeg", "--jpeg-quality=90", "--log=error"], cwd=web.WEB, env=env, check=True,
+                       timeout=600, capture_output=True, shell=str(npx).endswith(".cmd"))
+    except Exception as exc:
+        log.warning("Không vẽ được hình thu nhỏ: %s", exc)
+        return None
+    finally:
+        pf.unlink(missing_ok=True)
+    return out
+
+
+def thumbnail_for(video: dict) -> Path:
+    """Dựng lại hình thu nhỏ cho một video dài ĐÃ có (bổ sung cho video dựng trước khi có tính năng này): số chương
+    + khoảng ngày đọc từ chính tiêu đề, khung hình từ props Remotion còn lưu của các Shorts trong tuần đó."""
+    import re
+    title = video["title"] or ""
+    m_n = re.search(r"\d+", title)
+    m_span = re.search(r"\d{1,2}[/.]\d{1,2}\s*[–-]\s*\d{1,2}[/.]\d{1,2}", title)
+    if not (m_n and m_span):
+        return None
+    con = db.connect()
+    try:
+        week = week_videos(con, datetime.fromisoformat(video["created_at"]))
+    finally:
+        con.close()
+    stories = []
+    for v in week:
+        f = RENDER / f"web_{v['script_id']}.props.json"
+        if f.exists():
+            stories.append(json.loads(f.read_text(encoding="utf-8")))
+    return thumbnail(stories, int(m_n.group()), m_span.group(), thumb_path(video["file"]))
 
 
 def checks(path: Path) -> list:
@@ -219,6 +283,8 @@ def send(result: dict) -> int:
         if mid:
             db.update_video(con, vid, tg_message_id=mid)
             tg.send_message("Mô tả sẽ đăng kèm:\n\n" + result["description"], reply_to=mid)
+            if result.get("thumb"):
+                tg.send_photo(result["thumb"], "🖼 Hình thu nhỏ sẽ gắn khi đăng", reply_to=mid)
         return vid
     finally:
         con.close()
@@ -233,7 +299,23 @@ def main():
     ap = argparse.ArgumentParser(description="Video dài hằng tuần")
     ap.add_argument("--no-send", action="store_true")
     ap.add_argument("--concurrency", type=int, default=3)
+    ap.add_argument("--thumb", type=int, metavar="ID_VIDEO",
+                    help="dựng hình thu nhỏ cho video dài đã có (chỉ dựng; thêm --upload để gắn lên YouTube)")
+    ap.add_argument("--upload", action="store_true", help="cùng --thumb: gắn hình lên YouTube (thay đổi công khai)")
     a = ap.parse_args()
+    if a.thumb:
+        from .publish import youtube
+        con = db.connect()
+        try:
+            v = db.get_video(con, a.thumb)
+        finally:
+            con.close()
+        out = thumb_path(v["file"]) if a.upload and thumb_path(v["file"]).exists() else thumbnail_for(v)
+        print("Hình thu nhỏ:", out)
+        if out and a.upload and v.get("youtube_id"):
+            youtube.set_thumbnail(v["youtube_id"], out)
+            print("Đã gắn lên YouTube:", v["youtube_id"])
+        return
     try:
         result = build(concurrency=a.concurrency)
     except RuntimeError as exc:
