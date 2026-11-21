@@ -197,7 +197,11 @@ def _publish_api(con, video: dict, cfg: dict) -> None:
     if not video.get("script_id"):          # video dài (src/longform.py): không phải Shorts
         res["url"] = f"https://youtu.be/{res['id']}"
         thumb = (ROOT / video["file"]).with_suffix(".thumb.jpg")      # longform.thumb_path
-        if thumb.exists():
+        if thumb.exists() and youtube.can_set_thumbnails() is False:
+            thumb_note = (f"\nℹ️ Chưa gắn hình thu nhỏ tự dựng: kênh chưa xác minh số điện thoại (YouTube Studio → Cài"
+                          f" đặt → Kênh → Điều kiện sử dụng tính năng). Xác minh xong, gắn bằng: python -m src.longform"
+                          f" --thumb {video['id']} --upload")
+        elif thumb.exists():
             try:
                 youtube.set_thumbnail(res["id"], thumb)
                 thumb_note = "\n🖼 Đã gắn hình thu nhỏ tự dựng"

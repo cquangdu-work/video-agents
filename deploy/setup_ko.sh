@@ -77,12 +77,15 @@ mk video-agents-daily-retry.timer    video-agents-ko-daily-retry.timer  "s#17:40
 mk video-agents-weekly.service       video-agents-ko-weekly.service
 mk video-agents-weekly.timer         video-agents-ko-weekly.timer       "s#21:00:00#22:30:00#"
 mk video-agents-review.service       video-agents-ko-review.service
+# Video dài hằng tuần (Du bật 21/11/2026): thứ Bảy 11:30 — kênh Việt 09:30 dựng mất ~27 phút (đo 21/11)
+mk video-agents-longform.service     video-agents-ko-longform.service
+mk video-agents-longform.timer       video-agents-ko-longform.timer     "s#09:30:00#11:30:00#"
 # timer gọi đúng service cùng tên (-ko-) vì systemd ghép theo tên file
 systemctl --user daemon-reload
 echo
 echo "Xong phần cài. CHƯA bật lịch chạy. Khi đã có bot Telegram mới (TELEGRAM_BOT_TOKEN trong $KO/.env):"
 echo "  systemctl --user enable --now video-agents-ko-review.service"
 echo "  # gửi /capquyen cho BOT MỚI, chọn kênh YouTube tiếng Hàn -> token lưu ở $KO/.secrets/"
-echo "  systemctl --user enable --now video-agents-ko-daily.timer video-agents-ko-daily-retry.timer video-agents-ko-weekly.timer"
+echo "  systemctl --user enable --now video-agents-ko-daily.timer video-agents-ko-daily-retry.timer video-agents-ko-weekly.timer video-agents-ko-longform.timer"
 echo "Tắt hết kênh Hàn:"
-echo "  systemctl --user disable --now video-agents-ko-review.service video-agents-ko-daily.timer video-agents-ko-daily-retry.timer video-agents-ko-weekly.timer"
+echo "  systemctl --user disable --now video-agents-ko-review.service video-agents-ko-daily.timer video-agents-ko-daily-retry.timer video-agents-ko-weekly.timer video-agents-ko-longform.timer"

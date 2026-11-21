@@ -219,6 +219,21 @@ def compute_publish_at(yt_cfg: dict, now: datetime = None, taken=()):
     return at
 
 
+def can_set_thumbnails(get=None):
+    """Kênh đã mở tính năng TRUNG CẤP chưa (xác minh số điện thoại — mở hình thu nhỏ tự chọn, video trên 15 phút)?
+    Đọc qua longUploadsStatus (cùng tầng tính năng): "allowed" = đã mở. Không đọc được -> None (cứ thử gắn).
+    Ca thật 21/11: kênh Hàn chưa xác minh được vì số điện thoại của Du đã xác minh đủ 2 kênh/năm."""
+    try:
+        r = (get or requests.get)(f"{API_URL}/channels", timeout=30, params={"part": "status", "mine": "true"},
+                                  headers={"Authorization": f"Bearer {access_token()}"})
+        st = ((r.json().get("items") or [{}])[0]).get("status") or {}
+    except Exception:
+        return None
+    if "longUploadsStatus" not in st:
+        return None
+    return st["longUploadsStatus"] == "allowed"
+
+
 def set_thumbnail(video_id: str, path: Path, post=None) -> dict:
     """Gắn hình thu nhỏ tự dựng (video dài hằng tuần). JPEG/PNG ≤ 2 MB; kênh phải xác minh số điện thoại (kênh Việt
     đã có: longUploadsStatus=allowed). 50 đơn vị quota."""

@@ -288,7 +288,11 @@ def send(result: dict) -> int:
             db.update_video(con, vid, tg_message_id=mid)
             tg.send_message("Mô tả sẽ đăng kèm:\n\n" + result["description"], reply_to=mid)
             if result.get("thumb"):
-                tg.send_photo(result["thumb"], "🖼 Hình thu nhỏ sẽ gắn khi đăng", reply_to=mid)
+                from .publish import youtube
+                ok = youtube.can_set_thumbnails()
+                tg.send_photo(result["thumb"], "🖼 Hình thu nhỏ sẽ gắn khi đăng" if ok is not False else
+                              "🖼 Hình thu nhỏ đã dựng — kênh chưa xác minh số điện thoại nên YouTube chưa cho gắn;"
+                              " video vẫn đăng với hình YouTube tự cắt", reply_to=mid)
         return vid
     finally:
         con.close()

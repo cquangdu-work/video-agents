@@ -246,8 +246,35 @@ class LongThumbTest(DbCase):
         res = {"id": "LONG1", "url": "u", "privacy": "private", "requested_privacy": "private", "publish_at": None}
         cfg = {"publish": {"youtube": {"mode": "api"}}}
         with mock.patch.object(review, "ROOT", self.root), mock.patch.object(youtube, "upload", return_value=res), \
+                mock.patch.object(youtube, "can_set_thumbnails", return_value=True), \
                 mock.patch.object(youtube, "set_thumbnail") as st, \
                 mock.patch.object(tg, "send_message", return_value=1) as sm:
             review._publish_api(self.con, db.get_video(self.con, long_id), cfg)
         st.assert_called_once_with("LONG1", self.root / "output" / "weekly_x.thumb.jpg")
         self.assertIn("hình thu nhỏ", sm.call_args[0][0])
+
+    def test_unverified_channel_skips_thumbnail_and_says_why(self):
+        """Kênh Hàn chưa xác minh số điện thoại (số của Du đã dùng đủ 2 kênh/năm): không thử gắn, báo cách gắn sau."""
+        from src import review
+        from src.publish import youtube
+        long_id = db.upsert_video(self.con, None, "output/weekly_y.mp4", "Tuần", "D", [], [])
+        db.transition_video(self.con, long_id, "pending_review", "approved")
+        (self.root / "output").mkdir()
+        (self.root / "output" / "weekly_y.thumb.jpg").write_bytes(b"jpg")
+        res = {"id": "LONG2", "url": "u", "privacy": "private", "requested_privacy": "private", "publish_at": None}
+        with mock.patch.object(review, "ROOT", self.root), mock.patch.object(youtube, "upload", return_value=res), \
+                mock.patch.object(youtube, "can_set_thumbnails", return_value=False), \
+                mock.patch.object(youtube, "set_thumbnail") as st, \
+                mock.patch.object(tg, "send_message", return_value=1) as sm:
+            review._publish_api(self.con, db.get_video(self.con, long_id), {"publish": {"youtube": {"mode": "api"}}})
+        st.assert_not_called()
+        self.assertIn("xác minh số điện thoại", sm.call_args[0][0])
+        self.assertIn(f"--thumb {long_id} --upload", sm.call_args[0][0])
+
+    def test_can_set_thumbnails_reads_channel_status(self):
+        from src.publish import youtube
+        with mock.patch.object(youtube, "access_token", return_value="T"):
+            for status, want in (({"longUploadsStatus": "allowed"}, True), ({"longUploadsStatus": "eligible"}, False),
+                                 ({}, None)):
+                get = lambda url, **kw: Resp({"items": [{"status": status}]})
+                self.assertIs(youtube.can_set_thumbnails(get), want)
