@@ -306,3 +306,17 @@ profile:
   facebook_about: "숫자로 보는 한국과 세계 — 지도와 그래프로 매일 한 편씩."
   instagram_name: "숫자세계 | 데이터로 보는 세계"
   instagram_bio: "숫자로 보는 한국과 세계 📊\n지도·그래프·순위 레이스\n매일 저녁 7시 새 영상"
+  # Bài giới thiệu ghim đầu trang Instagram (ảnh assets/brand/ko/instagram_intro.jpg — src/brand_kit.py), đăng MỘT lần
+  # bằng src/channel_profile.py --ig-intro --apply sau khi Du duyệt.
+  instagram_intro: |-
+    숫자세계에 오신 것을 환영합니다 👋
+
+    지도·그래프·순위 레이스로 한국과 세계를 숫자로 보여 드립니다.
+    한국은 세계에서 몇 위일까? 일본과 비교하면 어떨까? OECD 안에서 우리나라의 위치는?
+
+    📊 데이터: 세계은행(World Bank), Our World in Data, KOSIS — 출처는 영상마다 표시합니다.
+    ✅ 모든 숫자는 원본 데이터와 대조합니다.
+    🤖 내레이션은 AI 음성이며, 모든 영상은 운영자가 직접 검토한 뒤 공개합니다.
+    🕖 매일 저녁 7시 새 릴스
+
+    #숫자세계 #데이터 #통계 #세계순위 #인포그래픽 #데이터시각화

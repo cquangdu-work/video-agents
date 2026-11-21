@@ -278,3 +278,55 @@ class LongThumbTest(DbCase):
                                  ({}, None)):
                 get = lambda url, **kw: Resp({"items": [{"status": status}]})
                 self.assertIs(youtube.can_set_thumbnails(get), want)
+
+
+class InstagramIntroTest(DbCase):
+    def test_posts_once_and_only_when_applied(self):
+        posted = []
+        fake = lambda image, text: (posted.append((image.name, text)), {"id": "IG1", "url": "https://ig/p/1"})[1]
+        with lang.using("ko"), mock.patch.object(cp, "asset", return_value=self.root / "instagram_intro.jpg"):
+            (self.root / "instagram_intro.jpg").write_bytes(b"jpg")
+            self.assertEqual(cp.instagram_intro(self.con, KO, apply=False, post_image=fake),
+                             ["Instagram: bài giới thiệu"])
+            self.assertEqual(posted, [])                                     # xem trước: không đăng
+            cp.instagram_intro(self.con, KO, apply=True, post_image=fake)
+            self.assertEqual(cp.instagram_intro(self.con, KO, apply=True, post_image=fake), [])   # chỉ một lần
+        self.assertEqual(len(posted), 1)
+        self.assertIn("숫자세계에 오신 것을 환영합니다", posted[0][1])
+        self.assertIn("AI", posted[0][1])
+
+    def test_vietnamese_channel_has_no_intro(self):
+        self.assertEqual(cp.instagram_intro(self.con, VI, apply=True, post_image=lambda *a: 1 / 0), [])
+
+    def test_post_image_hosts_on_facebook_cdn_then_publishes(self):
+        from src.publish import instagram
+        facebook._save({"id": "PAGE1", "name": "Trang", "access_token": "PAGE"},
+                       permissions=list(instagram.NEEDED))
+        img = self.root / "a.jpg"
+        img.write_bytes(b"jpg")
+        calls = []
+
+        def get(url, params=None, **kw):
+            calls.append(("get", url.rsplit("/", 1)[-1], params))
+            if url.endswith("/PAGE1"):
+                return Resp({"instagram_business_account": {"id": "IGU", "username": "sujaworld_du"}})
+            if url.endswith("/PH1"):
+                return Resp({"images": [{"width": 640, "source": "https://cdn/small"},
+                                        {"width": 1080, "source": "https://cdn/big"}]})
+            if url.endswith("/C1"):
+                return Resp({"status_code": "FINISHED"})
+            return Resp({"permalink": "https://www.instagram.com/p/X/"})
+
+        def post(url, data=None, files=None, **kw):
+            calls.append(("post", url.rsplit("/", 1)[-1], dict(data or {})))
+            if url.endswith("/photos"):
+                return Resp({"id": "PH1"})
+            if url.endswith("/media"):
+                return Resp({"id": "C1"})
+            return Resp({"id": "M1"})
+        res = instagram.post_image(img, "chào", get=get, post=post)
+        self.assertEqual(res, {"id": "M1", "url": "https://www.instagram.com/p/X/"})
+        photo = [c for c in calls if c[1] == "photos"][0][2]
+        self.assertEqual((photo["published"], photo["temporary"]), ("false", "true"))   # ảnh tạm, không lên Trang
+        media = [c for c in calls if c[1] == "media"][0][2]
+        self.assertEqual(media["image_url"], "https://cdn/big")                      # bản lớn nhất

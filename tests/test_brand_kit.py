@@ -31,10 +31,13 @@ class BrandMapTest(unittest.TestCase):
         for name, (a, b, c, d) in extents(kind, self.colors).items():
             self.assertTrue(x0 <= a and c <= x1 and y0 <= b and d <= y1,
                             f"{lang.code()} {kind}: {name} {a:.0f},{b:.0f}-{c:.0f},{d:.0f} ra ngoài vùng an toàn")
-        # khối chữ không đè lên phần được nhấn của bản đồ
+        # khối chữ không đè lên phần được nhấn của bản đồ (ảnh ngang: chữ bên trái; ảnh dọc Instagram: chữ ở trên)
         box = bk.SPECS[kind]["box"]
-        left = min(a for a, *_ in extents(kind, self.colors).values())
-        self.assertLess(box["x"] + box["w"], left, f"{lang.code()} {kind}: chữ đè lên bản đồ")
+        ext = extents(kind, self.colors).values()
+        if bk.SPECS[kind].get("shade_dir") == "y":
+            self.assertLess(box["y"] + box["h"], min(b for _, b, *_ in ext), f"{lang.code()} {kind}: chữ đè bản đồ")
+        else:
+            self.assertLess(box["x"] + box["w"], min(a for a, *_ in ext), f"{lang.code()} {kind}: chữ đè bản đồ")
 
     def test_vietnamese_channel_always_draws_hoang_sa_truong_sa(self):
         with lang.using("vi"):

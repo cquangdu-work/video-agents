@@ -170,6 +170,27 @@ def apply_facebook(con, cfg: dict, website: str = None, apply: bool = False, get
     return changes
 
 
+# ------------------------------------------------------------------ Instagram: bài giới thiệu ghim đầu trang
+def instagram_intro(con, cfg: dict, apply: bool = False, post_image=None) -> list:
+    """Bài ẢNH giới thiệu kênh (assets/brand/<ngôn ngữ>/instagram_intro.jpg + `profile.instagram_intro`), đăng MỘT lần
+    (state "ig_intro_posted") để trang không trống khi người xem bấm vào từ Reel — Du ghim lên đầu bằng app (API không
+    ghim được). Tiểu sử Instagram KHÔNG sửa được qua API (Meta không có endpoint) -> nằm trong --kit."""
+    text = (profile(cfg).get("instagram_intro") or "").strip()
+    if not text or db.get_state(con, "ig_intro_posted"):
+        return []
+    image = asset("instagram_intro.jpg")
+    if not image.exists():
+        raise FileNotFoundError(f"Chưa có {image} — chạy: python -m src.brand_kit --only instagram")
+    if not apply:
+        return ["Instagram: bài giới thiệu"]
+    if post_image is None:
+        from .publish import instagram
+        post_image = instagram.post_image
+    res = post_image(image, text)
+    db.set_state(con, "ig_intro_posted", res["id"])
+    return [f"Instagram: đã đăng bài giới thiệu {res.get('url', '')}"]
+
+
 # ------------------------------------------------------------------ phần Du tự làm (Telegram)
 def _pre(text: str) -> str:
     return f"<pre>{html.escape(str(text))}</pre>"
@@ -268,10 +289,22 @@ def main():
     ap = argparse.ArgumentParser(description="Hồ sơ kênh trên YouTube / Facebook / Instagram / TikTok")
     ap.add_argument("--apply", action="store_true", help="áp lên YouTube + Trang Facebook (thay đổi công khai)")
     ap.add_argument("--kit", action="store_true", help="gửi Du qua Telegram phần phải tự làm")
+    ap.add_argument("--ig-intro", action="store_true",
+                    help="bài giới thiệu Instagram: gửi Du bản xem trước; cùng --apply thì ĐĂNG (một lần)")
     a = ap.parse_args()
     load_dotenv(ROOT / ".env")
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     cfg, con = load_config(), db.connect()
+    if a.ig_intro:
+        if a.apply:
+            print(instagram_intro(con, cfg, apply=True) or "Đã đăng từ trước / chưa cấu hình — không làm gì")
+        elif instagram_intro(con, cfg):
+            from . import telegram_bot as tg
+            mid = tg.send_photo(asset("instagram_intro.jpg"), caption="📸 XEM TRƯỚC bài giới thiệu Instagram (ghim"
+                                " đầu trang). CHƯA đăng — Du trả lời Claude Code để duyệt.")
+            tg.send_message("Chữ đi kèm:\n\n" + profile(cfg)["instagram_intro"], reply_to=mid)
+            print("Đã gửi bản xem trước:", mid)
+        return
     from .publish import youtube
     ch = yt_channel(youtube.access_token())
     yt_url = channel_url(ch)

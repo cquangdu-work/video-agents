@@ -29,7 +29,8 @@ export type BrandArtProps = {
   sources: string;
   box: { x: number; y: number; w: number; h: number; title: number }; // khối chữ: vị trí + cỡ chữ tên kênh
   map: { paths: MapPath[]; dots: [number, number, number, string][]; labels: MapLabel[]; glowAt: [number, number] };
-  shade: number; // mép phải của lớp tối sau khối chữ (điểm ảnh)
+  shade: number; // mép của lớp tối sau khối chữ (điểm ảnh)
+  shadeDir?: "x" | "y"; // "x": tối từ trái sang (ảnh bìa ngang) · "y": tối từ trên xuống (ảnh dọc Instagram)
   guides?: [number, number, number, number][]; // vùng an toàn (chỉ để soát, bản thật không vẽ)
 };
 
@@ -40,7 +41,7 @@ const Accented: React.FC<{ text: string; accent?: string; color: string }> = ({ 
 };
 
 export const BrandArt: React.FC<BrandArtProps> = ({ width, height, brand, title, accent, tagline, chip, sources, box,
-  map, shade, guides }) => {
+  map, shade, shadeDir, guides }) => {
   const k = box.title / 120; // mọi cỡ chữ khác theo cỡ tên kênh
   const [gx, gy] = map.glowAt;
   return (
@@ -73,7 +74,7 @@ export const BrandArt: React.FC<BrandArtProps> = ({ width, height, brand, title,
       </svg>
       {/* lớp tối sau khối chữ: bản đồ phía sau không làm rối chữ */}
       {/* dốc mềm nhiều nấc: bản đầu hai nấc (95% -> 85% -> 0) để lại một vệt dọc thấy rõ trên đất liền */}
-      <AbsoluteFill style={{ background: `linear-gradient(90deg, ${[[0, "f2"], [0.45, "eb"], [0.62, "d4"], [0.75, "a8"],
+      <AbsoluteFill style={{ background: `linear-gradient(${shadeDir === "y" ? "180deg" : "90deg"}, ${[[0, "f2"], [0.45, "eb"], [0.62, "d4"], [0.75, "a8"],
         [0.86, "6b"], [0.94, "2e"], [1, "00"]].map(([f, a]) => `${brand.background}${a} ${Math.round(shade * (f as number))}px`).join(", ")})` }} />
 
       <div style={{ position: "absolute", left: box.x, top: box.y, width: box.w, height: box.h, display: "flex",

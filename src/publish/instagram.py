@@ -67,6 +67,11 @@ def upload_reel(path: Path, caption: str, ai_generated: bool = True, wait_second
             "Authorization": f"OAuth {token}", "offset": "0", "file_size": str(size)}))
     if up.get("success") is False:
         raise InstagramError(f"Tải video lên Instagram không thành công: {up}")
+    return _finish(ig, cid, token, get, post, wait_seconds, interval=20)
+
+
+def _finish(ig: str, cid: str, token: str, get, post, wait_seconds: int, interval: int) -> dict:
+    """Chờ "hộp chứa" xử lý xong (FINISHED) rồi đăng (media_publish). -> {"id", "url"}."""
     deadline, status = time.time() + wait_seconds, "IN_PROGRESS"
     while True:
         status = str(facebook._check(get(f"{facebook.GRAPH}/{cid}", timeout=30, params={
@@ -74,10 +79,10 @@ def upload_reel(path: Path, caption: str, ai_generated: bool = True, wait_second
         if status in ("FINISHED", "PUBLISHED"):
             break
         if status in ("ERROR", "EXPIRED"):
-            raise InstagramError(f"Instagram xử lý video lỗi: {status}")
+            raise InstagramError(f"Instagram xử lý lỗi: {status}")
         if time.time() >= deadline:
-            raise InstagramError(f"Instagram xử lý video quá {wait_seconds // 60} phút (trạng thái {status})")
-        time.sleep(20)
+            raise InstagramError(f"Instagram xử lý quá {wait_seconds} giây (trạng thái {status})")
+        time.sleep(interval)
     media = facebook._check(post(f"{facebook.GRAPH}/{ig}/media_publish", timeout=60,
                                  data={"creation_id": cid, "access_token": token}))
     mid = str(media["id"])
@@ -87,6 +92,36 @@ def upload_reel(path: Path, caption: str, ai_generated: bool = True, wait_second
     except Exception:
         link = ""
     return {"id": mid, "url": link or f"https://www.instagram.com/{account(get).get('username', '')}"}
+
+
+def hosted_url(path: Path, get=None, post=None) -> str:
+    """Địa chỉ web công khai của một ảnh trên máy: Instagram chỉ nhận ẢNH qua image_url (không tải thẳng được như
+    video), còn VM không công khai file. Cách không cần máy chủ riêng: tải lên Trang Facebook liên kết dạng ảnh TẠM
+    không đăng (published=false, temporary=true — như bài hẹn giờ của facebook.post_photo: không hiện trên Trang, tự hết
+    hạn) rồi lấy địa chỉ CDN của Meta."""
+    get, post = get or requests.get, post or requests.post
+    tok = facebook._token()
+    page, token = tok["page_id"], tok["page_token"]
+    with open(path, "rb") as fh:
+        photo = facebook._check(post(f"{facebook.GRAPH}/{page}/photos", timeout=120,
+                                     files={"source": (Path(path).name, fh)},
+                                     data={"published": "false", "temporary": "true", "access_token": token}))
+    images = facebook._check(get(f"{facebook.GRAPH}/{photo['id']}", timeout=30, params={
+        "fields": "images", "access_token": token})).get("images") or []
+    if not images:
+        raise InstagramError("Không lấy được địa chỉ ảnh từ Facebook")
+    return max(images, key=lambda i: int(i.get("width") or 0))["source"]
+
+
+def post_image(path: Path, caption: str, wait_seconds: int = 120, get=None, post=None) -> dict:
+    """Đăng một bài ẢNH (JPEG — Instagram không nhận PNG qua API). -> {"id", "url"}. Dùng cho bài giới thiệu kênh."""
+    get, post = get or requests.get, post or requests.post
+    token = facebook._token()["page_token"]
+    ig = account(get)["id"]
+    url = hosted_url(path, get, post)
+    created = facebook._check(post(f"{facebook.GRAPH}/{ig}/media", timeout=60, data={
+        "image_url": url, "caption": caption[:2200], "access_token": token}))
+    return _finish(ig, str(created["id"]), token, get, post, wait_seconds, interval=5)
 
 
 def caption(video: dict, cfg: dict) -> str:

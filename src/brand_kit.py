@@ -38,6 +38,10 @@ SPECS = {
                "box": {"x": 560, "y": 509, "w": 1080, "h": 422, "title": 100}},
     "cover": {"size": (1702, 630), "safe": (291, 0, 1411, 630), "file": "facebook_cover.png",
               "box": {"x": 330, "y": 40, "w": 640, "h": 550, "title": 84}},
+    # Bài giới thiệu ghim đầu trang Instagram (kênh Hàn, 21/11/2026): ảnh dọc 4:5, chữ trên - bản đồ dưới. Lưới trang cá
+    # nhân cắt 3:4 (bớt hai bên) -> vùng an toàn bỏ 40 điểm ảnh mỗi bên. JPEG: API Instagram không nhận PNG.
+    "instagram": {"size": (1080, 1350), "safe": (40, 0, 1040, 1350), "file": "instagram_intro.jpg", "shade_dir": "y",
+                  "box": {"x": 90, "y": 110, "w": 900, "h": 560, "title": 150}},
 }
 # Bản đồ theo ngôn ngữ kênh và loại ảnh: điểm `center` (kinh độ, vĩ độ) đặt ở `at` (điểm ảnh), `ppd` điểm ảnh mỗi độ
 # kinh ở xích đạo. Kênh Việt: Việt Nam + Hàn Quốc + Hoàng Sa + Trường Sa (vĩ độ 7,7-38,6) phải lọt CẢ vào dải
@@ -47,6 +51,8 @@ VIEWS = {
     ("vi", "cover"): {"center": (116.0, 23.2), "at": (1190, 315), "ppd": 12.0},
     ("ko", "banner"): {"center": (128.5, 36.6), "at": (1780, 720), "ppd": 22.0},
     ("ko", "cover"): {"center": (128.5, 36.6), "at": (1190, 315), "ppd": 20.0},
+    ("vi", "instagram"): {"center": (116.0, 23.2), "at": (540, 1005), "ppd": 14.5},   # kênh Việt chưa có Instagram
+    ("ko", "instagram"): {"center": (128.5, 36.6), "at": (560, 1010), "ppd": 34.0},
 }
 LAND_MIX = 0.3        # màu đất liền = nền phụ pha 30% màu chữ phụ (bản đầu dùng nguyên nền phụ: lẫn vào nền, biển
                       # trông như đất)
@@ -142,11 +148,14 @@ def props(kind: str, cfg: dict = None, guides: bool = False) -> dict:
     layer = map_layer(kind, colors)
     layer.pop("boxes")
     w, h = spec["size"]
+    box = spec["box"]
+    vertical = spec.get("shade_dir") == "y"
     out = {"width": w, "height": h, "brand": colors,
            "title": list(banner.get("title") or [colors["channel"]]), "accent": banner.get("accent", ""),
            "tagline": banner.get("tagline", ""),
            "chip": banner.get("chip", ""), "sources": banner.get("sources", ""),
-           "box": spec["box"], "map": layer, "shade": spec["box"]["x"] + spec["box"]["w"]}
+           "box": box, "map": layer, "shade": box["y"] + box["h"] if vertical else box["x"] + box["w"],
+           "shadeDir": "y" if vertical else "x"}
     if lang.code() != "vi":
         out["lang"] = lang.code()
     if guides:
@@ -162,9 +171,11 @@ def render(kind: str, out: Path = None, cfg: dict = None, guides: bool = False) 
     pf = out.with_suffix(".props.json")
     pf.write_text(json.dumps(props(kind, cfg, guides), ensure_ascii=False), encoding="utf-8")
     npx, env = web.node_env()
+    fmt = ["--image-format=jpeg", "--jpeg-quality=92"] if out.suffix.lower() in (".jpg", ".jpeg") \
+        else ["--image-format=png"]
     try:
         subprocess.run([npx, "remotion", "still", "src/index.ts", "BrandArt", str(out.resolve()), f"--props={pf.resolve()}",
-                        "--image-format=png", "--log=error"], cwd=web.WEB, env=env, check=True, timeout=600,
+                        *fmt, "--log=error"], cwd=web.WEB, env=env, check=True, timeout=600,
                        capture_output=True, shell=str(npx).endswith(".cmd"))
     finally:
         pf.unlink(missing_ok=True)
@@ -179,8 +190,11 @@ def main():
     ap.add_argument("--out-dir", type=Path)
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for kind in [a.only] if a.only else list(SPECS):
-        name = SPECS[kind]["file"].replace(".png", "_guides.png" if a.guides else ".png")
+    cfg = yaml.safe_load(lang.config_path().read_text(encoding="utf-8")) or {}
+    has_ig = bool(((cfg.get("publish") or {}).get("instagram") or {}).get("enabled"))
+    for kind in [a.only] if a.only else [k for k in SPECS if k != "instagram" or has_ig]:
+        file = Path(SPECS[kind]["file"])
+        name = f"{file.stem}_guides{file.suffix}" if a.guides else file.name
         out = (a.out_dir / name) if a.out_dir else OUT_DIR / lang.code() / name
         print(render(kind, out, guides=a.guides))
 
