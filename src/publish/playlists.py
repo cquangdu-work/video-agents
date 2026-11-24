@@ -22,20 +22,47 @@ from .. import db, lang
 log = logging.getLogger(__name__)
 API = "https://www.googleapis.com/youtube/v3"
 LONG = "tong-hop"
+# SERIES cố định (24/11/2026, Du chốt "phát triển sâu ngách"): ý tưởng có tiền tố tiêu đề này vào danh sách phát RIÊNG
+# (nếu cấu hình kênh có khoá đó), mô tả video mở bằng tên series + hashtag + link danh sách — người xem nhận ra, đi
+# tìm, xem tiếp cả series. Không có khoá trong cấu hình (kênh Việt) -> theo dạng video như cũ.
+SERIES = [("thang-nay", "이번 달 통계"), ("han-quoc", "한국 지도")]       # (khoá danh sách, tiền tố tiêu đề ý tưởng)
+PLAYLIST_URL = "https://www.youtube.com/playlist?list="
 
 
 def config(cfg: dict) -> dict:
     return ((cfg.get("publish") or {}).get("youtube") or {}).get("playlists") or {}
 
 
-def kind_of(con, video: dict) -> str:
-    """Dạng của video: video dài (không có kịch bản) -> "tong-hop"; Shorts -> learning.video_kind của ý tưởng."""
+def series_of(idea_title, cfg: dict):
+    """Khoá series của một ý tưởng (theo tiền tố tiêu đề do nguồn bảng số tự đặt), hoặc None."""
+    title = str(idea_title or "")
+    return next((key for key, prefix in SERIES if title.startswith(prefix) and key in config(cfg)), None)
+
+
+def with_series(con, meta: dict, idea_title, cfg: dict) -> dict:
+    """Mô tả video mở bằng dòng series ("▶ 시리즈 「지도로 보는 한국」 #지도로보는한국") + link danh sách phát nếu đã có."""
+    key = series_of(idea_title, cfg)
+    if not key:
+        return meta
+    name = config(cfg)[key]["title"]
+    line = f"▶ 시리즈 「{name}」 #{name.replace(' ', '')}"
+    pid = db.get_state(con, f"playlist_{key}")
+    if pid:
+        line += f"\n전체 보기: {PLAYLIST_URL}{pid}"
+    return dict(meta, description=f"{line}\n\n{meta['description']}")
+
+
+def kind_of(con, video: dict, cfg: dict = None) -> str:
+    """Danh sách của video: video dài (không có kịch bản) -> "tong-hop"; Shorts -> series (SERIES) nếu có, không thì
+    learning.video_kind của ý tưởng."""
     from ..learning import video_kind
     if not video.get("script_id"):
         return LONG
     row = con.execute("SELECT i.title, i.source_name FROM scripts s JOIN ideas i ON i.id = s.idea_id WHERE s.id = ?",
                       (video["script_id"],)).fetchone()
-    return video_kind(row[0], row[1]) if row else "bieu-do"
+    if not row:
+        return "bieu-do"
+    return series_of(row[0], cfg or {}) or video_kind(row[0], row[1])
 
 
 def _headers(token: str) -> dict:
@@ -89,7 +116,7 @@ def add(con, video: dict, cfg: dict, token: str = None, http=requests) -> str:
     if token is None:
         from . import youtube
         token = youtube.access_token()
-    pid = ensure(con, kind_of(con, video), cfg, token, http)
+    pid = ensure(con, kind_of(con, video, cfg), cfg, token, http)
     if not pid:
         return None
     from . import yt_quota
@@ -140,7 +167,7 @@ def main():
     cfg, con = load_config(), db.connect()
     pl = config(cfg)
     for v in pending(con):
-        kind = kind_of(con, v)
+        kind = kind_of(con, v, cfg)
         print(f"#{v['id']} {v['youtube_id']} [{kind}] -> {pl.get(kind, {}).get('title', '(không có danh sách)')}"
               f" | {v['title']}")
     if a.apply:

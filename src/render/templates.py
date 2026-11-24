@@ -408,8 +408,8 @@ class MapScene(BrandScene):
                  for r, k in enumerate(order)}
         if p.get("region") == "world":
             return self.world(data, order, shade, low, high)
-        if p.get("region") == "kr":
-            return self.provinces(data, order, shade, low, high)
+        if p.get("region") in ("kr", "kr_sgg"):
+            return self.provinces(data, order, shade, low, high, p["region"])
         self.asia(data, order, shade, low, high)
 
     def legend(self, data, order, low, high, y: float):
@@ -620,7 +620,7 @@ class MapScene(BrandScene):
         self.play(FadeIn(callouts), FadeIn(legend), run_time=0.4)
         self.wait(max(self.seconds - 0.5 - fill_time - 0.4, 0.1))
 
-    def provinces(self, data, order, shade, low, high):
+    def provinces(self, data, order, shade, low, high, region="kr"):
         """Dự phòng khi Remotion lỗi: bản đồ 17 시도 (kênh Hàn) — tô theo thứ hạng, Dokdo cùng màu 경북 + tên, thang màu.
         Bản Remotion (web_map.province_props) đầy đủ hơn (nền Triều Tiên, tên tỉnh, bảng số)."""
         from manim import Polygon, LaggedStart
@@ -628,7 +628,7 @@ class MapScene(BrandScene):
         c = self.b["colors"]
         to_xy = projector(self.MAP_W, self.MAP_H, self.MAP_CENTER, "kr")
         base, fills = VGroup(), []
-        for code, prov in load_map("kr")["countries"].items():
+        for code, prov in load_map(region)["countries"].items():
             shapes = VGroup(*[Polygon(*[to_xy(lon, lat) for lon, lat in ring[:-1]], stroke_color=c["muted"],
                                       stroke_width=1.2, stroke_opacity=0.55, fill_opacity=0) for ring in prov["rings"]])
             base.add(shapes)
@@ -636,6 +636,7 @@ class MapScene(BrandScene):
                 fills.append((data[code][1], shapes.copy().set_fill(shade[code], opacity=1)
                               .set_stroke(c["background"], width=1.2, opacity=1)))
         owner, spots, (lab_lon, lab_lat), _ = KR_DOKDO
+        owner = "SGG:경북 울릉군" if region == "kr_sgg" else owner
         base.add(*[Dot(to_xy(lon, lat), radius=0.05, color=shade.get(owner, c["muted"])) for lon, lat in spots])
         base.add(Text("독도", font=pick_font(), font_size=18, color=c["text"]).move_to(to_xy(lab_lon, lab_lat)))
         for name, (lon, lat) in KR_SEAS:

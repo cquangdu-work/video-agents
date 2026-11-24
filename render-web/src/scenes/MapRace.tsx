@@ -34,7 +34,7 @@ export const MapView: React.FC<P<MapScene>> = ({ s, brand, tl, dur }) => {
     <AbsoluteFill style={{ opacity: exitOf(tl, dur) }}>
       <SceneTitle text={s.title} brand={brand} tl={tl} />
       <svg width={1080} height={1920} style={{ position: "absolute" }}>
-        <g style={{ transform: `scale(${cam})`, transformOrigin: s.region === "world" ? "540px 720px" : s.region === "kr" ? "540px 690px" : "540px 790px" }}>
+        <g style={{ transform: `scale(${cam})`, transformOrigin: s.region === "world" ? "540px 720px" : s.region === "kr" || s.region === "kr_sgg" ? "540px 690px" : "540px 790px" }}>
           {s.context && (
             <>
               <defs>
@@ -47,6 +47,7 @@ export const MapView: React.FC<P<MapScene>> = ({ s, brand, tl, dur }) => {
               <path d={s.context} fill="url(#ctxfade)" opacity={ramp(tl, 0, 0.35)} stroke="none" />
             </>
           )}
+          {s.base && <path d={s.base} fill={brand.surface} fillOpacity={0.55 * ramp(tl, 0, 0.35)} stroke="none" />}
           <path d={s.outline} fill="none" stroke={brand.muted} strokeOpacity={0.45 * ramp(tl, 0, 0.35)} strokeWidth={1} />
           {s.fills.map((f) => {
             // tô từ thấp lên cao: mắt theo được thứ hạng
@@ -59,13 +60,14 @@ export const MapView: React.FC<P<MapScene>> = ({ s, brand, tl, dur }) => {
               </g>
             );
           })}
+          {s.borders && <path d={s.borders} fill="none" stroke={brand.background} strokeWidth={2.4} strokeLinejoin="round" />}
           {/* Hoàng Sa, Trường Sa: hiện ngay từ đầu cùng nền bản đồ, cùng màu Việt Nam */}
-          {s.islands.map(([x, y], i) => <circle key={`i${i}`} cx={x} cy={y} r={s.region === "world" ? 1.8 : s.region === "kr" ? 6 : 3.4} fill={s.islandColor} />)}
+          {s.islands.map(([x, y], i) => <circle key={`i${i}`} cx={x} cy={y} r={s.region === "world" ? 1.8 : s.region === "kr" || s.region === "kr_sgg" ? 6 : 3.4} fill={s.islandColor} />)}
           {s.islandLabels.map((l) => <Label key={l.text} l={l} brand={brand} />)}
           {s.marks.map((m, i) => (
             <g key={`m${i}`} opacity={late}>
               <path d={m.d} fill="none" stroke={m.color} strokeOpacity={0.35 * glow} strokeWidth={12} strokeLinejoin="round" />
-              <path d={m.d} fill="none" stroke={m.color} strokeWidth={s.region === "world" || s.region === "kr" ? 3 : 4} strokeLinejoin="round" />
+              <path d={m.d} fill="none" stroke={m.color} strokeWidth={s.region === "asia" ? 4 : 3} strokeLinejoin="round" />
             </g>
           ))}
           {s.names?.map((l) => <g key={`n${l.text}`} opacity={late}><Label l={l} brand={brand} /></g>)}
@@ -81,8 +83,8 @@ export const MapView: React.FC<P<MapScene>> = ({ s, brand, tl, dur }) => {
             return (
               <g opacity={k}>
                 <rect x={m0x} y={m0y} width={m1x - m0x} height={m1y - m0y} fill="none" stroke={brand.text} strokeWidth={2} />
-                <line x1={m0x} y1={m1y} x2={x0} y2={y0} stroke={brand.muted} strokeWidth={1.5} />
-                <line x1={m1x} y1={m1y} x2={x1} y2={y0} stroke={brand.muted} strokeWidth={1.5} />
+                {inset.lines !== false && <line x1={m0x} y1={m1y} x2={x0} y2={y0} stroke={brand.muted} strokeWidth={1.5} />}
+                {inset.lines !== false && <line x1={m1x} y1={m1y} x2={x1} y2={y0} stroke={brand.muted} strokeWidth={1.5} />}
                 <g style={{ transform: `translateY(${(1 - k) * 40}px)` }}>
                   <rect x={x0} y={y0} width={x1 - x0} height={y1 - y0} fill={inset.background} stroke={brand.muted} strokeWidth={2} rx={8} />
                   {inset.shapes.map((sh, i) => (

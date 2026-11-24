@@ -57,8 +57,8 @@ def map_props(p: dict, colors: dict) -> dict:
     FOCUS = focus_countries()                    # [(mã, khoá màu)]: Việt+Hàn (kênh Việt) | Hàn+Nhật (kênh Hàn)
     anchor, anchor_key = FOCUS[0]
     dec = int(p.get("decimals", 0) or 0)
-    if p.get("region") == "kr":
-        return province_props(p, colors)
+    if p.get("region") in ("kr", "kr_sgg"):
+        return province_props(p, colors, p["region"])
     region = "world" if p.get("region") == "world" else "asia"
     data, given = {}, {}
     for it in p.get("items") or []:
@@ -203,18 +203,28 @@ def _centroid(rings) -> tuple:
     return sum(p[0] for p in ring) / len(ring), sum(p[1] for p in ring) / len(ring)
 
 
-def province_props(p: dict, colors: dict) -> dict:
-    """Bản đồ Hàn Quốc theo 17 tỉnh/thành: tô theo THỨ HẠNG (như bản đồ nước), nền Triều Tiên/Nhật Bản mờ, Dokdo
-    tự vẽ cùng màu 경북 + tên "독도", chữ "동해"; viền + tên cho tỉnh cao nhất và thấp nhất; bảng: 1위, 최하위, 전국."""
+KR_INSET = dict(x0=728, y0=740, x1=1025, y1=1010)      # ô phóng to Seoul (bản đồ 시군구): góc dưới phải, biển trống
+
+
+def _extent(ring) -> float:
+    return max(max(q[0] for q in ring) - min(q[0] for q in ring), max(q[1] for q in ring) - min(q[1] for q in ring))
+
+
+def province_props(p: dict, colors: dict, region: str = "kr") -> dict:
+    """Bản đồ trong nước Hàn Quốc — "kr": 17 tỉnh/thành, "kr_sgg": ~229 시군구 (24/11/2026). Tô theo THỨ HẠNG (như bản đồ
+    nước), nền Triều Tiên mờ, Dokdo tự vẽ cùng màu vùng sở hữu (경북 | 울릉군) + tên "독도", chữ "동해"; viền + tên cho nơi
+    cao nhất và thấp nhất; bảng: 1위, 최하위, 전국. Bản đồ 시군구 thêm: nền + ranh giới tỉnh (định hướng; vùng không có số —
+    vd 영광군, thiếu trong geoBoundaries — hiện màu nền) và ô phóng to Seoul (25 구 quá nhỏ ở cỡ cả nước)."""
     from ..sources.datatable import ranks_desc
-    from .geo import KR_DOKDO, KR_SEAS, code_of, display_name, load_map, projector
+    from .geo import KR_DOKDO, KR_SEAS, SEOUL_BBOX, clip_ring, code_of, display_name, load_map, projector, sgg_code
+    sgg = region == "kr_sgg"
     dec = int(p.get("decimals", 0) or 0)
-    m = load_map("kr")
-    provinces = m["countries"]
+    base = load_map("kr")
+    units = load_map(region)["countries"]
     data, given = {}, {}
     for it in p.get("items") or []:
-        code = it.get("code") or code_of(it.get("label"))
-        if code in provinces:
+        code = it.get("code") or (sgg_code(it.get("label")) if sgg else code_of(it.get("label")))
+        if code in units:
             data[code] = (str(it.get("label")), float(it["value"]))
             if isinstance(it.get("rank"), int):
                 given[code] = it["rank"]
@@ -227,15 +237,17 @@ def province_props(p: dict, colors: dict) -> dict:
 
     cx, cy = _units(KR_BOX["cx"], KR_BOX["cy"])
     to_xy = projector(KR_BOX["w"] / U, KR_BOX["h"] / U, (cx, cy), "kr")
-    outline, fills = [], []
-    for code, c in provinces.items():
-        d = _path(c["rings"], to_xy)
-        outline.append(d)
+    fills = []
+    for code, c in units.items():
         if code in data:
-            fills.append({"code": code, "d": d, "color": shade[code], "k": order.index(code) / max(n - 1, 1)})
+            fills.append({"code": code, "d": _path(c["rings"], to_xy), "color": shade[code],
+                          "k": order.index(code) / max(n - 1, 1)})
     fills.sort(key=lambda f: f["k"])
+    province_paths = " ".join(_path(c["rings"], to_xy) for c in base["countries"].values())
 
     owner, spots, (lab_lon, lab_lat), _ = KR_DOKDO
+    if sgg:
+        owner = "SGG:경북 울릉군"                       # Dokdo thuộc 울릉군
     island_pts = [list(_px(to_xy(lon, lat))) for lon, lat in spots]
     lx, ly = _px(to_xy(lab_lon, lab_lat))
     labels = [{"text": "독도", "x": lx, "y": ly, "anchor": "middle", "size": 24, "color": colors["text"]}]
@@ -243,17 +255,39 @@ def province_props(p: dict, colors: dict) -> dict:
         x, y = _px(to_xy(lon, lat))
         labels.append({"text": name, "x": x, "y": y, "anchor": "middle", "size": 26, "color": colors["muted"]})
 
+    inset, to_in = None, None
+    if sgg:
+        lon0, lat0, lon1, lat1 = SEOUL_BBOX
+        w, h = KR_INSET["x1"] - KR_INSET["x0"], KR_INSET["y1"] - KR_INSET["y0"]
+        icx, icy = _units((KR_INSET["x0"] + KR_INSET["x1"]) / 2, (KR_INSET["y0"] + KR_INSET["y1"]) / 2)
+        to_in = projector(w / U, h / U, (icx, icy), "kr", bbox=SEOUL_BBOX)
+        shapes = []
+        for code, c in units.items():
+            rings = [r for r in (clip_ring(ring, SEOUL_BBOX) for ring in c["rings"]) if len(r) >= 3]
+            if rings:
+                shapes.append({"d": _path(rings, to_in), "fill": shade.get(code), "vn": False,
+                               "stroke": colors["background"]})
+        seoul = [r for r in (clip_ring(ring, SEOUL_BBOX) for ring in base["countries"]["KR-11"]["rings"])
+                 if len(r) >= 3]
+        shapes.append({"d": _path(seoul, to_in), "fill": None, "vn": True, "stroke": colors["text"]})
+        inset = {"frame": [(KR_INSET["x0"], KR_INSET["y0"]), (KR_INSET["x1"], KR_INSET["y1"])], "shapes": shapes,
+                 "islands": [], "mark": [_px(to_xy(lon0, lat1)), _px(to_xy(lon1, lat0))],
+                 "background": colors["background"], "lines": False,
+                 "labels": [{"text": "서울", "x": KR_INSET["x0"] + 14, "y": KR_INSET["y0"] + 24, "anchor": "start",
+                             "size": 24, "color": colors["text"]}]}
+
     marks, names, panel, ranks_shown = [], [], [], []
     picks = ([(order[-1], colors["text"], colors["accent"])] if order else []) + \
             ([(order[0], colors["korea"], colors["korea"])] if n >= 2 else [])
     for code, line, ink in picks:
-        rings = provinces[code]["rings"]
+        rings = units[code]["rings"]
         # viền chỉ quanh phần đất chính (전남 có hàng chục đảo: viền từng đảo thành một đám chấm trắng)
-        big = [r for r in rings if max(max(q[0] for q in r) - min(q[0] for q in r),
-                                       max(q[1] for q in r) - min(q[1] for q in r)) >= 0.3] or rings
+        big = [r for r in rings if _extent(r) >= (0.05 if sgg else 0.3)] or [max(rings, key=len)]
         marks.append({"d": _path(big, to_xy), "color": line})
-        x, y = _px(to_xy(*_centroid(rings)))
-        names.append({"text": display_name(code), "x": x, "y": y, "anchor": "middle", "size": 30, "color": line})
+        in_seoul = sgg and units[code].get("province") == "KR-11"
+        x, y = _px((to_in if in_seoul else to_xy)(*_centroid(rings)))        # 구 của Seoul: tên ghi trong ô phóng to
+        names.append({"text": display_name(code), "x": x, "y": y, "anchor": "middle", "size": 26 if sgg else 30,
+                      "color": line})
         r = rank[code]
         pos = lang.pick(vi=f"hạng {r}/{n}", ko=f"{n}곳 중 {r}위") + (lang.pick(vi=" (thấp nhất)", ko="(최하위)")
                                                                      if code == order[0] else "")
@@ -263,12 +297,16 @@ def province_props(p: dict, colors: dict) -> dict:
         panel.append({"label": lang.pick(vi="Cả nước", ko="전국"), "value": fmt(float(p["national"])),
                       "color": colors["text"], "pos": ""})
 
-    out = {"region": "kr", "title": str(p.get("title", "")), "outline": " ".join(outline), "fills": fills,
-           "context": _path(m.get("context") or [], to_xy),
+    out = {"region": region, "title": str(p.get("title", "")), "fills": fills,
+           # 시군구: đường "outline" (nét mảnh dưới lớp tô) bỏ — ranh giới TỈNH vẽ đè lên ("borders") để định hướng
+           "outline": "" if sgg else province_paths,
+           "context": _path(base.get("context") or [], to_xy),
            # Triều Tiên bị khung cắt thẳng ở mép trên -> mờ dần lên trên (không thành một "nắp" phẳng)
-           "contextFade": [_px(to_xy(126.0, m["bbox"][3]))[1], _px(to_xy(126.0, m["bbox"][3] - 0.5))[1]],
+           "contextFade": [_px(to_xy(126.0, base["bbox"][3]))[1], _px(to_xy(126.0, base["bbox"][3] - 0.5))[1]],
            "islands": island_pts, "islandColor": shade.get(owner, colors["muted"]), "islandLabels": labels,
            "marks": marks, "names": names, "panel": panel, "panelTop": KR_PANEL_TOP, "ranksShown": ranks_shown}
+    if sgg:
+        out.update(base=province_paths, borders=province_paths, inset=inset)
     if order:
         caption = " · ".join(x for x in (str(p.get("year") or ""), str(p.get("unit") or "")) if x)
         out["legend"] = {"stops": [_mix(low, high, 0.15 + 0.85 * i / 9) for i in range(10)],

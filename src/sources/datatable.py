@@ -113,8 +113,15 @@ def ranks_desc(values: dict) -> dict:
 WORLD_TABLE = "Số liệu từng nước năm"
 WORLD_TABLE_KO = "국가별 수치"
 REGION_TABLE_KO = "시도별 수치"           # bản đồ 17 tỉnh/thành Hàn Quốc (kosis.build_province_map, 24/11/2026)
+SGG_TABLE_KO = "시군구별 수치"            # bản đồ ~229 quận/huyện (level: sgg)
 NATIONAL_KO = "전국"                     # dòng "cả nước" trong bảng 시도 — không phải một vùng trên bản đồ
-_WORLD_MARK = rf"(?:{WORLD_TABLE}|{WORLD_TABLE_KO}|{REGION_TABLE_KO})"
+FRESH_MARK = "신규 공표"                  # ý tưởng từ số VỪA công bố (kosis.build_monthly_map) -> ưu tiên dựng
+
+
+def is_fresh(idea: dict) -> bool:
+    """Ý tưởng / kịch bản từ số liệu vừa công bố (dòng FRESH_MARK trong tóm tắt)."""
+    return f"{FRESH_MARK}:" in str((idea or {}).get("summary") or "")
+_WORLD_MARK = rf"(?:{WORLD_TABLE}|{WORLD_TABLE_KO}|{REGION_TABLE_KO}|{SGG_TABLE_KO})"
 
 
 def world_table_line(year: int, named: dict) -> str:
@@ -125,13 +132,17 @@ def world_table_line(year: int, named: dict) -> str:
         ko=f"{WORLD_TABLE_KO} {year} (지도 색칠용 — 내레이션에는 위에 나온 수치만 사용): {body}.")
 
 
-def region_table_line(year: int, named: dict, national: float = None) -> str:
+def region_table_line(year: int, named: dict, national: float = None, marker: str = REGION_TABLE_KO,
+                      unit: str = None, period: str = None) -> str:
     """{시도: giá trị} (+ toàn quốc) -> '시도별 수치 2024 (...): 강원 0.92; ...; 전국 0.75.' — cùng khuôn với bảng mọi nước
-    nên parse_world_table đọc lại được, mọi cổng đối chiếu số dùng chung."""
+    nên parse_world_table đọc lại được, mọi cổng đối chiếu số dùng chung. unit / period: đơn vị và mốc thời gian của
+    giá trị TÔ MÀU khi khác chỉ số gốc (bản đồ "% thay đổi so với cùng tháng năm trước", "2026년 8월") — code điền vào
+    chú thích thang màu, không để model tự ghi."""
     body = "; ".join(f"{n} {vn_number(v)}" for n, v in sorted(named.items()))
     if national is not None:
         body += f"; {NATIONAL_KO} {vn_number(national)}"
-    return f"{REGION_TABLE_KO} {year} (지도 색칠용 — 내레이션에는 위에 나온 수치만 사용): {body}."
+    tags = "".join(f"; {k}={v}" for k, v in (("단위", unit), ("기간", period)) if v)
+    return f"{marker} {year} (지도 색칠용 — 내레이션에는 위에 나온 수치만 사용{tags}): {body}."
 
 
 def before_world_table(summary: str) -> str:
@@ -141,16 +152,24 @@ def before_world_table(summary: str) -> str:
 
 def parse_world_table(summary: str):
     """Ngược lại world_table_line -> {"year": 2024, "items": [{"label", "value"}]} hoặc None."""
-    m = re.search(rf"^{_WORLD_MARK} ((?:19|20)\d{{2}})[^:]*:\s*(.+?)\.?\s*$", str(summary or ""), re.M)
+    m = re.search(rf"^{_WORLD_MARK} ((?:19|20)\d{{2}})([^:]*):\s*(.+?)\.?\s*$", str(summary or ""), re.M)
     if not m:
         return None
+    tags = dict(re.findall(r"(단위|기간)=([^;)]+)", m.group(2)))
     items = []
     num = (r"-?[\d,]*\d(?:\.\d+)?" if lang.code() == "ko" else r"-?[\d.]*\d(?:,\d+)?")
-    for part in m.group(2).split(";"):
+    for part in m.group(3).split(";"):
         pm = re.match(rf"\s*(.+?)\s+({num})\s*$", part)
         if pm:
             items.append({"label": pm.group(1), "value": parse_vn_number(pm.group(2))})
-    return {"year": int(m.group(1)), "items": items} if items else None
+    if not items:
+        return None
+    out = {"year": int(m.group(1)), "items": items}
+    if tags.get("단위"):
+        out["unit"] = tags["단위"].strip()
+    if tags.get("기간"):
+        out["period"] = tags["기간"].strip()
+    return out
 
 
 def lower_first(name: str) -> str:

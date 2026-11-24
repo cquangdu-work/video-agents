@@ -120,6 +120,21 @@ sources:
       - {kind: province_map, org: "101", tbl: DT_1YL21161, item: "1인가구비율", name: "1인 가구 비율", unit: "%"}
       - {kind: province_map, org: "101", tbl: DT_1YL20642, name: "청년 순이동률", unit: "%", national: false,
          pick: {B: "청년순이동률(19~39세)"}}
+      # level: sgg (24/11/2026) — bản đồ ~229 시군구 (assets/geo/kr_sgg.json, ô phóng to Seoul): "우리 동네는 몇 위?"
+      - {kind: province_map, level: sgg, org: "101", tbl: DT_1YL20631, item: "고령인구비율", name: "고령인구 비율",
+         unit: "%", per: người}
+      - {kind: province_map, level: sgg, org: "101", tbl: DT_1YL21161, item: "1인가구비율", name: "1인 가구 비율",
+         unit: "%"}
+      - {kind: province_map, level: sgg, org: "101", tbl: DT_1YL20642, name: "청년 순이동률", unit: "%",
+         national: false, pick: {B: "청년순이동률(19~39세)"}}
+    # SỐ MỚI CÔNG BỐ theo tháng (24/11/2026, kosis.build_monthly_map): kiểm MỖI NGÀY, tháng mới xuất hiện -> ý tưởng
+    # "이번 달 통계" dựng trước mọi thứ khác. Lần đầu chỉ ghi mốc (state kosis_seen_*). map_value: yoy = bản đồ tô theo %
+    # thay đổi so với cùng tháng năm trước (số đếm); không ghi = tô theo chính giá trị (tỷ lệ).
+    monthly:
+      - {org: "101", tbl: DT_1B8000G, name: "출생아 수", unit: "명", pick: {A: "출생아수(명)"}, map_value: yoy}
+      - {org: "101", tbl: DT_1B8000G, name: "혼인 건수", unit: "건", pick: {A: "혼인건수(건)"}, map_value: yoy}
+      - {org: "101", tbl: INH_1DA7014S_03, name: "고용률", unit: "%", pick: {B: "계"}}
+      - {org: "101", tbl: DT_1YL20581, name: "소비자물가 상승률(전년 동월 대비)", unit: "%"}
 
   # Our World in Data — cuộc đua (race) và bản đồ thế giới (map, góc nhìn Hàn Quốc). Mỗi ngày 2 dòng liền nhau,
   # xếp xen kẽ map / race.
@@ -273,6 +288,14 @@ publish:
     utc_offset_hours: 9
     oauth_token_days: null
     playlists:                    # src/publish/playlists.py — xem chú thích ở config/channel.yaml
+      # SERIES cố định (24/11/2026, playlists.SERIES): ý tưởng "이번 달 통계: …" / "한국 지도: …" vào danh sách riêng,
+      # mô tả mở bằng tên series + hashtag + link danh sách
+      thang-nay:
+        title: "이번 달 통계"
+        description: "통계청이 새로 발표한 이번 달 숫자를 발표 직후 지도와 그래프로 정리합니다. 출생아 수, 혼인 건수, 고용률, 물가까지."
+      han-quoc:
+        title: "지도로 보는 한국"
+        description: "시도·시군구별 공식 통계(KOSIS)를 지도로 색칠했습니다. 우리 동네는 몇 위일까요?"
       ban-do:
         title: "세계 지도로 보는 숫자"
         description: "실제 데이터로 색칠한 세계 지도 — 한국은 세계 여러 나라 가운데 어디쯤일까요?"

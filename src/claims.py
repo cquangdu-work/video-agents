@@ -53,7 +53,9 @@ def data_table(summary: str) -> dict:
     """{nhãn: {năm: giá trị}} đọc từ tóm tắt: các dòng "theo năm" + bảng mọi nước (bản đồ thế giới)."""
     table = {s["label"]: dict(zip(s["xs"], s["ys"])) for s in parse_series(summary)}
     world = parse_world_table(summary)
-    if world:
+    # bảng tô màu bằng giá trị DẪN XUẤT (% thay đổi so với cùng tháng năm trước — kosis.build_monthly_map) không phải
+    # số gốc của vùng: so "서울은 부산보다 많다" trên đó là sai; số gốc từng tỉnh đã có ở dòng "시도별 수치(높은 순)"
+    if world and not str(world.get("unit") or "").startswith("전년"):
         for it in world["items"]:
             table.setdefault(it["label"], {}).setdefault(world["year"], it["value"])
     return table

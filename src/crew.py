@@ -779,16 +779,33 @@ MAX_LINES = 4              # biểu đồ đường trên khung dọc: quá 4 đ
 def fill_world_map(p: dict, world: dict) -> None:
     """Cảnh bản đồ của ý tưởng "bản đồ thế giới": mọi nước trong bảng, kèm mã nước và thứ hạng
     (cùng hàm xếp hạng với phần tóm tắt -> hạng trên hình khớp hạng trong lời đọc)."""
-    from .render.geo import code_of, region_for
+    from .render.geo import KR_REGIONS
     from .sources.datatable import NATIONAL_KO, ranks_desc
-    items = [dict(it, code=code_of(it["label"])) for it in world["items"] if code_of(it["label"])]
+    pairs, region = world_codes(world)       # bảng 17 시도 / 시군구 -> bản đồ Hàn Quốc theo tỉnh / quận huyện
+    items = [dict(it, code=c) for it, c in pairs]
     rank = ranks_desc({it["code"]: it["value"] for it in items})
-    region = region_for([it["code"] for it in items])            # bảng 17 시도 -> bản đồ Hàn Quốc theo tỉnh
-    p["year"], p["region"], p["total"] = world["year"], ("kr" if region == "kr" else "world"), len(items)
+    p["year"], p["region"], p["total"] = world["year"], (region if region in KR_REGIONS else "world"), len(items)
     p["items"] = [dict(it, rank=rank[it["code"]]) for it in items]
     national = next((it["value"] for it in world["items"] if it["label"] == NATIONAL_KO), None)
-    if region == "kr" and national is not None:
+    if region in KR_REGIONS and national is not None:
         p["national"] = national
+    if world.get("unit"):              # giá trị tô màu khác chỉ số gốc (vd % thay đổi so với cùng tháng năm trước)
+        p["unit"] = world["unit"]
+    if world.get("period"):
+        p["year"] = world["period"]
+
+
+def world_codes(world: dict) -> tuple:
+    """([(dòng bảng, mã)], bản đồ) của bảng mọi nước / mọi vùng. Bảng cấp 시군구 tra tên trong bản đồ 시군구 TRƯỚC
+    ("세종시" vừa là tên phụ của tỉnh 세종 vừa là một đơn vị 시군구)."""
+    from .render.geo import code_of, region_for, sgg_code
+    rows = (world or {}).get("items", [])
+    sgg = [(it, sgg_code(it["label"])) for it in rows]
+    if sum(1 for _, c in sgg if c) >= max(10, len(rows) // 2):
+        pairs = [(it, c) for it, c in sgg if c]
+    else:
+        pairs = [(it, code_of(it["label"])) for it in rows if code_of(it["label"])]
+    return pairs, region_for([c for _, c in pairs])
 
 
 def fill_series_from_data(spec: list, data_series: list, world: dict = None) -> int:
@@ -885,13 +902,13 @@ def design_scenes(idea: dict, scenes: list, cfg: dict, log_problems=None, lesson
     data_series = parse_series(source_data)
     data_block = (f"\nDỮ LIỆU NGUỒN (số thật, ĐƯỢC dùng cho biểu đồ kể cả khi lời đọc không nhắc"
                   f" hết):\n\"\"\"\n{source_data}\n\"\"\"\n" if source_data else "")
-    from .render.geo import code_of as _code_of, region_for as _region_for
-    _codes = [c for c in (_code_of(it["label"]) for it in (world or {}).get("items", [])) if c]
-    if world and _region_for(_codes) == "kr":
+    _pairs, _region = world_codes(world) if world else ([], None)
+    if world and _region in ("kr", "kr_sgg"):
+        what = "TỈNH/THÀNH HÀN QUỐC (시도)" if _region == "kr" else "QUẬN/HUYỆN/THÀNH PHỐ HÀN QUỐC (시군구)"
         data_block += (
-            f"\nCÓ SỐ LIỆU CỦA {len(_codes)} TỈNH/THÀNH HÀN QUỐC (시도) NĂM {world['year']}: NÊN có ĐÚNG MỘT"
-            " cảnh \"map\" (bản đồ HÀN QUỐC theo tỉnh tô màu, tự có nhãn nơi cao nhất / thấp nhất / cả nước — chỉ ghi"
-            " title, unit, source, máy tự điền số mọi tỉnh) gánh TRỌN 1-2 câu nói nơi nào cao nhất, thấp nhất"
+            f"\nCÓ SỐ LIỆU CỦA {len(_pairs)} {what} NĂM {world['year']}: NÊN có ĐÚNG MỘT"
+            " cảnh \"map\" (bản đồ HÀN QUỐC tô màu theo vùng, tự có nhãn nơi cao nhất / thấp nhất / cả nước — chỉ ghi"
+            " title, unit, source, máy tự điền số mọi vùng) gánh TRỌN 1-2 câu nói nơi nào cao nhất, thấp nhất"
             " (≥ 5 giây lời; không chia câu đó cho cảnh khác — bản đồ cần thời gian để xem).\n")
     elif world:
         data_block += (

@@ -47,6 +47,9 @@ def collect(cfg: dict, con) -> int:
     return added
 
 
+FRESH_POINTS = 10       # ý tưởng từ số vừa công bố: xếp trước mọi ý tưởng khác (tổng điểm Biên tập ~15-27)
+
+
 def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
     """Bước 2-5: 4 agent xử lý, trả về số kịch bản đã gửi."""
     from . import crew  # import muộn: cần crewai + API key
@@ -64,6 +67,14 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
 
     # --- Agent Săn ý tưởng: chọn ứng viên có "góc"
     candidates = crew.hunt_ideas(raw, cfg) if raw else []
+    # SỐ VỪA CÔNG BỐ (kosis.build_monthly_map, dấu "신규 공표"): luôn là ứng viên — góc của nó chính là số mới, model Săn ý
+    # tưởng không được bỏ sót (Du chốt 24/11/2026: video trong ngày công bố là lợi thế khó bắt chước của kênh)
+    from .sources.datatable import is_fresh
+    picked = {c.get("id") for c in candidates}
+    candidates += [{"id": i["id"], "keyword": "",
+                    "angle": "Số liệu tháng mới vừa được cơ quan thống kê công bố — video ra ngay sau khi công bố,"
+                             " so với cùng tháng năm trước và theo từng tỉnh"}
+                   for i in raw if is_fresh(i) and i["id"] not in picked]
     by_id = {i["id"]: i for i in raw}
     enriched = [dict(i, keyword="") for i in stuck]
     for c in candidates:
@@ -82,7 +93,8 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
     survivors = []
     for idea in enriched:
         query = idea["keyword"] or idea["title"]
-        n = count_popular_vietnamese_videos(query, yt_cfg)
+        # số vừa công bố: chưa ai có video về tháng này (video cũ cùng đề tài là số cũ) -> không chặn
+        n = None if is_fresh(idea) else count_popular_vietnamese_videos(query, yt_cfg)
         if n is not None and n > yt_cfg["max_popular_allowed"]:
             db.set_status(con, idea["id"], "rejected",
                           reason=f"Đã có {n} video tiếng Việt view cao cùng đề tài “{query}”")
@@ -114,7 +126,7 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
         s = scores_by_id.get(idea["id"])
         if not s:
             continue
-        if s["total"] >= cfg["scoring_weights"]["min_total"]:
+        if s["total"] >= cfg["scoring_weights"]["min_total"] or is_fresh(idea):
             db.set_status(con, idea["id"], "selected", scores=s)
             selected.append(dict(idea, score=s["total"]))
         else:
@@ -125,7 +137,8 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
     from .sources.datatable import topic_family
     grow = growth._data()
     boost = lambda i: growth.IDEA_BOOST_POINTS * growth.boost_for(
-        topic_family(i.get("source_name")), learning.video_kind(i.get("title"), i.get("source_name")), grow)
+        topic_family(i.get("source_name")), learning.video_kind(i.get("title"), i.get("source_name")), grow) \
+        + (FRESH_POINTS if is_fresh(i) else 0)
     selected = balance_families(sorted(selected, key=lambda i: -(i["score"] + boost(i))))
     # Kịch bản hụt chuẩn (thiếu số, quá ngắn) không được tính -> thử thêm ý tưởng kế
     # tiếp theo điểm, nhưng có trần để không đốt quota LLM vô hạn.

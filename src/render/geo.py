@@ -17,7 +17,15 @@ from pathlib import Path
 GEO_DIR = Path(__file__).resolve().parent.parent.parent / "assets" / "geo"
 GEO_PATH = GEO_DIR / "asia.json"            # giữ tên cũ cho code/test đã dùng
 MAPS = {"asia": GEO_DIR / "asia.json", "world": GEO_DIR / "world.json",
-        "kr": GEO_DIR / "kr_provinces.json"}     # 17 시도 của Hàn Quốc (tools/build_kr_provinces.py), kênh Hàn
+        "kr": GEO_DIR / "kr_provinces.json",     # 17 시도 của Hàn Quốc (tools/build_kr_provinces.py), kênh Hàn
+        "kr_sgg": GEO_DIR / "kr_sgg.json"}       # ~229 시군구 (tools/build_kr_sgg.py, geoBoundaries 2020, CC BY 3.0)
+KR_REGIONS = ("kr", "kr_sgg")                    # bản đồ trong nước Hàn Quốc (web_map.province_props)
+
+# Mã tỉnh của KOSIS (2 chữ số; 1224 / 1236 = Gwangju / Jeonnam trong "전남광주통합특별시" mã 12 — danh mục KOSIS 24/11/2026)
+# -> mã ISO 3166-2 của kr_provinces.json. Dùng cho bảng KOSIS cấp 시군구 (mã vùng 5 chữ số = tỉnh + 3 chữ số).
+KOSIS_PROVINCE = {"11": "KR-11", "21": "KR-26", "22": "KR-27", "23": "KR-28", "1224": "KR-29", "25": "KR-30",
+                  "26": "KR-31", "29": "KR-50", "31": "KR-41", "32": "KR-42", "33": "KR-43", "34": "KR-44", "35": "KR-45",
+                  "1236": "KR-46", "37": "KR-47", "38": "KR-48", "39": "KR-49"}
 
 # Tên tiếng Việt (như kịch bản và bảng World Bank dùng) -> mã nước. Tên ở đây thắng tên trong
 # file bản đồ (Natural Earth ghi "Hoa Kỳ", "Myanma"; kịch bản nói "Mỹ", "Myanmar").
@@ -90,6 +98,7 @@ LABEL_AT_KO = {"KOR": (138.5, 24.5), "JPN": (141.0, 14.5)}
 # bờ Gangwon và Ulleungdo. Toạ độ chữ đặt ở vùng biển trống (đã dựng thử).
 KR_DOKDO = ("KR-47", [(131.87, 37.24)], (131.87, 36.98), "center")
 KR_SEAS = [("동해", (130.3, 38.1))]
+SEOUL_BBOX = (126.76, 37.41, 127.19, 37.72)      # ô phóng to Seoul trên bản đồ 시군구 (25 구 quá nhỏ ở cỡ cả nước)
 
 
 def _map_path(name: str) -> Path:
@@ -169,7 +178,7 @@ def country_names() -> dict:
 def name_index() -> dict:
     """tên thường (mọi cách gọi có trong file bản đồ, cả tên tiếng Hàn) -> mã nước. VI_TO_CODE thắng cuối cùng."""
     idx = {}
-    for name in ("world", "asia", "kr"):
+    for name in ("world", "asia", "kr", "kr_sgg"):
         if not has_map(name):
             continue
         for code, c in load_map(name)["countries"].items():
@@ -187,15 +196,45 @@ def code_of(label) -> str:
     return name_index().get(str(label or "").strip().lower())
 
 
+def sgg_code(label):
+    """Tên -> mã trên bản đồ 시군구, ƯU TIÊN bản đồ đó ("세종시" là tên phụ của tỉnh 세종 trong bản đồ tỉnh, nhưng trong bảng
+    cấp 시군구 nó là đơn vị "SGG:세종시"). Không có -> None."""
+    if not has_map("kr_sgg"):
+        return None
+    key = str(label or "").strip()
+    units = load_map("kr_sgg")["countries"]
+    if f"SGG:{key}" in units:
+        return f"SGG:{key}"
+    return next((c for c, u in units.items() if key in u.get("aliases", [])), None)
+
+
 def display_name(code: str) -> str:
     """Tên để hiện trên hình, theo ngôn ngữ của kênh."""
     from .. import lang
     if lang.code() == "ko" and code in names_ko():
         return names_ko()[code]
-    for name in ("world", "asia", "kr"):
+    for name in ("world", "asia", "kr", "kr_sgg"):
         if has_map(name) and code in load_map(name)["countries"]:
             return load_map(name)["countries"][code]["name"]
     return code
+
+
+def is_sgg(code) -> bool:
+    """Mã 시군구 của bản đồ kr_sgg ("SGG:서울 중구")."""
+    return str(code or "").startswith("SGG:")
+
+
+def kosis_sgg_label(code: str, name: str):
+    """Mục vùng KOSIS (mã, tên) -> tên vùng trên bản đồ 시군구 ("서울 중구"), hoặc None (cả nước, cấp tỉnh trừ 세종,
+    đơn vị không có trên bản đồ). 세종 là một đơn vị, KOSIS ghi ở cấp tỉnh (mã 29)."""
+    if code == "29":
+        return "세종시"
+    prov = next((KOSIS_PROVINCE[p] for p in sorted(KOSIS_PROVINCE, key=len, reverse=True)
+                 if code.startswith(p) and len(code) == len(p) + 3), None)
+    if not prov or not has_map("kr"):
+        return None
+    label = f"{load_map('kr')['countries'][prov]['name']} {name}"
+    return label if sgg_code(label) else None
 
 
 def is_province(code) -> bool:
@@ -209,6 +248,8 @@ def region_for(codes) -> str:
     codes = list(codes)
     if codes and all(is_province(c) for c in codes) and has_map("kr"):
         return "kr"
+    if codes and all(is_sgg(c) for c in codes) and has_map("kr_sgg"):
+        return "kr_sgg"
     asia = load_map("asia")["countries"]
     if all(c in asia for c in codes) or not has_map("world"):
         return "asia"

@@ -178,7 +178,7 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     công) -> điểm Biên tập + điểm "người xem thích" đã học (src/learning.py) -> mới hơn.
     """
     from . import growth, learning
-    from .sources.datatable import topic_family
+    from .sources.datatable import is_fresh, topic_family
     prefs = learning.preferences()
     fb_prefs = learning.preferences("fb_preferences")
     ig_prefs = learning.preferences("ig_preferences")      # kênh Hàn: người xem Instagram (src/ig_insights.py)
@@ -243,10 +243,12 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
         boost = growth.boost_for(feats["family"], feats["kind"], grow)
         out.append({"id": r["id"], "score": score, "has_final": final_path(r["id"]).exists(),
                     "family": family, "kind": feats["kind"], "streak": streak(family, recent),
+                    "fresh": is_fresh({"summary": r["summary"]}),
                     "long": words > max_words, "learned": bonus, "boost": boost})
     # Kịch bản DÀI hơn độ dài mới (viết trước 19/11 cho video 60-90 giây) xếp sau cùng: chỉ dựng khi
     # không còn kịch bản nào đúng khổ 45-60 giây (assemble đọc nhanh tối đa 1,12 lần vẫn ra ~80 giây)
-    return sorted(out, key=lambda c: (c["long"], c["streak"], not c["has_final"],
+    # số VỪA CÔNG BỐ (kosis.build_monthly_map) dựng trước nhất: giá trị của nó nằm ở chỗ ra ngay ngày công bố
+    return sorted(out, key=lambda c: (c["long"], not c["fresh"], c["streak"], not c["has_final"],
                                       -(c["score"] + PREF_WEIGHT * (c["learned"] + c["boost"])), -c["id"]))
 
 

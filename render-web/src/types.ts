@@ -68,12 +68,14 @@ export type LineSoloScene = Span & { kind: "line_solo"; title: string; world: Wo
 type Pt = [number, number];
 export type MapLabel = { text: string; x: number; y: number; anchor: "start" | "middle"; size: number; color: string };
 export type MapScene = Span & {
-  kind: "map"; region: "asia" | "world" | "kr"; title: string;
+  kind: "map"; region: "asia" | "world" | "kr" | "kr_sgg"; title: string;
   outline: string;
   context?: string; // bản đồ 17 시도: nền Triều Tiên (không tô số)
   contextFade?: [number, number]; // y bắt đầu / hết mờ dần của nền
   names?: MapLabel[]; // tên tỉnh được nhấn (bản đồ 17 시도), hiện khi tô xong
   panelTop?: number;
+  base?: string; // bản đồ 시군구: nền đất các tỉnh (vùng không có số vẫn thấy hình)
+  borders?: string; // bản đồ 시군구: ranh giới tỉnh vẽ đè lên các vùng
   fills: { code: string; d: string; color: string; k: number; dot?: [number, number, number] }[];
   islands: Pt[]; islandColor: string; islandLabels: MapLabel[];
   marks: { d: string; color: string }[];
@@ -82,6 +84,7 @@ export type MapScene = Span & {
   inset?: {
     frame: [Pt, Pt]; shapes: { d: string; fill?: string | null; stroke: string; vn: boolean }[];
     islands: Pt[]; labels: MapLabel[]; mark: [Pt, Pt]; background: string;
+    lines?: boolean; // false: không vẽ hai đường nối khung đánh dấu với ô (ô Seoul ở xa, đường cắt ngang bản đồ)
   };
   panel?: { label: string; value: string; color: string; pos: string }[];
 };
