@@ -206,7 +206,9 @@ big_channels:
   outlier_ratio: 3.0
   watch_per_week: 4
   rediscover_days: 28
-  seed_channels: []
+  # Ở Hàn gần như không có kênh Shorts số liệu >= 100k (quét 24/11) -> học cấu trúc từ các kênh số liệu kênh Việt đang
+  # học: Mr Globee, Gosudarst, maxmaxdata (độ dài, nhịp đổi hình, kiểu mở đầu không phụ thuộc ngôn ngữ)
+  seed_channels: [UC_que-CjOEPzrv6YMwBoWdQ, UC15gzmYSQKFj-misVqzZnZA, UC0nvCwGLmrKFZ6phJ19BoYQ]
   queries:
     - {q: "나라별 순위", lang: ko}
     - {q: "세계 순위 쇼츠", lang: ko}

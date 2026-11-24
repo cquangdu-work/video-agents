@@ -123,6 +123,7 @@ def discover(cfg: dict, now: datetime = None, get=None) -> list:
              if ch["subs"] >= c["min_subs"] or ch["id"] in seeds]
     for ch in found:
         ch["lang"] = langs.get(ch["id"], "")
+        ch["seed"] = ch["id"] in seeds          # kênh chọn sẵn trong cấu hình: không qua bộ lọc ngách / tiếng Hàn
     return sorted(found, key=lambda ch: -ch["subs"])[: c["max_channels"]]
 
 
@@ -300,13 +301,14 @@ def update(con, cfg: dict, now: datetime = None, get=None, post=None) -> list:
             continue
         if not s:
             continue
-        if s["niche"] < MIN_NICHE and not ch.get("manual"):
+        chosen = ch.get("manual") or ch.get("seed")
+        if s["niche"] < MIN_NICHE and not chosen:
             log.info("Bỏ kênh %s: chỉ %d%% tiêu đề đúng ngách", ch.get("title"), 100 * s["niche"])
             continue
-        if lang.code() == "ko" and s.get("korean", 1) < MIN_KOREAN and not ch.get("manual"):
+        if lang.code() == "ko" and s.get("korean", 1) < MIN_KOREAN and not chosen:
             log.info("Bỏ kênh %s: chỉ %d%% tiêu đề tiếng Hàn", ch.get("title"), 100 * s.get("korean", 0))
             continue
-        if len(kept) < c["max_channels"] or ch.get("manual"):
+        if len(kept) < c["max_channels"] or chosen:
             scans.append(s)
             kept.append(ch)
     data["channels"] = kept

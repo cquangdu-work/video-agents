@@ -215,3 +215,17 @@ class BigChannelTest(Case):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KoreanChannelFilterTest(unittest.TestCase):
+    """Kênh Hàn (24/11/2026): chỉ học kênh lớn tiêu đề tiếng Hàn, trừ kênh chọn sẵn (seed) trong cấu hình."""
+
+    def test_hangul_detection_and_seeds_configured(self):
+        import yaml
+        from pathlib import Path
+        from src.analysis import big_channels as bc
+        self.assertTrue(bc.HANGUL.search("209개국 중 23위"))
+        self.assertFalse(bc.HANGUL.search("RUSSIA 2024"))
+        ko = yaml.safe_load((Path(__file__).resolve().parent.parent / "config" / "channel_ko.yaml").read_text(encoding="utf-8"))
+        self.assertTrue(all(s.startswith("UC") for s in ko["big_channels"]["seed_channels"]))
+        self.assertFalse(any(q["lang"] == "en" for q in ko["big_channels"]["queries"]))
