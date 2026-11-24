@@ -672,6 +672,10 @@ def static_scenes(spec: list, max_words: int) -> list:
 # Cảnh nhiều chi tiết cần đủ thời gian để mắt kịp đọc (ca thật kịch bản #7: bản đồ thế giới
 # chia câu mở đầu 4 giây với một cảnh chữ, chỉ còn 2,3 giây — chưa tô màu xong đã chuyển cảnh)
 RICH_MIN_SECONDS = {"map": 5.0, "bar_race": 5.0}
+# Hai bước TỰ SỬA bên dưới (gộp câu, đổi cuộc đua thành đường) tính có biên: giọng TTS mỗi hôm nhanh chậm khác nhau
+# và video còn được đọc nhanh tới x1,12; tiếng Hàn câu ÍT SỐ đọc nhanh hơn hẳn mức trung bình 1,1 cụm/giây — câu 7 cụm
+# ước 6,4 giây thật ra chỉ đọc mất 4,0 giây (chạy thử 24/11). Đổi nhầm một cuộc đua ~6 giây thành đường thì mất ít.
+RICH_MARGIN = 1.5
 
 
 def _voice_runs(spec: list) -> list:
@@ -724,7 +728,7 @@ def absorb_statements(spec: list, wps: float) -> list:
         voice = " ".join(str(sc.get("voice") or "").split())
         alone = all(" ".join(str(spec[j].get("voice") or "").split()) != voice
                     for j in (i - 1, i + 1) if 0 <= j < len(spec))
-        if need and voice and alone and len(voice.split()) / wps < need:
+        if need and voice and alone and len(voice.split()) / wps < need * RICH_MARGIN:
             for j in (i + 1, i - 1):
                 if 0 <= j < len(spec) and spec[j].get("template") == "statement":
                     other = " ".join(str(spec[j].get("voice") or "").split())
@@ -738,6 +742,33 @@ def absorb_statements(spec: list, wps: float) -> list:
                         i -= 1
                     break
         i += 1
+    return spec
+
+
+def short_race_to_line(spec: list, wps: float) -> list:
+    """Tự sửa sau absorb_statements: cuộc đua vẫn quá ngắn (một câu, không có cảnh chữ cạnh để gộp) -> biểu đồ đường
+    CÙNG số liệu (năm, giá trị đã do code điền từ bảng): 4 giây đủ xem một đường, không đủ cho các thanh chạy hết các
+    mốc năm. Ca thật 24/11 (chạy thử bản đồ 17 시도): cuộc đua 3 thanh 4 giây cho câu "2018년 전국 … 1명 아래로"."""
+    for voice, idx in _voice_runs(spec):
+        if len(idx) != 1:
+            continue
+        sc = spec[idx[0]]
+        p = sc.get("params") or {}
+        if sc.get("template") != "bar_race" or len(voice.split()) / wps >= RICH_MIN_SECONDS["bar_race"] * RICH_MARGIN:
+            continue
+        years, items = p.get("years") or [], [it for it in p.get("items") or [] if isinstance(it, dict)]
+        if len(years) < 2 or not items:
+            continue
+        keep = sorted(items, key=lambda it: str(it.get("label", "")).lower() not in FOCUS_LABELS)[:MAX_LINES]
+        keep = [it for it in items if it in keep]
+        series = [{"label": str(it["label"]), "xs": list(years), "ys": list(it["values"])} for it in keep
+                  if len(it.get("values") or []) == len(years)]
+        if not series:
+            continue
+        log.info("Cuộc đua chỉ ~%.1f giây lời — đổi sang biểu đồ đường cùng số liệu", len(voice.split()) / wps)
+        sc["template"] = "line_chart"
+        sc["params"] = {k: v for k, v in p.items() if k in ("title", "unit", "source", "decimals")}
+        sc["params"].update(xs=list(years), series=series)
     return spec
 
 
@@ -1023,7 +1054,8 @@ Yêu cầu:
             problems.append("cảnh đứng yên quá lâu: " + "; ".join(slow) + " — tách thành 2-3 cảnh"
                             " LIỀN NHAU (mỗi cảnh một ý của câu, hoặc thêm 'statement' tóm ý),"
                             " các cảnh đó ghi CÙNG 'voice'")
-        spec = absorb_statements(make_room_for_rich(spec), words_per_second(cfg))
+        spec = short_race_to_line(absorb_statements(make_room_for_rich(spec), words_per_second(cfg)),
+                                  words_per_second(cfg))
         short = short_rich_scenes(spec, words_per_second(cfg))
         if short:
             problems.append("cảnh nhiều chi tiết quá ngắn: " + "; ".join(short))

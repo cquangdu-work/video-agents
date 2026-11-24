@@ -138,13 +138,40 @@ class AbsorbStatementTest(unittest.TestCase):
 
     def test_long_enough_or_shared_statement_untouched(self):
         from src.crew import absorb_statements
-        long_map = [{"template": "map", "voice": " ".join(["말"] * 8), "seconds": 6},
+        long_map = [{"template": "map", "voice": " ".join(["말"] * 10), "seconds": 6},
                     {"template": "statement", "voice": "다른 문장", "seconds": 3}]
         self.assertEqual(len(absorb_statements(long_map, 1.1)), 2)
         shared = [{"template": "map", "voice": "짧은 문장", "seconds": 3},
                   {"template": "statement", "voice": "같은 문장 둘", "seconds": 2},
                   {"template": "versus", "voice": "같은 문장 둘", "seconds": 2}]
         self.assertEqual(len(absorb_statements(shared, 1.1)), 3)
+
+
+class ShortRaceTest(unittest.TestCase):
+    """Ca thật 24/11: cuộc đua 3 thanh chỉ 4 giây lời, không có cảnh chữ cạnh -> biểu đồ đường cùng số liệu."""
+    RACE = {"template": "bar_race", "voice": "2018년 전국 수치는 처음 1명 아래로 하락했습니다.", "seconds": 4,
+            "params": {"title": "추이", "unit": "명", "source": "KOSIS", "years": [2011, 2015, 2020, 2025],
+                       "items": [{"label": "전남", "values": [1.57, 1.55, 1.15, 1.09]},
+                                 {"label": "전국", "values": [1.24, 1.24, 0.84, 0.8]}]}}
+
+    def test_short_race_becomes_line_chart(self):
+        import copy
+        from src.crew import short_race_to_line
+        from src.produce import _check_scene
+        spec = short_race_to_line([copy.deepcopy(self.RACE)], 1.1)
+        sc = spec[0]
+        self.assertEqual(sc["template"], "line_chart")
+        self.assertEqual(sc["params"]["xs"], [2011, 2015, 2020, 2025])
+        self.assertEqual([s["label"] for s in sc["params"]["series"]], ["전남", "전국"])
+        self.assertEqual(sc["params"]["series"][1]["ys"], [1.24, 1.24, 0.84, 0.8])
+        self.assertIsNotNone(_check_scene(0, sc))
+
+    def test_long_race_kept(self):
+        import copy
+        from src.crew import short_race_to_line
+        race = copy.deepcopy(self.RACE)
+        race["voice"] = " ".join(["말"] * 10)
+        self.assertEqual(short_race_to_line([race], 1.1)[0]["template"], "bar_race")
 
 
 class ProvinceSceneTest(unittest.TestCase):
