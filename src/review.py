@@ -143,14 +143,18 @@ def _send_for_review(cfg, con, script_id, force, skip_qc):
         if tr:
             tg.send_message("🇻🇳 Bản dịch để duyệt (máy dịch — chỉ để hiểu nội dung; số liệu đã được code đối chiếu"
                             " với nguồn):\n\n" + tr[:3500], reply_to=mid)
-    try:
-        prepare_fb_post(con, video_id, script_id, row, scenes, cfg, mid)
-    except Exception:                           # bài viết là phần thêm: lỗi không được chặn video
-        log.exception("Không soạn được bài viết Facebook cho video #%s", video_id)
-    try:
-        prepare_ig_post(con, video_id, script_id, row, scenes, cfg, mid, tags=meta.get("tags") or [])
-    except Exception:
-        log.exception("Không soạn được bài viết Instagram cho video #%s", video_id)
+    if posts_today(con, cfg, exclude=video_id) >= int((cfg.get("daily") or {}).get("posts_per_day", 1)):
+        # 2 video/ngày (kênh Hàn, 24/11/2026): bài viết ảnh Facebook/Instagram vẫn 1 bài/ngày, đi kèm video đầu tiên
+        log.info("Hôm nay đã có bài viết kèm video khác — video #%s chỉ có Reel", video_id)
+    else:
+        try:
+            prepare_fb_post(con, video_id, script_id, row, scenes, cfg, mid)
+        except Exception:                           # bài viết là phần thêm: lỗi không được chặn video
+            log.exception("Không soạn được bài viết Facebook cho video #%s", video_id)
+        try:
+            prepare_ig_post(con, video_id, script_id, row, scenes, cfg, mid, tags=meta.get("tags") or [])
+        except Exception:
+            log.exception("Không soạn được bài viết Instagram cho video #%s", video_id)
     print(f"Đã gửi video #{video_id} vào Telegram, chờ Du duyệt.")
     return video_id
 
@@ -169,6 +173,16 @@ def _publish_manual(con, video: dict, cfg: dict) -> None:
                     buttons=[[("📤 Đã đăng xong", f"done:{video['id']}")]])
 
 
+def posts_today(con, cfg: dict, exclude: int = None, now: datetime = None) -> int:
+    """Số Shorts gửi duyệt HÔM NAY (giờ của Du, daily.utc_offset_hours) đã có bài viết ảnh Facebook/Instagram kèm theo."""
+    tz = timezone(timedelta(hours=float((cfg.get("daily") or {}).get("utc_offset_hours", 9))))
+    local = (now or datetime.now(timezone.utc)).astimezone(tz)
+    since = local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).isoformat(
+        timespec="seconds")
+    return con.execute("SELECT COUNT(*) FROM videos WHERE created_at >= ? AND script_id IS NOT NULL AND id != ?"
+                       " AND (fb_post IS NOT NULL OR ig_post IS NOT NULL)", (since, exclude or -1)).fetchone()[0]
+
+
 def _publish_api(con, video: dict, cfg: dict) -> None:
     """Tự upload YouTube. Lỗi thì trả video về 'approved' và đưa nút Thử lại."""
     from .publish import youtube
@@ -176,6 +190,21 @@ def _publish_api(con, video: dict, cfg: dict) -> None:
     yt = cfg["publish"]["youtube"]
     # Chốt chống upload trùng: chỉ một lượt được chuyển approved -> publishing
     if not db.transition_video(con, video["id"], "approved", "publishing"):
+        return
+    from .publish import yt_quota
+    if not yt_quota.can_upload():
+        # Hạn mức YouTube API (chung hai kênh) sắp hết: giữ video lại, housekeeping tải lên khi hạn mức đặt lại
+        # (retry_quota_waits). Facebook / Instagram / TikTok vẫn đăng như thường (publish() chạy tiếp).
+        db.transition_video(con, video["id"], "publishing", "approved")
+        key = f"yt_quota_wait_{video['id']}"
+        if not db.get_state(con, key):
+            reset = yt_quota.reset_at()
+            db.set_state(con, key, reset.isoformat(timespec="seconds"))
+            tg.send_message(
+                f"⏳ Hạn mức YouTube API hôm nay (dùng chung hai kênh) đã dùng ~{yt_quota.used():,} / "
+                f"{yt_quota.LIMIT:,} đơn vị — giữ video #{video['id']} lại, bot tự tải lên YouTube sau"
+                f" {_local_times(reset.strftime('%Y-%m-%dT%H:%M:%SZ'), yt)} (lúc Google đặt lại hạn mức), giờ công"
+                " khai theo khung trống kế tiếp. Facebook / Instagram / TikTok vẫn đăng bình thường.")
         return
     try:
         # mỗi khung giờ một video: khung đã có video khác hẹn thì lùi sang ngày kế tiếp (_taken_times)
@@ -342,8 +371,8 @@ def push_fb_post(con, video: dict, cfg: dict) -> None:
     if not img or not Path(img).exists():
         tg.send_message(f"ℹ️ Bài viết Facebook của video #{video['id']} thiếu ảnh — không đăng.")
         return
-    iso = youtube.compute_publish_at({**pcfg, "publish_time_local": pcfg.get("post_time_local", "11:30")},
-                                     taken=_taken_times(con, "fb_post"))
+    iso = youtube.compute_publish_at(pcfg, taken=_taken_times(con, "fb_post"),
+                                     times=[pcfg.get("post_time_local", "11:30")])
     at = int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()) if iso else None
     db.set_state(con, key, "posting")
     try:
@@ -476,8 +505,8 @@ def schedule_ig_post(con, video: dict, cfg: dict) -> None:
     pcfg = _ig_post_cfg(cfg)
     if not pcfg or not video.get("ig_post") or video.get("ig_post_id") or video.get("ig_post_due"):
         return
-    due = (youtube.compute_publish_at({**pcfg, "publish_time_local": pcfg.get("post_time_local", "12:30")},
-                                      taken=_taken_times(con, "ig_post"))
+    due = (youtube.compute_publish_at(pcfg, taken=_taken_times(con, "ig_post"),
+                                      times=[pcfg.get("post_time_local", "12:30")])
            or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
     db.update_video(con, video["id"], ig_post_due=due)
     tg.send_message(f"📝 Bài viết Instagram của video #{video['id']} sẽ đăng lúc {_local_times(due, pcfg)}"
@@ -548,9 +577,14 @@ def push_facebook(con, video: dict, cfg: dict) -> None:
     if state == "SCHEDULED":
         from . import fb_insights            # agent Facebook: thử nhiều khung giờ đăng, học khung nào tốt
         slot = fb_insights.choose_slot(con, fcfg, video["id"])
-        iso = youtube.compute_publish_at({**fcfg, "publish_time_local": slot}, taken=_taken_times(con, "facebook"))
+        # khung agent chọn đứng đầu; khung đó đã có Reel khác (2 video/ngày) thì lấy khung khác CÙNG NGÀY trước khi
+        # lùi sang ngày sau — không thì hàng đợi Reel dài mãi
+        times = [slot] + [s for s in (fcfg.get("slots") or []) if s != slot]
+        iso = youtube.compute_publish_at(fcfg, taken=_taken_times(con, "facebook"), times=times)
         if iso:
             at = int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
+            local = datetime.fromtimestamp(at, timezone(timedelta(hours=float(fcfg.get("utc_offset_hours", 7)))))
+            slot = f"{local:%H:%M}"             # khung THẬT đã dùng (agent Facebook học theo khung này)
         else:
             state = "PUBLISHED"
     db.set_state(con, key, "uploading")
@@ -1219,10 +1253,35 @@ def check_scheduled(con, now: datetime = None) -> list:
     return done
 
 
+def retry_quota_waits(con, cfg: dict, now: datetime = None) -> list:
+    """Video đã duyệt bị giữ vì hạn mức YouTube (_publish_api) -> tải lên khi hạn mức đã đặt lại. -> [id đã thử]."""
+    from .publish import yt_quota
+    now = now or datetime.now(timezone.utc)
+    done = []
+    for key, value in con.execute("SELECT key, value FROM state WHERE key LIKE 'yt_quota_wait_%'").fetchall():
+        if not value:
+            continue
+        try:
+            due = datetime.fromisoformat(str(value))
+        except ValueError:
+            due = now
+        video = db.get_video(con, int(key.rsplit("_", 1)[1]))
+        if not video or video["status"] != "approved" or video.get("youtube_id"):
+            db.set_state(con, key, "")           # đã đăng / bị loại / Du tự xử lý
+            continue
+        if now < due or not yt_quota.can_upload(now):
+            continue
+        db.set_state(con, key, "")
+        _publish_api(con, video, cfg)
+        done.append(video["id"])
+    return done
+
+
 def housekeeping(con, cfg: dict, now: datetime = None) -> None:
     """Các việc chạy định kỳ trong vòng lặp listen; lỗi ở đây không được làm sập bot."""
     yt = cfg["publish"]["youtube"]
-    for job in (lambda: remind_token(con, yt, now), lambda: check_scheduled(con, now),
+    for job in (lambda: retry_quota_waits(con, cfg, now),
+                lambda: remind_token(con, yt, now), lambda: check_scheduled(con, now),
                 lambda: publish_instagram_due(con, cfg, now), lambda: publish_ig_posts_due(con, cfg, now),
                 lambda: remind_facebook_access(con, now)):
         try:

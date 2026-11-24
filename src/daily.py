@@ -65,16 +65,38 @@ def videos_made_today(con, cfg: dict, now: datetime = None) -> int:
     Đếm theo ngày lịch chứ không theo "N giờ qua": hôm nào video ra muộn (lượt chạy
     bù buổi chiều vì sáng hết quota) thì sáng hôm sau vẫn phải làm video mới.
     """
-    tz = timezone(timedelta(hours=float(cfg["daily"].get("utc_offset_hours", 9))))
-    local = (now or datetime.now(timezone.utc)).astimezone(tz)
-    midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
-    since = midnight.astimezone(timezone.utc).isoformat(timespec="seconds")
+    since = _today_since(cfg, now)
     # Chỉ tính Shorts ĐÃ TỚI Telegram (có tg_message_id); gửi hụt thì không tính.
     # Video dài hằng tuần (src/longform.py, script_id rỗng) không tính: thứ Bảy sáng hết
     # quota TTS thì lượt chạy bù 17:40 vẫn phải làm Shorts dù video dài đã gửi lúc 09:30.
     return con.execute("SELECT COUNT(*) FROM videos WHERE created_at >= ?"
                        " AND tg_message_id IS NOT NULL AND script_id IS NOT NULL",
                        (since,)).fetchone()[0]
+
+
+def _today_since(cfg: dict, now: datetime = None) -> str:
+    """0:00 hôm nay theo giờ của Du (daily.utc_offset_hours), dạng UTC ISO — để so với cột created_at."""
+    tz = timezone(timedelta(hours=float(cfg["daily"].get("utc_offset_hours", 9))))
+    local = (now or datetime.now(timezone.utc)).astimezone(tz)
+    midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
+    return midnight.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def todays_mix(con, cfg: dict, now: datetime = None) -> list:
+    """[(mảng, dạng video)] của các Shorts đã gửi duyệt HÔM NAY — video sau trong ngày phải khác cả hai."""
+    from . import learning
+    from .sources.datatable import topic_family
+    rows = con.execute("SELECT i.source_name, i.title FROM videos v JOIN scripts s ON s.id = v.script_id"
+                       " JOIN ideas i ON i.id = s.idea_id WHERE v.created_at >= ? AND v.tg_message_id IS NOT NULL"
+                       " AND v.script_id IS NOT NULL", (_today_since(cfg, now),)).fetchall()
+    return [(topic_family(r["source_name"]), learning.video_kind(r["title"], r["source_name"])) for r in rows]
+
+
+def clashes(c: dict, mix: list) -> bool:
+    """Kịch bản trùng MẢNG hoặc trùng DẠNG (bản đồ / cuộc đua / biểu đồ / bài báo) với một video đã làm hôm nay.
+    Kênh Hàn 2 video/ngày (Du chốt phương án A 24/11/2026): hai video cùng ngày phải khác nhau rõ — hai bản đồ hay hai
+    video Hàn–Nhật trong một ngày là đúng kiểu "nội dung lặp khuôn" YouTube không cho kiếm tiền."""
+    return any(c.get("family") == f or c.get("kind") == k for f, k in mix)
 
 
 def max_script_words(cfg: dict) -> float:
@@ -220,7 +242,7 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
         # agent Tăng trưởng (src/growth.py): cùng mảng + dạng với video ĐỘT BIẾN gần đây thì làm trước
         boost = growth.boost_for(feats["family"], feats["kind"], grow)
         out.append({"id": r["id"], "score": score, "has_final": final_path(r["id"]).exists(),
-                    "family": family, "streak": streak(family, recent),
+                    "family": family, "kind": feats["kind"], "streak": streak(family, recent),
                     "long": words > max_words, "learned": bonus, "boost": boost})
     # Kịch bản DÀI hơn độ dài mới (viết trước 19/11 cho video 60-90 giây) xếp sau cùng: chỉ dựng khi
     # không còn kịch bản nào đúng khổ 45-60 giây (assemble đọc nhanh tối đa 1,12 lần vẫn ra ~80 giây)
@@ -338,8 +360,20 @@ def run_daily(skip_ideas: bool = False, dry_run: bool = False, runner=run_step) 
             LOCK.unlink(missing_ok=True)
 
 
-def _run_daily(cfg, con, skip_ideas, dry_run, runner) -> int:
+def videos_wanted(cfg: dict, now: datetime = None) -> int:
+    """Số video mỗi ngày. Có `cadence_since` (ngày đổi nhịp, giờ của Du) thì TRƯỚC ngày đó vẫn 1 video — kênh Hàn
+    lên 2 video/ngày từ lượt 07:30 ngày 25/11/2026; không để lượt chạy bù 18:40 hôm trước làm sớm một video."""
     want = int(cfg["daily"].get("videos_per_day", 1))
+    since = str(cfg["daily"].get("cadence_since") or "")
+    if since:
+        tz = timezone(timedelta(hours=float(cfg["daily"].get("utc_offset_hours", 9))))
+        if (now or datetime.now(timezone.utc)).astimezone(tz).strftime("%Y-%m-%d") < since:
+            return 1
+    return want
+
+
+def _run_daily(cfg, con, skip_ideas, dry_run, runner) -> int:
+    want = videos_wanted(cfg)
     LOG_DIR.mkdir(exist_ok=True)
     log_file = LOG_DIR / f"daily_{datetime.now():%Y-%m-%d}.log"
 
@@ -368,9 +402,14 @@ def _run_daily(cfg, con, skip_ideas, dry_run, runner) -> int:
         return 0
 
     made, attempts = 0, 0
+    mix = todays_mix(con, cfg)
+    skipped = []
     for c in candidates:
         if made >= want - already or attempts >= int(cfg["daily"].get("max_attempts", 2)):
             break
+        if clashes(c, mix):
+            skipped.append(c["id"])
+            continue
         attempts += 1
         failed, retry_later = None, False
         for name, key, args in plan_steps(c["id"]):
@@ -397,6 +436,7 @@ def _run_daily(cfg, con, skip_ideas, dry_run, runner) -> int:
             log.warning(failed)
         else:
             made += 1
+            mix.append((c["family"], c["kind"]))
 
     # Agent Cộng đồng (src/community.py): đọc bình luận mới mỗi sáng, MỘT lần mỗi ngày, không ảnh hưởng
     # việc ra video (lỗi thì chỉ ghi log)
@@ -407,12 +447,15 @@ def _run_daily(cfg, con, skip_ideas, dry_run, runner) -> int:
         if not ok:
             log.warning("Agent Cộng đồng lỗi (không ảnh hưởng video): %s", tail.splitlines()[:1])
 
-    if made == 0:
+    if made + already < want and skipped and made + already > 0:
+        problems.append(f"Hôm nay {made + already}/{want} video: kịch bản còn lại ({', '.join(f'#{i}' for i in skipped)})"
+                        " trùng mảng hoặc dạng với video đã làm hôm nay — để dành cho ngày sau.")
+    if made == 0 and already == 0:
         reason = "\n\n".join(problems) if problems else "Không có kịch bản nào qua được Kiểm chứng."
         tg.send_message(f"⚠️ Hôm nay chưa có video để duyệt.\n\n{reason}"[:3500]
                         + f"\n\nChi tiết: logs/{log_file.name}")
     elif problems:
-        tg.send_message("ℹ️ Đã gửi video, nhưng có trục trặc trên đường:\n\n"
+        tg.send_message(("ℹ️ Đã gửi video, nhưng có trục trặc trên đường:\n\n" if made else "ℹ️ Lượt chạy bù:\n\n")
                         + "\n\n".join(problems)[:3000])
     log.info("Xong: %d video gửi duyệt, %d trục trặc", made, len(problems))
     return made

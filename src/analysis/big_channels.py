@@ -61,6 +61,9 @@ def _cfg(cfg: dict) -> dict:
 
 def _get(endpoint: str, **params) -> dict:
     params["key"] = os.getenv("YOUTUBE_API_KEY")
+    if endpoint == "search":            # 100 đơn vị/lần, hạn mức dùng chung hai kênh (src/publish/yt_quota.py)
+        from ..publish import yt_quota
+        yt_quota.spend("search")
     r = requests.get(f"{API}/{endpoint}", params=params, timeout=30)
     r.raise_for_status()
     return r.json()

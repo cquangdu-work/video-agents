@@ -208,15 +208,37 @@ def access_token() -> str:
 
 
 # ---------------------------------------------------------------- Hẹn giờ
-def compute_publish_at(yt_cfg: dict, now: datetime = None, taken=()):
-    """Như _next_publish_at, nhưng khung giờ đã có video khác hẹn (`taken`: các giờ UTC dạng "…Z") thì lùi sang
-    NGÀY KẾ TIẾP. Ca thật 21/11: Du duyệt hai video kênh Hàn cùng lúc -> cả hai hẹn 19:00 cùng ngày, giành lượt xem
-    của nhau."""
-    at = _next_publish_at(yt_cfg, now)
+def publish_times(cfg: dict) -> list:
+    """Các khung giờ đăng ("HH:MM" giờ địa phương) của một nền tảng: `publish_times_local` (danh sách — kênh Hàn
+    2 video/ngày từ 24/11/2026: 12:00 + 19:00) hoặc một `publish_time_local` như trước."""
+    times = cfg.get("publish_times_local") or ([cfg["publish_time_local"]] if cfg.get("publish_time_local") else [])
+    return [str(t) for t in times]
+
+
+def compute_publish_at(yt_cfg: dict, now: datetime = None, taken=(), times=None):
+    """Khung giờ TRỐNG sớm nhất (cách hiện tại ≥ 15 phút) -> chuỗi UTC "…Z"; không cấu hình giờ -> None.
+
+    Mỗi khung giờ một video: khung đã có video khác hẹn (`taken`: các giờ UTC dạng "…Z") thì sang khung kế tiếp
+    trong ngày, hết khung thì sang ngày sau. Ca thật 21/11: Du duyệt hai video kênh Hàn cùng lúc -> cả hai hẹn 19:00
+    cùng ngày, giành lượt xem của nhau. `times`: thứ tự ƯU TIÊN trong một ngày (mặc định publish_times(yt_cfg) —
+    đã xếp theo giờ); Facebook đưa khung agent Facebook chọn lên đầu."""
+    times = list(times or publish_times(yt_cfg))
+    if not times:
+        return None
+    tz = timezone(timedelta(hours=float(yt_cfg.get("utc_offset_hours", 7))))
+    local = (now or datetime.now(timezone.utc)).astimezone(tz)
     taken = {str(t) for t in taken or () if t}
-    while at and at in taken:
-        at = (datetime.fromisoformat(at.replace("Z", "+00:00")) + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return at
+    for d in range(400):
+        day = (local + timedelta(days=d)).date()
+        for hhmm in times:
+            hour, minute = (int(x) for x in str(hhmm).split(":"))
+            target = datetime(day.year, day.month, day.day, hour, minute, tzinfo=tz)
+            if target < local + timedelta(minutes=15):
+                continue
+            iso = target.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            if iso not in taken:
+                return iso
+    return None
 
 
 def can_set_thumbnails(get=None):
@@ -239,6 +261,8 @@ def set_thumbnail(video_id: str, path: Path, post=None) -> dict:
     đã có: longUploadsStatus=allowed). 50 đơn vị quota."""
     path = Path(path)
     kind = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+    from . import yt_quota
+    yt_quota.spend("thumbnail")
     r = (post or requests.post)("https://www.googleapis.com/upload/youtube/v3/thumbnails/set", timeout=120,
                                 params={"videoId": video_id, "uploadType": "media"},
                                 headers={"Authorization": f"Bearer {access_token()}", "Content-Type": kind},
@@ -319,6 +343,8 @@ def upload(path: Path, title: str, description: str, tags: list, yt_cfg: dict,
     publish_at = publish_at or compute_publish_at(yt_cfg)
     body = build_body(title, description, tags, yt_cfg, publish_at)
 
+    from . import yt_quota                 # hạn mức dùng chung hai kênh: ghi 1.600 đơn vị (tính cả lần hỏng)
+    yt_quota.spend("upload")
     r = requests.post(
         UPLOAD_URL, timeout=60,
         params={"uploadType": "resumable", "part": "snippet,status",

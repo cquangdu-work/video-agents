@@ -55,6 +55,8 @@ def count_popular_vietnamese_videos(query: str, cfg: dict):
     if not key:
         return None
     try:
+        from ..publish import yt_quota      # 100 đơn vị/lần, hạn mức dùng chung hai kênh
+        yt_quota.spend("search")
         r = requests.get(SEARCH_URL, params={
             "key": key, "q": query, "part": "id", "type": "video",
             # kênh đang chạy (src/lang.py): kênh Việt tìm video tiếng Việt ở VN, kênh Hàn tìm video tiếng Hàn ở KR

@@ -193,6 +193,53 @@ def report_lines(snap: dict, rows: list, notes: list, cfg: dict) -> list:
     return lines
 
 
+def _median(xs: list) -> float:
+    xs = sorted(xs)
+    mid = len(xs) // 2
+    return 0.0 if not xs else (xs[mid] if len(xs) % 2 else (xs[mid - 1] + xs[mid]) / 2)
+
+
+CADENCE_MIN_DAYS = 14
+CADENCE_DROP = 0.6
+
+
+def cadence_lines(rows: list, cfg: dict, now: datetime = None) -> list:
+    """So TRƯỚC / SAU khi đổi nhịp đăng (daily.cadence_since — kênh Hàn lên 2 video/ngày từ 25/11/2026, Du chốt
+    phương án A): lượt xem trung vị mỗi Short (theo ngày, views_per_day) và lượt xem mỗi ngày của cả nhóm Shorts.
+    Luật lùi đã thống nhất: sau ≥ 2 tuần, trung vị mỗi video giảm > 40% mà tổng lượt xem mỗi ngày không tăng ->
+    nhắc quay về nhịp cũ (sửa daily.videos_per_day). Chỉ NHẮC, không tự đổi."""
+    since = str((cfg.get("daily") or {}).get("cadence_since") or "")
+    if not since:
+        return []
+    now = now or datetime.now(timezone.utc)
+    shorts = [r for r in rows if r.get("script_id") and r.get("views") is not None and r.get("published_at")]
+    before = [r for r in shorts if str(r["published_at"])[:10] < since]
+    after = [r for r in shorts if str(r["published_at"])[:10] >= since]
+    if not before or not after:
+        return []
+
+    def stats(group):
+        days = {str(r["published_at"])[:10] for r in group}
+        first = datetime.fromisoformat(min(days)).date()
+        last = datetime.fromisoformat(max(days)).date()
+        span = (last - first).days + 1
+        return _median([views_per_day(r) for r in group]), sum(views_per_day(r) for r in group) / span
+    (mb, tb), (ma, ta) = stats(before), stats(after)
+    f = lambda x: f"{x:.0f}"
+    want = int((cfg.get("daily") or {}).get("videos_per_day", 1))
+    lines = [f"  Nhịp đăng ({want} video/ngày từ {since}): trước {len(before)} Shorts — trung vị {f(mb)} lượt xem/ngày"
+             f" mỗi video, cả nhóm {f(tb)}/ngày; sau {len(after)} Shorts — trung vị {f(ma)}, cả nhóm {f(ta)}/ngày"]
+    elapsed = (now.date() - datetime.fromisoformat(since).date()).days
+    if elapsed < CADENCE_MIN_DAYS:
+        lines.append(f"  (mới {elapsed} ngày — đủ {CADENCE_MIN_DAYS} ngày mới xét luật lùi)")
+    elif mb > 0 and ma < CADENCE_DROP * mb and ta <= tb:
+        lines.append(f"  ⚠️ Luật lùi: trung vị mỗi video giảm {100 * (1 - ma / mb):.0f}% mà tổng lượt xem mỗi ngày không"
+                     " tăng — nên quay về nhịp cũ (sửa daily.videos_per_day trong file cấu hình kênh).")
+    else:
+        lines.append("  ✅ Nhịp mới chưa làm giảm hiệu quả quá ngưỡng (giảm > 40% mỗi video mà tổng không tăng)")
+    return lines
+
+
 def update(con, cfg: dict, rows: list, now: datetime = None, token: str = None) -> list:
     """Agent Phân tích gọi mỗi Chủ nhật. Trả về các dòng báo cáo."""
     now = now or datetime.now(timezone.utc)
@@ -209,7 +256,7 @@ def update(con, cfg: dict, rows: list, now: datetime = None, token: str = None) 
         data["latest"] = snap
         _save(data)
     notes = apply_breakouts(con, find_breakouts(rows), now)
-    return report_lines(snap, rows, notes, cfg)
+    return report_lines(snap, rows, notes, cfg) + cadence_lines(rows, cfg, now)
 
 
 def status_text(cfg: dict = None) -> str:

@@ -4,3 +4,6 @@ config/channel_ko.yaml) thì 125 test đỏ vì đọc nhầm kênh. Chỉ ảnh
 import os
 
 os.environ["CHANNEL_CONFIG"] = "config/channel.yaml"
+# Bộ đếm hạn mức YouTube dùng chung (src/publish/yt_quota.py): test không được ghi vào file thật của VM
+import tempfile as _tempfile  # noqa: E402
+os.environ["YT_QUOTA_FILE"] = os.path.join(_tempfile.mkdtemp(prefix="ytq_"), "yt_quota.json")

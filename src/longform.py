@@ -141,21 +141,44 @@ def build_text(videos: list, starts: list, span: str, cfg: dict, lead: int = Non
     return title, desc, tags
 
 
-def lead_chapter(videos: list) -> int:
-    """Chỉ số chương được xem nhiều nhất trên YouTube (số công khai, API key — không tốn quota OAuth). Lỗi -> 0."""
+def chapter_views(videos: list):
+    """[lượt xem công khai] theo thứ tự `videos` (API key, 1 đơn vị) — hoặc None nếu không đọc được."""
     import os
     from .publish import youtube
     key = os.getenv("YOUTUBE_API_KEY")
     ids = [v.get("youtube_id") for v in videos if v.get("youtube_id")]
     if not key or not ids:
-        return 0
+        return None
     try:
         stats = youtube.public_stats(ids, key)
     except Exception as exc:
         log.warning("Không đọc được lượt xem các chương: %s", exc)
+        return None
+    return [stats.get(v.get("youtube_id"), {}).get("views", 0) for v in videos]
+
+
+def lead_chapter(videos: list, views: list = None) -> int:
+    """Chỉ số chương được xem nhiều nhất trên YouTube (số công khai, API key — không tốn quota OAuth). Lỗi -> 0."""
+    views = views if views is not None else chapter_views(videos)
+    if not views:
         return 0
-    views = [(stats.get(v.get("youtube_id"), {}).get("views", 0), -k) for k, v in enumerate(videos)]
-    return -max(views)[1]
+    return -max((v, -k) for k, v in enumerate(views))[1]
+
+
+MAX_CHAPTERS = 8
+
+
+def pick_chapters(videos: list, views, limit: int = MAX_CHAPTERS) -> tuple:
+    """Kênh Hàn 2 Shorts/ngày (24/11/2026) -> tới 14 Shorts/tuần: video dài ghép hết sẽ ~10 phút, dựng gần một giờ.
+    Giữ `limit` Shorts được xem NHIỀU NHẤT (không đọc được lượt xem: mới nhất), vẫn xếp theo ngày đăng.
+    -> (videos, views) đã lọc."""
+    if len(videos) <= limit:
+        return videos, views
+    order = (sorted(range(len(videos)), key=lambda k: (-views[k], -k)) if views
+             else list(range(len(videos) - 1, -1, -1)))
+    keep = sorted(order[:limit])
+    log.info("Tuần có %d Shorts — video dài lấy %d chương xem nhiều nhất", len(videos), limit)
+    return [videos[k] for k in keep], ([views[k] for k in keep] if views else views)
 
 
 def intro_text(videos: list, span: str, lead: int) -> str:
@@ -203,6 +226,8 @@ def build(now: datetime = None, concurrency: int = 3) -> dict:
         con.close()
     if len(videos) < MIN_CHAPTERS:
         raise RuntimeError(f"Tuần này mới có {len(videos)} Shorts đã đăng (cần >= {MIN_CHAPTERS})")
+    views = chapter_views(videos)
+    videos, views = pick_chapters(videos, views, int((cfg.get("longform") or {}).get("max_chapters", MAX_CHAPTERS)))
     # giờ của người xem chính (kênh Việt +7, kênh Hàn +9 — publish.youtube.utc_offset_hours)
     tz_vn = timezone(timedelta(hours=float(cfg.get("publish", {}).get("youtube", {}).get("utc_offset_hours", 7))))
     d0 = datetime.fromisoformat(videos[0]["published_at"]).astimezone(tz_vn)
@@ -211,7 +236,7 @@ def build(now: datetime = None, concurrency: int = 3) -> dict:
     series = lang.pick(vi=f"TUẦN QUA CON SỐ · {span}", ko=f"숫자로 본 한 주 · {span}")
     chapters = [v["title"] for v in videos]
     TMP.mkdir(parents=True, exist_ok=True)
-    lead = lead_chapter(videos)
+    lead = lead_chapter(videos, views)
     parts, starts, t, stories = [], [], 0.0, []
     for k, v in enumerate(videos, 1):
         story, audio = chapter_source(v["script_id"])

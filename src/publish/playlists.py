@@ -68,6 +68,8 @@ def ensure(con, kind: str, cfg: dict, token: str, http=requests) -> str:
             break
     if not pid:
         snippet = {"title": want["title"], "description": want.get("description", ""), "defaultLanguage": lang.code()}
+        from . import yt_quota
+        yt_quota.spend("insert")
         body = _check(http.post(f"{API}/playlists", params={"part": "snippet,status"}, headers=_headers(token),
                                 json={"snippet": snippet, "status": {"privacyStatus": "public"}}, timeout=30))
         pid = body["id"]
@@ -90,6 +92,8 @@ def add(con, video: dict, cfg: dict, token: str = None, http=requests) -> str:
     pid = ensure(con, kind_of(con, video), cfg, token, http)
     if not pid:
         return None
+    from . import yt_quota
+    yt_quota.spend("insert")
     r = http.post(f"{API}/playlistItems", params={"part": "snippet"}, headers=_headers(token), timeout=30,
                   json={"snippet": {"playlistId": pid, "position": 0,
                                     "resourceId": {"kind": "youtube#video", "videoId": video["youtube_id"]}}})

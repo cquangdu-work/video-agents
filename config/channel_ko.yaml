@@ -174,9 +174,14 @@ angle_rules: >
 
 daily:
   raw_target: 20
-  shortlist: 2
+  # 2 video/ngày (Du chốt phương án A 24/11/2026): 2 kịch bản đạt/ngày đã có sẵn từ 20/11 (mỗi ngày bỏ phí 1),
+  # Biên kịch 4-9/20 lượt gọi, TTS 1 lượt/video. Hai video cùng ngày phải KHÁC mảng và KHÁC dạng (daily.clashes),
+  # đăng 12:00 + 19:00; bài viết ảnh Facebook/Instagram vẫn 1 bài/ngày (posts_per_day). Lùi về 1: sửa videos_per_day.
+  shortlist: 3
   extra_script_tries: 1
-  videos_per_day: 1
+  videos_per_day: 2
+  posts_per_day: 1
+  cadence_since: "2026-11-25"   # báo cáo tuần so trước/sau ngày đổi nhịp (growth.cadence_lines, luật lùi sau 2 tuần)
   utc_offset_hours: 9
   max_attempts: 2
   max_script_age_days: 3
@@ -263,6 +268,8 @@ publish:
     contains_synthetic_media: true
     notify_subscribers: true
     publish_time_local: "19:00"   # giờ tối Hàn Quốc
+    # 2 video/ngày (24/11/2026): mỗi khung một video, khung sớm nhất còn trống (youtube.compute_publish_at)
+    publish_times_local: ["12:00", "19:00"]
     utc_offset_hours: 9
     oauth_token_days: null
     playlists:                    # src/publish/playlists.py — xem chú thích ở config/channel.yaml
@@ -305,6 +312,7 @@ publish:
     # liên kết tài khoản Instagram chuyên nghiệp, tích instagram_basic + instagram_content_publish.
     enabled: true
     publish_time_local: "19:00" # giờ Hàn — API không hẹn giờ được, bot tự đăng khi tới giờ
+    publish_times_local: ["12:00", "19:00"]     # 2 Reel/ngày (24/11/2026), cùng khung với YouTube
     utc_offset_hours: 9
     ai_generated: true          # nhãn AI của Meta (giọng đọc AI)
     # BÀI VIẾT (ảnh 4:5 + chữ) mỗi ngày ngoài Reel (Du xin 21/11/2026): soạn lúc gửi duyệt (src/fb_post.py, cùng các
