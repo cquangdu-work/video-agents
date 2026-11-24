@@ -123,6 +123,8 @@ def _send_for_review(cfg, con, script_id, force, skip_qc):
     meta = metadata.build_metadata(idea, scenes, hooks, cfg, music_credit(script_id))
     from .publish import playlists           # series cố định (kênh Hàn): dòng series + link danh sách ở đầu mô tả
     meta = playlists.with_series(con, meta, idea["title"], cfg)
+    if (cfg.get("publish") or {}).get("youtube", {}).get("mode") == "api":     # link đăng ký: kênh đã cấp quyền API
+        meta = playlists.with_subscribe(con, meta)
 
     video_id = db.upsert_video(con, script_id, video_path.relative_to(ROOT).as_posix(),
                                meta["title"], meta["description"], meta["tags"], checks)

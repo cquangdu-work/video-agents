@@ -524,6 +524,15 @@ def reply_comment(parent_id: str, text: str, token: str) -> str:
     return r.json().get("id", "")
 
 
+def my_channel_id(token: str) -> str:
+    """ID kênh của token hiện tại (1 đơn vị quota). Không commit ID kênh vào repo — chỉ lưu ở DB trên VM."""
+    r = requests.get(f"{API_URL}/channels", timeout=30, params={"part": "id", "mine": "true"},
+                     headers={"Authorization": f"Bearer {token}"})
+    r.raise_for_status()
+    items = r.json().get("items") or []
+    return items[0]["id"] if items else ""
+
+
 def channel_stats(token: str) -> dict:
     """Số liệu công khai của kênh (người đăng ký, lượt xem, số video) — agent Tăng trưởng."""
     r = requests.get(f"{API_URL}/channels", timeout=30, params={"part": "statistics", "mine": "true"},

@@ -497,7 +497,8 @@ class TelegramTest(unittest.TestCase):
     def test_errors_return_none_and_never_log_token(self):
         with mock.patch.dict(os.environ, self.ENV):
             boom = mock.Mock(side_effect=ConnectionError("https://api.telegram.org/botS3CRET/x"))
-            with mock.patch.object(tg.requests, "post", boom), self.assertLogs(tg.log, "ERROR") as lg:
+            # getUpdates mất mạng: chỉ CẢNH BÁO (bot tự hỏi lại), vẫn không lộ token
+            with mock.patch.object(tg.requests, "post", boom), self.assertLogs(tg.log, "WARNING") as lg:
                 self.assertIsNone(tg.get_updates(0, timeout=0))
             self.assertNotIn("S3CRET", "\n".join(lg.output))
             api_err = mock.Mock(return_value=Resp(400, {"ok": False, "description": "Bad Request"}))

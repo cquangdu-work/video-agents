@@ -405,7 +405,7 @@ def caption(video: dict) -> str:
     desc = str(video.get("description") or "")
     lines = []
     for line in desc.splitlines():
-        if "youtube.com/playlist" in line:            # link danh sách phát YouTube (dòng series) không hợp Reels
+        if "youtube.com/" in line:     # link YouTube (danh sách phát của series, link đăng ký kênh) không hợp Reels
             continue
         if line.strip().startswith("#"):
             line = " ".join(w for w in line.split() if w.lower() != "#shorts")

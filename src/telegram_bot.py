@@ -42,13 +42,19 @@ def _call(method: str, files: dict = None, http_timeout: int = 20, **params):
             r = requests.post(url, json=params, timeout=http_timeout)
         body = r.json()
         if not body.get("ok"):
-            log.error("Telegram %s lỗi: %s", method, body.get("description"))
+            _log_level(method)("Telegram %s lỗi: %s", method, body.get("description"))
             return None
         return body.get("result")
     except Exception as exc:
         # KHÔNG in exc nguyên văn kèm URL: URL chứa token của bot
-        log.error("Telegram %s lỗi kết nối: %s", method, type(exc).__name__)
+        _log_level(method)("Telegram %s lỗi kết nối: %s", method, type(exc).__name__)
         return None
+
+
+def _log_level(method: str):
+    """getUpdates (bot hỏi tin mới mỗi vài chục giây) gặp mạng chập chờn là chuyện thường — vòng lặp tự hỏi lại ngay;
+    ghi CẢNH BÁO để nhật ký lỗi thật không bị lấp (24/11/2026: 18 dòng ERROR/30 giờ toàn là loại này)."""
+    return log.warning if method == "getUpdates" else log.error
 
 
 def keyboard(rows: list) -> dict:

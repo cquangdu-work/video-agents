@@ -52,6 +52,31 @@ def with_series(con, meta: dict, idea_title, cfg: dict) -> dict:
     return dict(meta, description=f"{line}\n\n{meta['description']}")
 
 
+SUBSCRIBE_URL = "https://www.youtube.com/channel/{}?sub_confirmation=1"
+
+
+def with_subscribe(con, meta: dict, get_id=None) -> dict:
+    """Dòng mời đăng ký ở ĐẦU mô tả, link `?sub_confirmation=1` (bấm vào là YouTube hiện hộp xác nhận đăng ký). Lý do
+    (24/11/2026): ~1 người đăng ký / 1.000 lượt xem ở cả hai kênh. ID kênh lấy qua API một lần, nhớ ở state "channel_id"
+    (không commit ID kênh). Không lấy được -> giữ nguyên mô tả."""
+    cid = db.get_state(con, "channel_id")
+    if not cid:
+        try:
+            if get_id is None:
+                from . import youtube
+                get_id = lambda: youtube.my_channel_id(youtube.access_token())
+            cid = get_id()
+        except Exception as exc:
+            log.warning("Chưa lấy được ID kênh cho link đăng ký: %s", exc)
+            return meta
+        if not cid:
+            return meta
+        db.set_state(con, "channel_id", cid)
+    line = lang.pick(vi="🔔 Theo dõi kênh để xem mỗi ngày một câu chuyện số liệu: ",
+                     ko="🔔 매일 숫자 이야기 — 구독하기: ") + SUBSCRIBE_URL.format(cid)
+    return dict(meta, description=f"{line}\n\n{meta['description']}")
+
+
 def kind_of(con, video: dict, cfg: dict = None) -> str:
     """Danh sách của video: video dài (không có kịch bản) -> "tong-hop"; Shorts -> series (SERIES) nếu có, không thì
     learning.video_kind của ý tưởng."""

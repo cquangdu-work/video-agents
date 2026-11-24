@@ -213,6 +213,20 @@ class SeriesTest(unittest.TestCase):
         self.assertNotIn("youtube.com/playlist", cap)                            # Reels không mang link YouTube
         self.assertIn("▶ 시리즈", cap)
 
+    def test_subscribe_link_cached_and_kept_off_reels(self):
+        from src.publish import facebook, playlists
+        calls = []
+        get = lambda: calls.append(1) or "UCxyz"
+        with lang.using("ko"):
+            meta = playlists.with_subscribe(self.con, {"description": "본문"}, get)
+            playlists.with_subscribe(self.con, {"description": "본문"}, get)
+        self.assertEqual(len(calls), 1)                                          # ID kênh lấy một lần, nhớ ở state
+        self.assertTrue(meta["description"].startswith("🔔 매일 숫자 이야기 — 구독하기: "
+                                                       "https://www.youtube.com/channel/UCxyz?sub_confirmation=1"))
+        self.assertNotIn("sub_confirmation", facebook.caption({"title": "T", "description": meta["description"]}))
+        db.set_state(self.con, "channel_id", "")
+        self.assertEqual(playlists.with_subscribe(self.con, {"description": "x"}, lambda: 1 / 0)["description"], "x")
+
 
 class TrialFixesTest(unittest.TestCase):
     """Hai lỗi lộ ra khi chạy thử video bản đồ 시군구 trên VM (24/11/2026)."""

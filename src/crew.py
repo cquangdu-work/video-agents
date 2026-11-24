@@ -219,7 +219,9 @@ def scene_budget(cfg: dict) -> tuple:
     per = float(cfg.get("pacing", {}).get("words_per_scene", 12))
     # video ngắn (thử nghiệm độ dài 30 giây, 20/11) cần ít cảnh hơn: sàn 6 thay vì 10
     lo = max(6, int(-(-lo_words // per)))
-    return lo, max(lo, min(SCRIPT_MAX_SCENES, int(hi_words // per)))
+    # trần cảnh tính theo câu DÀI NHẤT prompt cho phép (13 từ, không phải 12 trung bình): đo 21-24/11 kênh Việt —
+    # 17 lần trong 3 ngày Biên kịch viết 182-195 từ khi trần là 170 (14 cảnh x 13 từ = 182), mỗi lần tốn một lượt viết lại
+    return lo, max(lo, min(SCRIPT_MAX_SCENES, int(hi_words // (per * 13 / 12))))
 
 
 SCRIPT_MIN_NUMBERS = 4   # kênh "Thế giới qua con số" — lời đọc ít số là hỏng từ gốc

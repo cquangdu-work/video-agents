@@ -146,7 +146,8 @@ class LengthTest(StyleCase):
         self.assertIsNone(style.choose_length({"style": {"experiments": False}}, 7))
         from src import crew
         self.assertEqual(crew.word_budget({**short, "pacing": {"words_per_second": 3.4}}), (76, 102))
-        self.assertEqual(crew.scene_budget({**short, "pacing": {"words_per_second": 3.4}}), (7, 8))
+        # trần cảnh tính theo câu dài nhất (13 từ): 7 cảnh x 13 = 91 <= 102 từ (24/11/2026)
+        self.assertEqual(crew.scene_budget({**short, "pacing": {"words_per_second": 3.4}}), (7, 7))
 
 
 class TempoTest(unittest.TestCase):
