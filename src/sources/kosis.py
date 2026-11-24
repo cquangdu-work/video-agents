@@ -95,11 +95,11 @@ def total_of(items: list) -> str:
     return next((i for i, n in items if n in TOTAL_NAMES), items[0][0])
 
 
-def fetch_table(org: str, tbl: str, dims: dict, pick: dict, start: int, end: int) -> list:
-    """Lấy dữ liệu theo năm. pick: {mã chiều: mã mục hoặc "ALL"}; chiều không nêu = mục tổng.
-    -> các dòng thô của KOSIS (C1..Cn, C1_NM..., PRD_DE, DT)."""
+def fetch_table(org: str, tbl: str, dims: dict, pick: dict, start: int, end: int, item: str = None) -> list:
+    """Lấy dữ liệu theo năm. pick: {mã chiều: mã mục hoặc "ALL"}; chiều không nêu = mục tổng; item: mã chỉ tiêu
+    (thiếu = chỉ tiêu đầu tiên). -> các dòng thô của KOSIS (C1..Cn, C1_NM..., PRD_DE, DT, UNIT_NM)."""
     order = [d for d in dims if d != "ITEM"]
-    params = dict(method="getList", orgId=org, tblId=tbl, itmId=dims["ITEM"][0][0], prdSe="Y",
+    params = dict(method="getList", orgId=org, tblId=tbl, itmId=item or dims["ITEM"][0][0], prdSe="Y",
                   startPrdDe=str(start), endPrdDe=str(end))
     for k, d in enumerate(order, 1):
         params[f"objL{k}"] = pick.get(d, total_of(dims[d]))
@@ -224,7 +224,128 @@ def build_vietnam_by_category(t: dict, today: date = None):
     }
 
 
-BUILDERS = {"nationality_race": build_nationality_race, "vietnam_by_category": build_vietnam_by_category}
+# ------------------------------------------------------------- bản đồ 17 시도 (kênh Hàn, 24/11/2026)
+# Một chỉ số theo tỉnh/thành (출산율, 고령인구비율, 1인당 GRDP...) -> ý tưởng "bản đồ Hàn Quốc": nơi cao nhất / thấp
+# nhất, Seoul đứng đâu, so với cả nước. Bảng có chiều vùng (nhận ra nhờ mục "서울특별시"); bảng cấp 시군구 (261 mục)
+# cũng dùng được — chỉ giữ mục khớp tên 시도 (src/render/geo.py, assets/geo/kr_provinces.json).
+MIN_PROVINCES = 16
+SEOUL = "KR-11"
+
+
+def _province_series(raw: dict) -> tuple:
+    """{tên KOSIS: chuỗi} -> ({mã 시도: chuỗi}, chuỗi cả nước). Hai tên của cùng một tỉnh (강원도 / 강원특별자치도 —
+    đổi tên năm 2023) gộp thành một chuỗi, tên mới chồng lên tên cũ."""
+    from ..render.geo import code_of, is_province
+    out = {}
+    for name, series in sorted(raw.items(), key=lambda kv: "특별자치" in kv[0]):
+        code = code_of(name)
+        if is_province(code):
+            merged = dict(out.get(code) or [])
+            merged.update(dict(series))
+            out[code] = sorted(merged.items())
+    return out, raw.get("전국")
+
+
+def build_province_map(t: dict, today: date = None):
+    """Một chỉ số theo 17 시도 -> ý tưởng bản đồ Hàn Quốc (chỉ kênh Hàn: tên tỉnh, cách nói đều là tiếng Hàn)."""
+    import statistics
+    from ..render.geo import display_name
+    from .datatable import (beats_lines, ranks_desc, ratio_phrase, region_table_line, relatable_line, series_line,
+                            shown_value, story_beats)
+    if lang.code() != "ko":
+        return None
+    end = (today or date.today()).year
+    dims = table_meta(t["org"], t["tbl"])
+    region = find_dim(dims, "서울특별시")
+    if not region:
+        return None
+    item = next((i for i, n in dims["ITEM"] if t.get("item") and n.startswith(t["item"])), None)
+    pick = {region: "ALL"}
+    for d, want in (t.get("pick") or {}).items():           # chiều phụ chọn theo TÊN mục
+        code = next((i for i, n in dims.get(d, []) if n == want), None)
+        if code:
+            pick[d] = code
+    rows = fetch_table(t["org"], t["tbl"], dims, pick, int(t.get("start", end - 15)), end, item)
+    scale = float(t.get("scale", 1))
+    raw = {k: [(y, v * scale) for y, v in s] for k, s in by_dimension(rows, dims, region).items()}
+    named, national = _province_series(raw)
+    if t.get("national") is False:      # chỉ số mà cả nước luôn = 0 (순이동률: người đi = người đến) — bỏ dòng 전국
+        national = None
+    has =lambda y: sum(1 for s in named.values() if y in dict(s)) >= MIN_PROVINCES
+    years = sorted({y for s in named.values() for y, _ in s})
+    year = next((y for y in reversed(years) if has(y)), None)
+    if year is None:
+        return None
+    table = {c: dict(s)[year] for c, s in named.items() if year in dict(s)}
+    nat = dict(national or []).get(year)
+    unit, name, k = t.get("unit", ""), t["name"], lang.josa
+    val = lambda v: lang.with_unit(vn_number(v), unit)
+    nm = {c: display_name(c) for c in named}
+    n = len(table)
+    rank = ranks_desc(table)
+    order = sorted(table, key=lambda c: -table[c])
+    top, bottom = order[0], order[-1]
+    lines = [f"지표: {name}({unit}). 출처: KOSIS — {t.get('org_name', '통계청')}, 표 {t['org']}/{t['tbl']}."
+             f" {year}년: {n}개 시도 수치 있음."]
+    if nat is not None:
+        lines.append(f"{year}년 전국: {val(nat)}.")
+    lines.append(f"{year}년 시도별 순위(높은 순): "
+                 + "; ".join(f"{rank[c]}. {nm[c]} — {val(table[c])}" for c in order) + ".")
+    lines.append(f"가장 높은 곳: {nm[top]} {val(table[top])}; 가장 낮은 곳: {nm[bottom]} {val(table[bottom])}.")
+    if SEOUL in table and SEOUL not in (top, bottom):
+        lines.append(f"서울: {n}개 시도 중 높은 순으로 {rank[SEOUL]}위 ({val(table[SEOUL])}).")
+    if nat is not None:
+        above = [nm[c] for c in order if table[c] > nat]
+        lines.append(f"전국 수치보다 높은 시도: {len(above)}곳"
+                     + (f" ({', '.join(above)})." if 0 < len(above) <= 8 else "."))
+    if unit.startswith("%"):            # hiệu hai tỷ lệ % là điểm phần trăm (%p), trừ trên số đã làm tròn như được đọc
+        gap = round(shown_value(table[top]) - shown_value(table[bottom]), 6)
+        beats = [f"{year}년 {k(nm[top], '은/는')} {nm[bottom]}보다 {vn_number(gap)}%p 높음"]
+    else:
+        beats = [ratio_phrase(nm[top], table[top], nm[bottom], table[bottom], 1.2)]
+    if SEOUL in table and nat is not None:
+        beats.append(ratio_phrase("서울", table[SEOUL], "전국", nat, 1.2)
+                     or ratio_phrase("전국", nat, "서울", table[SEOUL], 1.2))
+    beats.append(f"시도 중앙값: {val(statistics.median(table.values()))}")
+    # thứ hạng đổi nhiều nhất so với ~10 năm trước (năm sớm nhất cũng đủ tỉnh có số)
+    first = next((y for y in years if y <= year - 5 and has(y)), None)
+    if first:
+        old = {c: dict(s)[first] for c, s in named.items() if first in dict(s) and c in table}
+        r0 = ranks_desc(old)
+        moves = sorted((r0[c] - rank[c], c) for c in old)
+        for (d, c), word in ((moves[-1], "상승"), (moves[0], "하락")):
+            if abs(d) >= 3:
+                beats.append(f"순위 {word}폭 최대: {nm[c]} — {first}년 {r0[c]}위({val(old[c])}) → {year}년"
+                             f" {rank[c]}위({val(table[c])})")
+    hist = {}
+    if national:
+        hist["전국"] = [p for p in national if p[0] <= year]
+    if SEOUL in named:
+        hist["서울"] = [p for p in named[SEOUL] if p[0] <= year]
+    beats += story_beats(hist, list(hist), unit) if hist else []
+    relate = relatable_line([(nm[top], table[top]), (nm[bottom], table[bottom])], unit, t)
+    if relate:
+        lines.append(relate)
+    lines += beats_lines([b for b in beats if b])
+    chart = [("전국", national or []), (nm[top], named[top])] + (
+        [("서울", named[SEOUL])] if SEOUL in named and SEOUL != top else [])
+    for lab, s in chart:                  # chuỗi theo năm -> biểu đồ đường (cả nước, nơi cao nhất, Seoul)
+        s = [p for p in s if p[0] <= year]
+        picks = [p for i, p in enumerate(s) if p[0] % 5 == 0 or i in (0, len(s) - 1)]
+        if len(picks) >= 2:
+            lines.append(series_line(lab, picks))
+    lines.append(region_table_line(year, {nm[c]: v for c, v in table.items()}, nat))
+    return {
+        "title": f"한국 지도: {year}년 시도별 {name} — 1위 {nm[top]}, 최하위 {nm[bottom]}",
+        "summary": "\n".join(lines),
+        "url": PAGE.format(org=t["org"], tbl=t["tbl"], end=year),
+        "source": SOURCE_NAME,
+        "lang": lang.code(),
+    }
+
+
+BUILDERS = {"nationality_race": build_nationality_race, "vietnam_by_category": build_vietnam_by_category,
+            "province_map": build_province_map}
 
 
 def fetch_kosis(cfg: dict, today: date = None) -> list:

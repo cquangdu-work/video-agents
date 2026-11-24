@@ -112,7 +112,9 @@ def ranks_desc(values: dict) -> dict:
 # để model chép, và model không được dùng số ở đây cho lời đọc).
 WORLD_TABLE = "Số liệu từng nước năm"
 WORLD_TABLE_KO = "국가별 수치"
-_WORLD_MARK = rf"(?:{WORLD_TABLE}|{WORLD_TABLE_KO})"
+REGION_TABLE_KO = "시도별 수치"           # bản đồ 17 tỉnh/thành Hàn Quốc (kosis.build_province_map, 24/11/2026)
+NATIONAL_KO = "전국"                     # dòng "cả nước" trong bảng 시도 — không phải một vùng trên bản đồ
+_WORLD_MARK = rf"(?:{WORLD_TABLE}|{WORLD_TABLE_KO}|{REGION_TABLE_KO})"
 
 
 def world_table_line(year: int, named: dict) -> str:
@@ -121,6 +123,15 @@ def world_table_line(year: int, named: dict) -> str:
     return lang.pick(
         vi=f"{WORLD_TABLE} {year} (máy dùng để tô bản đồ; lời đọc chỉ dùng các số đã nêu ở trên): {body}.",
         ko=f"{WORLD_TABLE_KO} {year} (지도 색칠용 — 내레이션에는 위에 나온 수치만 사용): {body}.")
+
+
+def region_table_line(year: int, named: dict, national: float = None) -> str:
+    """{시도: giá trị} (+ toàn quốc) -> '시도별 수치 2024 (...): 강원 0.92; ...; 전국 0.75.' — cùng khuôn với bảng mọi nước
+    nên parse_world_table đọc lại được, mọi cổng đối chiếu số dùng chung."""
+    body = "; ".join(f"{n} {vn_number(v)}" for n, v in sorted(named.items()))
+    if national is not None:
+        body += f"; {NATIONAL_KO} {vn_number(national)}"
+    return f"{REGION_TABLE_KO} {year} (지도 색칠용 — 내레이션에는 위에 나온 수치만 사용): {body}."
 
 
 def before_world_table(summary: str) -> str:

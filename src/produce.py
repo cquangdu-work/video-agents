@@ -77,6 +77,7 @@ def _check_scene(i: int, sc: dict):
         from .render.geo import code_of, load_map, has_map, region_for
         known = set(load_map("asia")["countries"]) | (set(load_map("world")["countries"])
                                                       if has_map("world") else set())
+        known |= set(load_map("kr")["countries"]) if has_map("kr") else set()      # 17 시도 (kênh Hàn)
         good = []
         for it in params["items"]:
             try:
@@ -94,7 +95,7 @@ def _check_scene(i: int, sc: dict):
         params["items"] = good
         # mọi nước đều ở châu Á -> bản đồ châu Á (chi tiết hơn); có nước ngoài châu Á -> thế giới
         params["region"] = region_for([it["code"] for it in good])
-        if params["region"] == "world":
+        if params["region"] in ("world", "kr"):
             params["total"] = len(good)
     if tpl == "bar_race":
         years = params["years"]

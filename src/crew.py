@@ -719,12 +719,16 @@ MAX_LINES = 4              # biểu đồ đường trên khung dọc: quá 4 đ
 def fill_world_map(p: dict, world: dict) -> None:
     """Cảnh bản đồ của ý tưởng "bản đồ thế giới": mọi nước trong bảng, kèm mã nước và thứ hạng
     (cùng hàm xếp hạng với phần tóm tắt -> hạng trên hình khớp hạng trong lời đọc)."""
-    from .render.geo import code_of
-    from .sources.datatable import ranks_desc
+    from .render.geo import code_of, region_for
+    from .sources.datatable import NATIONAL_KO, ranks_desc
     items = [dict(it, code=code_of(it["label"])) for it in world["items"] if code_of(it["label"])]
     rank = ranks_desc({it["code"]: it["value"] for it in items})
-    p["year"], p["region"], p["total"] = world["year"], "world", len(items)
+    region = region_for([it["code"] for it in items])            # bảng 17 시도 -> bản đồ Hàn Quốc theo tỉnh
+    p["year"], p["region"], p["total"] = world["year"], ("kr" if region == "kr" else "world"), len(items)
     p["items"] = [dict(it, rank=rank[it["code"]]) for it in items]
+    national = next((it["value"] for it in world["items"] if it["label"] == NATIONAL_KO), None)
+    if region == "kr" and national is not None:
+        p["national"] = national
 
 
 def fill_series_from_data(spec: list, data_series: list, world: dict = None) -> int:
@@ -821,7 +825,15 @@ def design_scenes(idea: dict, scenes: list, cfg: dict, log_problems=None, lesson
     data_series = parse_series(source_data)
     data_block = (f"\nDỮ LIỆU NGUỒN (số thật, ĐƯỢC dùng cho biểu đồ kể cả khi lời đọc không nhắc"
                   f" hết):\n\"\"\"\n{source_data}\n\"\"\"\n" if source_data else "")
-    if world:
+    from .render.geo import code_of as _code_of, region_for as _region_for
+    _codes = [c for c in (_code_of(it["label"]) for it in (world or {}).get("items", [])) if c]
+    if world and _region_for(_codes) == "kr":
+        data_block += (
+            f"\nCÓ SỐ LIỆU CỦA {len(_codes)} TỈNH/THÀNH HÀN QUỐC (시도) NĂM {world['year']}: NÊN có ĐÚNG MỘT"
+            " cảnh \"map\" (bản đồ HÀN QUỐC theo tỉnh tô màu, tự có nhãn nơi cao nhất / thấp nhất / cả nước — chỉ ghi"
+            " title, unit, source, máy tự điền số mọi tỉnh) gánh TRỌN 1-2 câu nói nơi nào cao nhất, thấp nhất"
+            " (≥ 5 giây lời; không chia câu đó cho cảnh khác — bản đồ cần thời gian để xem).\n")
+    elif world:
         data_block += (
             f"\nCÓ SỐ LIỆU CỦA {len(world['items'])} NƯỚC NĂM {world['year']}: NÊN có ĐÚNG MỘT cảnh"
             " \"map\" (bản đồ THẾ GIỚI tô màu, Việt Nam và Hàn Quốc có nhãn hạng — chỉ ghi title,"

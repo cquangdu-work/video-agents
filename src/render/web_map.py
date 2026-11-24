@@ -57,6 +57,8 @@ def map_props(p: dict, colors: dict) -> dict:
     FOCUS = focus_countries()                    # [(mã, khoá màu)]: Việt+Hàn (kênh Việt) | Hàn+Nhật (kênh Hàn)
     anchor, anchor_key = FOCUS[0]
     dec = int(p.get("decimals", 0) or 0)
+    if p.get("region") == "kr":
+        return province_props(p, colors)
     region = "world" if p.get("region") == "world" else "asia"
     data, given = {}, {}
     for it in p.get("items") or []:
@@ -186,6 +188,92 @@ def map_props(p: dict, colors: dict) -> dict:
     out.update(inset={"frame": frame, "shapes": inset_shapes, "islands": inset_islands, "labels": inset_labels,
                       "mark": mark, "background": colors["background"]},
                panel=panel, ranksShown=ranks_shown)
+    return out
+
+
+# ------------------------------------------------------------------------- bản đồ 17 시도 (kênh Hàn, 24/11/2026)
+KR_BOX = dict(cx=540, cy=690, w=960, h=640)             # y ~370..1010; bảng số bên dưới, phụ đề ở y 1395
+KR_PANEL_TOP = 1040
+KR_LEGEND = dict(y=1062, left=640, width=400, stop=24)
+
+
+def _centroid(rings) -> tuple:
+    """Tâm (trung bình các điểm) của vòng lớn nhất — chỗ đặt tên tỉnh."""
+    ring = max(rings, key=len)
+    return sum(p[0] for p in ring) / len(ring), sum(p[1] for p in ring) / len(ring)
+
+
+def province_props(p: dict, colors: dict) -> dict:
+    """Bản đồ Hàn Quốc theo 17 tỉnh/thành: tô theo THỨ HẠNG (như bản đồ nước), nền Triều Tiên/Nhật Bản mờ, Dokdo
+    tự vẽ cùng màu 경북 + tên "독도", chữ "동해"; viền + tên cho tỉnh cao nhất và thấp nhất; bảng: 1위, 최하위, 전국."""
+    from ..sources.datatable import ranks_desc
+    from .geo import KR_DOKDO, KR_SEAS, code_of, display_name, load_map, projector
+    dec = int(p.get("decimals", 0) or 0)
+    m = load_map("kr")
+    provinces = m["countries"]
+    data, given = {}, {}
+    for it in p.get("items") or []:
+        code = it.get("code") or code_of(it.get("label"))
+        if code in provinces:
+            data[code] = (str(it.get("label")), float(it["value"]))
+            if isinstance(it.get("rank"), int):
+                given[code] = it["rank"]
+    rank = {**ranks_desc({k: v[1] for k, v in data.items()}), **given}
+    order = sorted(data, key=lambda k: data[k][1])
+    n = len(order)
+    low, high = colors["surface"], colors["accent"]
+    shade = {k: _mix(low, high, 0.15 + 0.85 * r / max(n - 1, 1)) for r, k in enumerate(order)}
+    fmt = lambda v: fmt_num(v, label_decimals(v, dec))
+
+    cx, cy = _units(KR_BOX["cx"], KR_BOX["cy"])
+    to_xy = projector(KR_BOX["w"] / U, KR_BOX["h"] / U, (cx, cy), "kr")
+    outline, fills = [], []
+    for code, c in provinces.items():
+        d = _path(c["rings"], to_xy)
+        outline.append(d)
+        if code in data:
+            fills.append({"code": code, "d": d, "color": shade[code], "k": order.index(code) / max(n - 1, 1)})
+    fills.sort(key=lambda f: f["k"])
+
+    owner, spots, (lab_lon, lab_lat), _ = KR_DOKDO
+    island_pts = [list(_px(to_xy(lon, lat))) for lon, lat in spots]
+    lx, ly = _px(to_xy(lab_lon, lab_lat))
+    labels = [{"text": "독도", "x": lx, "y": ly, "anchor": "middle", "size": 24, "color": colors["text"]}]
+    for name, (lon, lat) in KR_SEAS:
+        x, y = _px(to_xy(lon, lat))
+        labels.append({"text": name, "x": x, "y": y, "anchor": "middle", "size": 26, "color": colors["muted"]})
+
+    marks, names, panel, ranks_shown = [], [], [], []
+    picks = ([(order[-1], colors["text"], colors["accent"])] if order else []) + \
+            ([(order[0], colors["korea"], colors["korea"])] if n >= 2 else [])
+    for code, line, ink in picks:
+        rings = provinces[code]["rings"]
+        # viền chỉ quanh phần đất chính (전남 có hàng chục đảo: viền từng đảo thành một đám chấm trắng)
+        big = [r for r in rings if max(max(q[0] for q in r) - min(q[0] for q in r),
+                                       max(q[1] for q in r) - min(q[1] for q in r)) >= 0.3] or rings
+        marks.append({"d": _path(big, to_xy), "color": line})
+        x, y = _px(to_xy(*_centroid(rings)))
+        names.append({"text": display_name(code), "x": x, "y": y, "anchor": "middle", "size": 30, "color": line})
+        r = rank[code]
+        pos = lang.pick(vi=f"hạng {r}/{n}", ko=f"{n}곳 중 {r}위") + (lang.pick(vi=" (thấp nhất)", ko="(최하위)")
+                                                                     if code == order[0] else "")
+        ranks_shown += [r, n]
+        panel.append({"label": data[code][0], "value": fmt(data[code][1]), "color": ink, "pos": pos})
+    if isinstance(p.get("national"), (int, float)):
+        panel.append({"label": lang.pick(vi="Cả nước", ko="전국"), "value": fmt(float(p["national"])),
+                      "color": colors["text"], "pos": ""})
+
+    out = {"region": "kr", "title": str(p.get("title", "")), "outline": " ".join(outline), "fills": fills,
+           "context": _path(m.get("context") or [], to_xy),
+           # Triều Tiên bị khung cắt thẳng ở mép trên -> mờ dần lên trên (không thành một "nắp" phẳng)
+           "contextFade": [_px(to_xy(126.0, m["bbox"][3]))[1], _px(to_xy(126.0, m["bbox"][3] - 0.5))[1]],
+           "islands": island_pts, "islandColor": shade.get(owner, colors["muted"]), "islandLabels": labels,
+           "marks": marks, "names": names, "panel": panel, "panelTop": KR_PANEL_TOP, "ranksShown": ranks_shown}
+    if order:
+        caption = " · ".join(x for x in (str(p.get("year") or ""), str(p.get("unit") or "")) if x)
+        out["legend"] = {"stops": [_mix(low, high, 0.15 + 0.85 * i / 9) for i in range(10)],
+                         "lo": fmt(data[order[0]][1]), "hi": fmt(data[order[-1]][1]), "caption": caption,
+                         **KR_LEGEND}
     return out
 
 

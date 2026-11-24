@@ -68,12 +68,16 @@ export type LineSoloScene = Span & { kind: "line_solo"; title: string; world: Wo
 type Pt = [number, number];
 export type MapLabel = { text: string; x: number; y: number; anchor: "start" | "middle"; size: number; color: string };
 export type MapScene = Span & {
-  kind: "map"; region: "asia" | "world"; title: string;
+  kind: "map"; region: "asia" | "world" | "kr"; title: string;
   outline: string;
+  context?: string; // bản đồ 17 시도: nền Triều Tiên (không tô số)
+  contextFade?: [number, number]; // y bắt đầu / hết mờ dần của nền
+  names?: MapLabel[]; // tên tỉnh được nhấn (bản đồ 17 시도), hiện khi tô xong
+  panelTop?: number;
   fills: { code: string; d: string; color: string; k: number; dot?: [number, number, number] }[];
   islands: Pt[]; islandColor: string; islandLabels: MapLabel[];
   marks: { d: string; color: string }[];
-  legend?: { stops: string[]; lo: string; hi: string; caption: string; y: number };
+  legend?: { stops: string[]; lo: string; hi: string; caption: string; y: number; left?: number; width?: number; stop?: number };
   callouts?: { label: string; value: string; color: string; x: number; y: number; to: Pt }[];
   inset?: {
     frame: [Pt, Pt]; shapes: { d: string; fill?: string | null; stroke: string; vn: boolean }[];

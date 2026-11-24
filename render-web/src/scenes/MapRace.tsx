@@ -34,7 +34,19 @@ export const MapView: React.FC<P<MapScene>> = ({ s, brand, tl, dur }) => {
     <AbsoluteFill style={{ opacity: exitOf(tl, dur) }}>
       <SceneTitle text={s.title} brand={brand} tl={tl} />
       <svg width={1080} height={1920} style={{ position: "absolute" }}>
-        <g style={{ transform: `scale(${cam})`, transformOrigin: s.region === "world" ? "540px 720px" : "540px 790px" }}>
+        <g style={{ transform: `scale(${cam})`, transformOrigin: s.region === "world" ? "540px 720px" : s.region === "kr" ? "540px 690px" : "540px 790px" }}>
+          {s.context && (
+            <>
+              <defs>
+                <linearGradient id="ctxfade" gradientUnits="userSpaceOnUse" x1={0} x2={0}
+                  y1={s.contextFade?.[0] ?? 0} y2={s.contextFade?.[1] ?? 0}>
+                  <stop offset="0" stopColor={brand.muted} stopOpacity={0} />
+                  <stop offset="1" stopColor={brand.muted} stopOpacity={0.22} />
+                </linearGradient>
+              </defs>
+              <path d={s.context} fill="url(#ctxfade)" opacity={ramp(tl, 0, 0.35)} stroke="none" />
+            </>
+          )}
           <path d={s.outline} fill="none" stroke={brand.muted} strokeOpacity={0.45 * ramp(tl, 0, 0.35)} strokeWidth={1} />
           {s.fills.map((f) => {
             // tô từ thấp lên cao: mắt theo được thứ hạng
@@ -48,14 +60,15 @@ export const MapView: React.FC<P<MapScene>> = ({ s, brand, tl, dur }) => {
             );
           })}
           {/* Hoàng Sa, Trường Sa: hiện ngay từ đầu cùng nền bản đồ, cùng màu Việt Nam */}
-          {s.islands.map(([x, y], i) => <circle key={`i${i}`} cx={x} cy={y} r={s.region === "world" ? 1.8 : 3.4} fill={s.islandColor} />)}
+          {s.islands.map(([x, y], i) => <circle key={`i${i}`} cx={x} cy={y} r={s.region === "world" ? 1.8 : s.region === "kr" ? 6 : 3.4} fill={s.islandColor} />)}
           {s.islandLabels.map((l) => <Label key={l.text} l={l} brand={brand} />)}
           {s.marks.map((m, i) => (
             <g key={`m${i}`} opacity={late}>
               <path d={m.d} fill="none" stroke={m.color} strokeOpacity={0.35 * glow} strokeWidth={12} strokeLinejoin="round" />
-              <path d={m.d} fill="none" stroke={m.color} strokeWidth={s.region === "world" ? 3 : 4} strokeLinejoin="round" />
+              <path d={m.d} fill="none" stroke={m.color} strokeWidth={s.region === "world" || s.region === "kr" ? 3 : 4} strokeLinejoin="round" />
             </g>
           ))}
+          {s.names?.map((l) => <g key={`n${l.text}`} opacity={late}><Label l={l} brand={brand} /></g>)}
           {s.callouts?.map((c, i) => {
             const k = pop(tl, fillEnd + 0.1 + i * 0.15, 0.4);
             return k > 0 ? <line key={`cl${i}`} x1={tagLeft(c) - 8} y1={c.y} x2={c.to[0]} y2={c.to[1]} stroke={c.color}
@@ -100,7 +113,7 @@ export const MapView: React.FC<P<MapScene>> = ({ s, brand, tl, dur }) => {
       {s.panel?.map((r, i) => {
         const k = pop(tl, fillEnd + 0.15 + i * 0.15, 0.4);
         return (
-          <div key={`p${i}`} style={{ position: "absolute", left: 60, top: 1066 + i * 92, width: 620,
+          <div key={`p${i}`} style={{ position: "absolute", left: 60, top: (s.panelTop ?? 1066) + i * 92, width: 620,
             transform: `translateX(${(1 - Math.min(k, 1)) * -40}px)`, opacity: Math.min(k, 1) }}>
             <div style={{ fontSize: 30, fontWeight: 800, color: r.color, whiteSpace: "nowrap", overflow: "hidden",
               textOverflow: "ellipsis" }}>{r.label}</div>
@@ -115,13 +128,15 @@ export const MapView: React.FC<P<MapScene>> = ({ s, brand, tl, dur }) => {
       {s.legend && (() => {
         const lg = s.legend!;
         const world = s.region === "world";
+        const side = world || lg.left !== undefined; // thế giới / 17 시도: canh trái ở một cột
         const k = ramp(tl, fillEnd - 0.1, fillEnd + 0.4);
         return (
-          <div style={{ position: "absolute", top: lg.y, left: world ? 60 : 0, right: world ? undefined : 0, width: world ? 620 : undefined,
-            display: "flex", flexDirection: "column", alignItems: world ? "flex-start" : "center", gap: 6, opacity: k }}>
+          <div style={{ position: "absolute", top: lg.y, left: side ? (lg.left ?? 60) : 0, right: side ? undefined : 0,
+            width: side ? (lg.width ?? 620) : undefined,
+            display: "flex", flexDirection: "column", alignItems: side ? "flex-start" : "center", gap: 6, opacity: k }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 26, fontWeight: 700, color: brand.text }}>
               <span>{lg.lo}</span>
-              <div style={{ display: "flex" }}>{lg.stops.map((c, i) => <div key={i} style={{ width: 34, height: 18, background: c }} />)}</div>
+              <div style={{ display: "flex" }}>{lg.stops.map((c, i) => <div key={i} style={{ width: lg.stop ?? 34, height: 18, background: c }} />)}</div>
               <span>{lg.hi}</span>
             </div>
             <div style={{ fontSize: 24, fontWeight: 600, color: brand.muted }}>{lg.caption}</div>

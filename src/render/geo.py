@@ -16,7 +16,8 @@ from pathlib import Path
 
 GEO_DIR = Path(__file__).resolve().parent.parent.parent / "assets" / "geo"
 GEO_PATH = GEO_DIR / "asia.json"            # giữ tên cũ cho code/test đã dùng
-MAPS = {"asia": GEO_DIR / "asia.json", "world": GEO_DIR / "world.json"}
+MAPS = {"asia": GEO_DIR / "asia.json", "world": GEO_DIR / "world.json",
+        "kr": GEO_DIR / "kr_provinces.json"}     # 17 시도 của Hàn Quốc (tools/build_kr_provinces.py), kênh Hàn
 
 # Tên tiếng Việt (như kịch bản và bảng World Bank dùng) -> mã nước. Tên ở đây thắng tên trong
 # file bản đồ (Natural Earth ghi "Hoa Kỳ", "Myanma"; kịch bản nói "Mỹ", "Myanmar").
@@ -84,6 +85,11 @@ KO_ISLANDS = [("독도", [(131.87, 37.24)], (132.25, 37.24), "left")]
 KO_SEAS = [("동해", (131.0, 40.2))]
 KO_INSET_BBOX = (124.0, 32.5, 134.0, 43.0)       # bán đảo Hàn + 동해 (đủ chỗ cho chữ "독도")
 LABEL_AT_KO = {"KOR": (138.5, 24.5), "JPN": (141.0, 14.5)}
+
+# Bản đồ 17 시도 (24/11/2026): Dokdo thuộc 경상북도 (KR-47) -> cùng màu 경북, có tên; chữ "동해" ở vùng biển giữa
+# bờ Gangwon và Ulleungdo. Toạ độ chữ đặt ở vùng biển trống (đã dựng thử).
+KR_DOKDO = ("KR-47", [(131.87, 37.24)], (131.87, 36.98), "center")
+KR_SEAS = [("동해", (130.3, 38.1))]
 
 
 def _map_path(name: str) -> Path:
@@ -163,7 +169,7 @@ def country_names() -> dict:
 def name_index() -> dict:
     """tên thường (mọi cách gọi có trong file bản đồ, cả tên tiếng Hàn) -> mã nước. VI_TO_CODE thắng cuối cùng."""
     idx = {}
-    for name in ("world", "asia"):
+    for name in ("world", "asia", "kr"):
         if not has_map(name):
             continue
         for code, c in load_map(name)["countries"].items():
@@ -186,15 +192,23 @@ def display_name(code: str) -> str:
     from .. import lang
     if lang.code() == "ko" and code in names_ko():
         return names_ko()[code]
-    for name in ("world", "asia"):
+    for name in ("world", "asia", "kr"):
         if has_map(name) and code in load_map(name)["countries"]:
             return load_map(name)["countries"][code]["name"]
     return code
 
 
+def is_province(code) -> bool:
+    """Mã 시도 của Hàn Quốc (ISO 3166-2, "KR-11")."""
+    return str(code or "").startswith("KR-")
+
+
 def region_for(codes) -> str:
-    """Bản đồ nào vẽ đủ các nước này: châu Á nếu mọi nước đều có trên bản đồ châu Á,
-    ngược lại là thế giới (khi có file world.json)."""
+    """Bản đồ nào vẽ đủ các nước này: 17 시도 nếu mọi mã là tỉnh/thành Hàn Quốc; châu Á nếu mọi nước đều có trên
+    bản đồ châu Á, ngược lại là thế giới (khi có file world.json)."""
+    codes = list(codes)
+    if codes and all(is_province(c) for c in codes) and has_map("kr"):
+        return "kr"
     asia = load_map("asia")["countries"]
     if all(c in asia for c in codes) or not has_map("world"):
         return "asia"

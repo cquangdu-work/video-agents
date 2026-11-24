@@ -292,7 +292,7 @@ def video_kind(title: str, source_name: str) -> str:
     title = str(title or "").lower()
     if not is_data_source(source_name):
         return "bai-bao"
-    if title.startswith(("bản đồ", "세계 지도")):            # kênh Hàn: "세계 지도: …", "… 순위 경쟁…"
+    if title.startswith(("bản đồ", "세계 지도", "한국 지도")):   # kênh Hàn: "세계 지도: …", "한국 지도: …" (17 시도)
         return "ban-do"
     if "cuộc đua" in title or "순위 경쟁" in title:
         return "cuoc-dua"

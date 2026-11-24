@@ -103,12 +103,23 @@ sources:
 
   # KOSIS: người nước ngoài cư trú tại Hàn Quốc theo quốc tịch (cuộc đua). Bảng "người Việt theo visa" của
   # kênh Việt không hợp khán giả Hàn nên không dùng.
+  # province_map (24/11/2026): một chỉ số theo 17 시도 -> bản đồ Hàn Quốc theo tỉnh (src/sources/kosis.py,
+  # assets/geo/kr_provinces.json). item = tên chỉ tiêu (khớp phần đầu), pick = chiều phụ chọn theo tên mục,
+  # scale = nhân số (천원 -> 만원: 0.1), national: false = bỏ dòng 전국 (chỉ số mà cả nước luôn bằng 0).
+  # Thêm bảng: tìm trên KOSIS bảng có chiều vùng với mục "서울특별시", chạy thử kosis.build_province_map.
   kosis:
     per_day: 1
     tables:
       - {kind: nationality_race, org: "111", tbl: DT_1B040A7, start: 2010, top: 10,
          org_name: "법무부", unit: "명", focus: [],
          name: "국적별 국내 체류 외국인"}
+      - {kind: province_map, org: "101", tbl: DT_1B81A21, item: "합계출산율", name: "합계출산율", unit: "명"}
+      - {kind: province_map, org: "101", tbl: DT_1YL20631, item: "고령인구비율", name: "고령인구 비율", unit: "%",
+         per: người}
+      - {kind: province_map, org: "101", tbl: INH_1C96_02, name: "1인당 지역내총생산", unit: "만원", scale: 0.1}
+      - {kind: province_map, org: "101", tbl: DT_1YL21161, item: "1인가구비율", name: "1인 가구 비율", unit: "%"}
+      - {kind: province_map, org: "101", tbl: DT_1YL20642, name: "청년 순이동률", unit: "%", national: false,
+         pick: {B: "청년순이동률(19~39세)"}}
 
   # Our World in Data — cuộc đua (race) và bản đồ thế giới (map, góc nhìn Hàn Quốc). Mỗi ngày 2 dòng liền nhau,
   # xếp xen kẽ map / race.
