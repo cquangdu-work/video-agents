@@ -14,7 +14,7 @@ export const FindingCard: React.FC<{ f: Finding; brand: Brand; t: number }> = ({
   const txt = ramp(tl, 0.45, 0.9);
   const long = f.text.length > 70;
   return (
-    <AbsoluteFill style={{ background: `${brand.background}${Math.round(bg * 235).toString(16).padStart(2, "0")}`,
+    <AbsoluteFill style={{ background: `${brand.background}${Math.round(bg * 250).toString(16).padStart(2, "0")}`,
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 80px" }}>
       <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: "0.22em", color: brand.accent, opacity: bg,
         border: `3px solid ${brand.accent}`, borderRadius: 999, padding: "8px 26px", marginTop: -140 }}>{f.label}</div>
@@ -24,7 +24,7 @@ export const FindingCard: React.FC<{ f: Finding; brand: Brand; t: number }> = ({
           whiteSpace: "nowrap" }}>{f.value}</div>
       )}
       <div style={{ marginTop: 44, fontSize: long ? 50 : 58, fontWeight: 800, lineHeight: 1.3, color: brand.text,
-        textAlign: "center", opacity: txt, transform: `translateY(${(1 - txt) * 24}px)` }}>{f.text}</div>
+        textAlign: "center", wordBreak: "keep-all", opacity: txt, transform: `translateY(${(1 - txt) * 24}px)` }}>{f.text}</div>
     </AbsoluteFill>
   );
 };

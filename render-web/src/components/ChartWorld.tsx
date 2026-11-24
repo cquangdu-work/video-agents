@@ -167,9 +167,13 @@ export const ChartWorld: React.FC<{ world: World; scenes: Scene[]; t: number; br
   // năm cuối ở chế độ toàn màn hình: ngoặc mọc từ giữa ra hai đầu, rồi hiện "×5,06" / "24 điểm %" do Python tính
   const gp = w.gap;
   const gva = gp ? exactAt(w.series[gp.a], gp.x) : null, gvb = gp ? exactAt(w.series[gp.b], gp.x) : null;
-  const gk = gp && isFull && st && p.drawEnd >= w.maxX - 1e-6 && gva !== null && gvb !== null
-    ? ramp(tl, 0.72 * dur, 0.72 * dur + 0.5, Easing.out(Easing.cubic)) : 0;
-  const gx = gp ? X(gp.x) + 44 : 0, gya = gva !== null ? Y(gva) : 0, gyb = gvb !== null ? Y(gvb) : 0;
+  // cảnh vẽ tới năm cuối: ngoặc mọc khi đường vẽ xong; các cảnh SAU còn giữ biểu đồ (thu xuống nửa dưới): ngoặc ở
+  // sẵn — cảnh line_chart có khi chỉ 3 giây, chưa kịp đọc (bản thử 24/11, video #10)
+  const firstDraw = isFull && p.drawFrom < w.maxX - 1e-6;
+  const gxRaw = gp ? X(gp.x) + 44 : 0;
+  const gk = gp && st && p.drawEnd >= w.maxX - 1e-6 && gva !== null && gvb !== null && gxRaw <= box.right + 60
+    ? (firstDraw ? ramp(tl, 0.72 * dur, 0.72 * dur + 0.5, Easing.out(Easing.cubic)) : opacity) : 0;
+  const gx = gxRaw, gya = gva !== null ? Y(gva) : 0, gyb = gvb !== null ? Y(gvb) : 0;
   const gmid = (gya + gyb) / 2, ghalf = Math.abs(gya - gyb) / 2 * gk;
   const ref = w.reference && y1 > w.reference.y * 1.08 ? ramp(y1, w.reference.y * 1.08, w.reference.y * 1.3) : 0;
 
@@ -283,13 +287,14 @@ export const ChartWorld: React.FC<{ world: World; scenes: Scene[]; t: number; br
       {gk > 0 && gp && (() => {
         const roomy = Math.abs(gya - gyb) >= 200;
         const top = roomy ? gmid - 60 : Math.max(gya, gyb) + 70;
-        const k = ramp(tl, 0.72 * dur + 0.35, 0.72 * dur + 0.8);
+        const k = firstDraw ? ramp(tl, 0.72 * dur + 0.35, 0.72 * dur + 0.8) : gk;
+        const small = !isFull;
         return (
           <div style={{ position: "absolute", right: 1080 - gx + 24, top, textAlign: "right", opacity: k,
             transform: `translateX(${(1 - k) * 20}px)` }}>
-            <div style={{ display: "inline-block", fontSize: 64, fontWeight: 800, color: brand.background, lineHeight: 1.1,
+            <div style={{ display: "inline-block", fontSize: small ? 46 : 64, fontWeight: 800, color: brand.background, lineHeight: 1.1,
               background: brand.accent, borderRadius: 16, padding: "4px 18px" }}>{gp.value}</div>
-            <div style={{ marginTop: 8, fontSize: 30, fontWeight: 700, color: brand.text, maxWidth: 520,
+            <div style={{ marginTop: 8, fontSize: small ? 24 : 30, fontWeight: 700, color: brand.text, maxWidth: 520,
               textShadow: "0 2px 12px rgba(0,0,0,0.9)" }}>{gp.label}</div>
           </div>
         );
