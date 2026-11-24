@@ -31,19 +31,19 @@ export const WideIntro: React.FC<WideIntroProps> = ({ brand, duration, series, h
       <div style={{ position: "absolute", left: 120, top: 110, opacity: head }}>
         <div style={{ display: "inline-block", fontSize: 30, fontWeight: 800, letterSpacing: "0.16em", color: brand.accent,
           border: `3px solid ${brand.accent}`, borderRadius: 999, padding: "6px 22px" }}>{series}</div>
-        <div style={{ marginTop: 24, fontSize: 76, fontWeight: 800, lineHeight: 1.1 }}>{headline}</div>
+        <div style={{ marginTop: 24, fontSize: 84, fontWeight: 800, lineHeight: 1.1 }}>{headline}</div>
       </div>
       <div style={{ position: "absolute", left: 120, right: 120, top: 360 }}>
         {chapters.map((c, i) => {
           const k = pop(t, 0.6 + i * step, 0.35);
           const isLead = i === lead;
           return (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 22, marginTop: 16, opacity: Math.min(k, 1),
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 22, marginTop: chapters.length > 6 ? 22 : 30, opacity: Math.min(k, 1),
               transform: `translateX(${(1 - Math.min(k, 1)) * -30}px)` }}>
-              <div style={{ width: 52, height: 52, borderRadius: 26, display: "flex", alignItems: "center",
+              <div style={{ width: 60, height: 60, borderRadius: 30, display: "flex", alignItems: "center",
                 justifyContent: "center", fontSize: 26, fontWeight: 800, flexShrink: 0,
                 background: isLead ? brand.accent : brand.surface, color: isLead ? brand.background : brand.muted }}>{i + 1}</div>
-              <div style={{ fontSize: chapters.length > 6 ? 34 : 38, fontWeight: isLead ? 800 : 600,
+              <div style={{ fontSize: chapters.length > 6 ? 44 : 52, fontWeight: isLead ? 800 : 600,
                 color: isLead ? brand.accent : brand.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                 wordBreak: "keep-all" }}>{c}</div>
               {isLead && <div style={{ flexShrink: 0, fontSize: 24, fontWeight: 800, color: brand.background,

@@ -16,6 +16,9 @@ import { ChartWorld } from "../components/ChartWorld";
 type P<S> = { s: S; brand: Brand; tl: number; dur: number };
 
 const exitOf = (tl: number, dur: number) => 1 - ramp(tl, dur - 0.15, dur);
+// k: mức "mọc" của HÌNH (thanh, cột, vòng %) — chiều dài/độ lớn của nó chính là số liệu. CON SỐ thì KHÔNG đếm chạy từ 0
+// nữa (24/11/2026, Du: "chuyển động phải giúp hiểu số liệu, không chỉ để trang trí"): khung giữa chừng của hiệu ứng đếm
+// hiện số không có trong dữ liệu (video #10: "3,89 lần" trên đường đếm tới 4,91) — số hiện ĐÚNG giá trị và bật lên.
 const countK = (tl: number, dur: number) => ramp(tl, 0.05 * dur, 0.62 * dur, Easing.out(Easing.cubic));
 /** Cỡ chữ để một chuỗi số vừa bề ngang `width` (ước lượng ~0,6 em mỗi ký tự với font đậm). */
 const fitSize = (text: string, width: number, max: number) => Math.min(max, width / (0.62 * Math.max(text.length, 1)));
@@ -159,9 +162,9 @@ const PeopleGrid: React.FC<{ s: BigNumberScene; brand: Brand; tl: number; dur: n
 };
 
 export const BigNumber: React.FC<P<BigNumberScene>> = ({ s, brand, tl, dur }) => {
-  const k = countK(tl, dur);
-  const txt = fmtDec(s.value * k, s.dec);
-  const final = fmtDec(s.value, s.dec);
+  const txt = fmtDec(s.value, s.dec);
+  const final = txt;
+  const grow = pop(tl, 0.05, 0.45);
   const panel = !!s.chart;
   const iso = !panel && !!s.isotype;
   const size = fitSize(final, 900, iso ? 150 : panel ? 190 : 240);
@@ -174,8 +177,8 @@ export const BigNumber: React.FC<P<BigNumberScene>> = ({ s, brand, tl, dur }) =>
         {!iso && s.flag && <div style={{ transform: `scale(${pop(tl, 0.05, 0.4)})` }}><Flag code={s.flag} w={110} /></div>}
         <div style={{ display: "flex", alignItems: "baseline", gap: 20 }}>
           {iso && s.flag && <Flag code={s.flag} w={70} />}
-          <span style={{ fontSize: size, fontWeight: 800, lineHeight: 1, color: s.color,
-            textShadow: `0 0 70px ${s.color}55` }}>{txt}</span>
+          <span style={{ fontSize: size, fontWeight: 800, lineHeight: 1, color: s.color, display: "inline-block",
+            transform: `scale(${grow})`, textShadow: `0 0 70px ${s.color}55` }}>{txt}</span>
           {iso && <span style={{ fontSize: 50, fontWeight: 700, color: brand.text }}>{s.suffix}</span>}
         </div>
         {!iso && s.suffix && <div style={{ fontSize: 48, fontWeight: 700, color: brand.text, textAlign: "center" }}>{s.suffix}</div>}
@@ -206,7 +209,7 @@ export const Versus: React.FC<P<VersusScene>> = ({ s, brand, tl, dur }) => {
           <Flag code={v.flag} w={panel ? 84 : 100} />
           <div style={{ fontSize: 44, fontWeight: 800, color: v.color, textAlign: "center", lineHeight: 1.15 }}>{v.label}</div>
           <div style={{ fontSize: size, fontWeight: 800, color: v.color, lineHeight: 1.05,
-            textShadow: `0 0 60px ${v.color}55` }}>{fmtDec(v.value * k, v.dec)}</div>
+            textShadow: `0 0 60px ${v.color}55` }}>{fmtDec(v.value, v.dec)}</div>
         </div>
       ))}
       {s.suffix && (
@@ -250,7 +253,7 @@ const ColumnChart: React.FC<P<BarChartScene>> = ({ s, brand, tl, dur }) => {
               borderRadius: "12px 12px 3px 3px", background: `linear-gradient(180deg, ${it.color}, ${it.color}66)`,
               boxShadow: `0 0 34px ${it.color}33` }} />
             <div style={{ position: "absolute", left: cx - slot / 2, width: slot, top: base - h - 56, textAlign: "center",
-              fontSize: n > 4 ? 34 : 42, fontWeight: 800, color: brand.text }}>{fmtDec(it.value * k, it.dec)}</div>
+              fontSize: n > 4 ? 34 : 42, fontWeight: 800, color: brand.text }}>{fmtDec(it.value, it.dec)}</div>
             <div style={{ position: "absolute", left: cx - slot / 2, width: slot, top: base + 14, display: "flex",
               flexDirection: "column", alignItems: "center", gap: 6 }}>
               <Flag code={it.flag} w={50} />
@@ -288,7 +291,7 @@ const HorizontalBars: React.FC<P<BarChartScene>> = ({ s, brand, tl, dur }) => {
             <div style={{ display: "flex", alignItems: "center", gap: 18, marginTop: 10 }}>
               <div style={{ width: Math.max(w, 6), height: barH, borderRadius: 10,
                 background: `linear-gradient(90deg, ${it.color}88, ${it.color})`, boxShadow: `0 0 30px ${it.color}33` }} />
-              <span style={{ fontSize: 44, fontWeight: 800, color: brand.text }}>{fmtDec(it.value * k, it.dec)}</span>
+              <span style={{ fontSize: 44, fontWeight: 800, color: brand.text }}>{fmtDec(it.value, it.dec)}</span>
             </div>
           </div>
         );
@@ -314,7 +317,7 @@ export const PercentRing: React.FC<P<PercentScene>> = ({ s, brand, tl, dur }) =>
           style={{ filter: `drop-shadow(0 0 24px ${brand.accent}88)` }} />
       </svg>
       <div style={{ position: "absolute", top: 820 - 80, left: 0, right: 0, textAlign: "center", fontSize: fitSize(fmtDec(s.value, s.dec) + "%", 420, 150),
-        fontWeight: 800, color: brand.accent, lineHeight: "160px" }}>{fmtDec(s.value * k, s.dec)}%</div>
+        fontWeight: 800, color: brand.accent, lineHeight: "160px" }}>{fmtDec(s.value, s.dec)}%</div>
       {s.label && <div style={{ position: "absolute", top: 1150, left: 70, right: 70, textAlign: "center", fontSize: 42,
         fontWeight: 700, color: brand.text, opacity: ramp(tl, 0.2, 0.5) }}>{s.label}</div>}
     </AbsoluteFill>
