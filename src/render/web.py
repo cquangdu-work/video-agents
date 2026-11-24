@@ -326,6 +326,9 @@ def gap_of(series: list, unit: str):
 # Số trong câu: 1.234,5 | 1,234.5 | 9,71 | 44.5 (kèm đơn vị ngay sau nếu có)
 _NUM = re.compile(r"\d[\d.,]*\d|\d")
 _UNIT_AFTER = re.compile(r"^\s?(%p|%|điểm phần trăm|lần|배|위|세|명|년|tuổi|người|USD|đô la|달러|kWh|tấn|톤|만|억|조)")
+# cụm phân số: "2명 중 1명", "10곳 중 3곳", "3분의 1" | "cứ 3 người thì 2", "cứ 10 phụ nữ thì gần 6"
+_FRACTION = re.compile(r"\d+\s*\S{0,3}\s*중\s*(?:거의\s*)?\d+|\d+\s*분의\s*\d+"
+                       r"|cứ\s+\d+\s+[^\d,.]{1,20}?\s+thì\s+(?:gần\s+|hơn\s+)?\d+", re.I)
 
 
 def finding_of(spec: list, duration: float):
@@ -337,7 +340,12 @@ def finding_of(spec: list, duration: float):
     if not hook or duration < 8:
         return None
     cands = []
+    # số nằm trong cụm PHÂN SỐ không đứng riêng được: "2명 중 1명" -> thẻ hiện to "2명" (ca thật 24/11, bản đồ 시군구 —
+    # con số đáng nhớ là 49.2%, không phải "2명")
+    fractions = [m.span() for m in _FRACTION.finditer(hook)]
     for m in _NUM.finditer(hook):
+        if any(a <= m.start() < b for a, b in fractions):
+            continue
         tok = m.group().rstrip(".,")
         unit = _UNIT_AFTER.match(hook[m.end():])
         year = re.fullmatch(r"(19|20)\d\d", tok) and not (unit and unit.group(1) in ("%", "%p", "lần", "배"))

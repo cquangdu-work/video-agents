@@ -214,5 +214,28 @@ class SeriesTest(unittest.TestCase):
         self.assertIn("▶ 시리즈", cap)
 
 
+class TrialFixesTest(unittest.TestCase):
+    """Hai lỗi lộ ra khi chạy thử video bản đồ 시군구 trên VM (24/11/2026)."""
+
+    def test_whisper_number_pieces_merged_before_alignment(self):
+        from src.audio.subtitles import merge_number_pieces, script_words_timed
+        heard = [("반면", 11.7, 12.0), ("화성시는", 12.0, 12.54), ("11", 12.54, 13.1), (".6", 13.1, 13.5),
+                 ("%로", 13.5, 14.08), ("최저입니다.", 14.08, 14.7)]
+        self.assertEqual(merge_number_pieces(heard)[2], ("11.6%로", 12.54, 14.08))
+        script = ["반면", "화성시는", "11.6%로", "최저입니다."]
+        timed = script_words_timed(script, heard)
+        self.assertEqual([w for w, _, _ in timed], script)            # chữ kịch bản, không phải mảnh Whisper
+        self.assertEqual(merge_number_pieces([("2020,", 0, 1), ("Việt", 1, 2)])[1][0], "Việt")
+
+    def test_finding_card_skips_fraction_numbers(self):
+        from src.render.web import finding_of
+        spec = lambda hook: [{"voice": hook}, {"voice": "x"}]
+        with lang.using("ko"):
+            f = finding_of(spec("2025년 경북 의성군은 2명 중 1명이 고령인구입니다."), 30)
+            self.assertEqual(f["value"], "")                           # chỉ còn câu, không hiện to "2명"
+            self.assertEqual(finding_of(spec("의성군은 2명 중 1명, 49.2%가 고령인구입니다."), 30)["value"], "49.2%")
+        self.assertEqual(finding_of(spec("Cứ 3 người thì 2 người dùng internet, tức 68,6%."), 30)["value"], "68,6%")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -45,6 +45,22 @@ def _ts(sec: float) -> str:
     return f"{int(h)}:{int(m):02d}:{s:05.2f}"
 
 
+def merge_number_pieces(heard: list) -> list:
+    """Whisper (tiếng Hàn) tách một con số thành nhiều "từ": "11", ".6", "%로" — kịch bản chỉ có MỘT từ "11.6%로". Ghép
+    mảnh bắt đầu bằng . , % vào từ trước khi từ trước tận cùng bằng chữ số (lấy mốc đầu của từ trước, mốc cuối của
+    mảnh). Ca thật 24/11/2026 (chạy thử bản đồ 시군구): ba con số thập phân làm độ khớp tụt còn 59% < 60% -> phụ đề
+    lùi về chữ Whisper và ngắt dòng ngay giữa số (".6 %로 최저입니다")."""
+    out = []
+    for w, s, e in heard:
+        text = str(w).strip()
+        if out and text[:1] in ".,%" and str(out[-1][0]).strip()[-1:].isdigit():
+            pw, ps, _ = out[-1]
+            out[-1] = (str(pw).strip() + text, ps, e)
+        else:
+            out.append((w, s, e))
+    return out
+
+
 def script_words_timed(script_words: list, heard: list, min_match: float = 0.6) -> list:
     """Phụ đề hiện CHỮ CỦA KỊCH BẢN, chỉ mượn MỐC THỜI GIAN của Whisper.
 
@@ -63,6 +79,7 @@ def script_words_timed(script_words: list, heard: list, min_match: float = 0.6) 
     from .batch import tokens
 
     key = lambda w: "".join(tokens(w))
+    heard = merge_number_pieces(heard)
     a, b = [key(w) for w in script_words], [key(h[0]) for h in heard]
     if not a or not b:
         return list(heard)
