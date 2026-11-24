@@ -348,7 +348,9 @@ def finding_of(spec: list, duration: float):
     value = min(cands)[2].strip() if cands else ""
     span = min(3.2, max(2.2, 0.08 * duration))
     return {"value": value, "text": hook, "start": round(duration - span, 3), "end": round(duration, 3),
-            "label": lang.pick(vi="ĐIỀU ĐÁNG NHỚ", ko="핵심 한 줄")}
+            "label": lang.pick(vi="ĐIỀU ĐÁNG NHỚ", ko="핵심 한 줄"),
+            # thẻ cuối mời theo dõi (24/11: ~1 người đăng ký / 1.000 lượt xem)
+            "cta": lang.pick(vi="Theo dõi để xem mỗi ngày một câu chuyện số liệu", ko="구독하고 매일 숫자 이야기 보기")}
 
 
 def _same_series(p: dict, world: dict, colors: dict) -> bool:
@@ -384,7 +386,7 @@ def _nice_ticks(y_max: float) -> list:
     return sorted(out)
 
 
-def build_story(spec: list, timed_words: list, script_id, render_clip=None, caption_size=None) -> dict:
+def build_story(spec: list, timed_words: list, script_id, render_clip=None, caption_size=None, opening=None) -> dict:
     """Spec đã có thời lượng thật + từ có mốc thời gian -> props cho Remotion.
 
     render_clip(scene, index) -> Path: dựng một cảnh bằng Manim (bản đồ, cuộc đua...) để lồng vào;
@@ -568,6 +570,9 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None, capt
     finding = finding_of(spec, t)
     if finding:
         props["finding"] = finding
+        if opening and float(opening) > 0:        # thẻ mở đầu (núm "opening" của src/style.py), tối đa nửa cảnh đầu
+            first = scenes[0]["end"] - scenes[0]["start"] if scenes else 0
+            props["opening"] = round(min(float(opening), max(0.8, 0.6 * first)), 2)
         add_sfx("thump", finding["start"] + 0.15, 0.4)
         if spec:                       # số của thẻ phát hiện là số của câu mở đầu (đã kiểm) — cho Kiểm định biết
             try:

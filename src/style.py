@@ -41,6 +41,9 @@ KNOBS = {
     "captions": {"label": "Cỡ phụ đề", "center": 88.0, "step": 8.0, "lo": 72.0, "hi": 96.0},
     # độ dài TỐI ĐA của video (giây); Biên kịch viết cho khoảng 0,75×..1× mức này. Gán lúc viết kịch bản (main)
     "length": {"label": "Độ dài video", "center": 40.0, "step": 10.0, "lo": 30.0, "hi": 60.0},
+    # THẺ MỞ ĐẦU (24/11/2026, Du duyệt đề xuất "giây đầu tiên"): số giây thẻ phát hiện (con số chính + câu mở đầu) phủ
+    # khung đầu video trước khi mở ra cảnh — 0 = không thẻ. Đo 24/11: chỉ 37-62% lượt xem qua được vài giây đầu.
+    "opening": {"label": "Thẻ mở đầu", "center": 1.2, "step": 1.2, "lo": 0.0, "hi": 2.4},
 }
 METRIC = "avg_view_pct"     # mục tiêu của kênh là tỷ lệ xem hết -> % thời lượng được xem
 SHRINK = 3.0                # mỗi mức như có sẵn 3 video "trung bình": ít video thì không kết luận mạnh
@@ -62,7 +65,7 @@ def fmt(knob: str, v) -> str:
         return f"×{v:.2f}".replace(".", ",")
     if knob == "music":
         return "0 dB" if abs(v) < 1e-9 else f"{v:+.0f} dB"
-    if knob in ("pace", "length"):
+    if knob in ("pace", "length", "opening"):
         return f"{v:g} giây".replace(".", ",")
     return f"{v:.0f} px"
 

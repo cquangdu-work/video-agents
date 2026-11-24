@@ -4,6 +4,7 @@ import { Story } from "./Story";
 import { Wide, WideProps } from "./Wide";
 import { BrandArt, BrandArtProps } from "./BrandArt";
 import { Thumb, ThumbProps } from "./Thumb";
+import { WideIntro, WideIntroProps } from "./WideIntro";
 import { StoryProps } from "./types";
 
 // Props thật do Python truyền vào bằng --props=<file.json>; bản mặc định chỉ để mở Studio.
@@ -57,6 +58,18 @@ export const RemotionRoot: React.FC = () => (
       durationInFrames={1}
       defaultProps={artEmpty}
       calculateMetadata={({ props }) => ({ width: props.width, height: props.height })}
+    />
+    {/* Mở đầu video dài (src/longform.py): lời dẫn + danh sách chương */}
+    <Composition
+      id="WideIntro"
+      component={WideIntro}
+      width={1920}
+      height={1080}
+      fps={30}
+      durationInFrames={300}
+      defaultProps={{ brand: empty.brand, duration: 10, series: "TUẦN QUA CON SỐ", headline: "", chapters: [], lead: 0,
+        leadLabel: "" } as WideIntroProps}
+      calculateMetadata={({ props }) => ({ durationInFrames: Math.max(1, Math.round(props.duration * 30)) })}
     />
     {/* Hình thu nhỏ video dài hằng tuần (src/longform.py). Ảnh tĩnh nhưng durationInFrames DÀI: Remotion ép số khung
         về [0, durationInFrames-1] kể cả bên trong <Freeze> — bản đầu dài 1 khung nên mọi Shorts bị dừng ở khung 0

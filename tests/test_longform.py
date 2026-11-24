@@ -1,6 +1,7 @@
 """Video dài hằng tuần (src/longform.py). Chạy: python -m unittest tests.test_longform -v"""
 import json
 import sqlite3
+import os
 import unittest
 from datetime import datetime, timezone
 from unittest import mock
@@ -73,3 +74,36 @@ class PublishTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LongformUpgradeTest(unittest.TestCase):
+    """Nâng cấp video dài 24/11/2026: tiêu đề mở bằng chương được xem nhiều nhất, lời dẫn mở đầu do code ghép từ tiêu
+    đề đã đăng, chương "0:00 Giới thiệu" + các chương sau dời đúng số giây lời dẫn."""
+    V = [{"title": "Điện tái tạo: Việt Nam thứ 77", "description": "Nguồn: OWID", "tags": "[]", "youtube_id": "a"},
+         {"title": "Xe điện: Việt Nam hạng 2", "description": "Nguồn: OWID", "tags": "[]", "youtube_id": "b"},
+         {"title": "Lao động nông nghiệp gấp 4,91 lần", "description": "Nguồn: WB", "tags": "[]", "youtube_id": "c"}]
+
+    def test_title_leads_with_most_viewed_and_chapters_shift(self):
+        from src import lang, longform
+        with lang.using("vi"):
+            title, desc, _ = longform.build_text(self.V, [0, 50, 100], "15/11–21/11", {"publish": {}}, lead=2, intro=11.0)
+        self.assertTrue(title.startswith("Lao động nông nghiệp gấp 4,91 lần | 3 câu chuyện"))
+        self.assertIn("0:00 Giới thiệu", desc)
+        self.assertIn("0:11 Điện tái tạo", desc)
+        self.assertIn("1:01 Xe điện", desc)
+
+    def test_lead_chapter_by_public_views(self):
+        from src import longform
+        from src.publish import youtube
+        with mock.patch.dict(os.environ, {"YOUTUBE_API_KEY": "K"}), \
+                mock.patch.object(youtube, "public_stats", return_value={"a": {"views": 5}, "b": {"views": 90}, "c": {"views": 7}}):
+            self.assertEqual(longform.lead_chapter(self.V), 1)
+        with mock.patch.dict(os.environ, {"YOUTUBE_API_KEY": ""}):
+            self.assertEqual(longform.lead_chapter(self.V), 0)
+
+    def test_intro_text_reuses_published_titles_only(self):
+        from src import lang, longform
+        with lang.using("vi"):
+            t = longform.intro_text(self.V, "15/11–21/11", 1)
+        self.assertIn("Xe điện: Việt Nam hạng 2", t)
+        self.assertIn("3 câu chuyện", t)

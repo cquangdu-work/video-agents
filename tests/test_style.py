@@ -83,7 +83,8 @@ class AssignTest(StyleCase):
     def test_paused_or_disabled_uses_the_window_center(self):
         style.set_paused(True)
         self.assertEqual(style.assign(self.con, 1),
-                         {"tempo": 1.05, "music": 0.0, "pace": 2.5, "captions": 88.0, "length": None})
+                         {"tempo": 1.05, "music": 0.0, "pace": 2.5, "captions": 88.0, "length": None,
+                          "opening": 1.2})
         style.set_paused(False)
         off = {"style": {"experiments": False}}
         self.assertEqual(style.assign(self.con, 2, off)["captions"], 88.0)

@@ -96,19 +96,29 @@ def ts(sec: float) -> str:
     return f"{sec // 3600}:{sec % 3600 // 60:02d}:{sec % 60:02d}" if sec >= 3600 else f"{sec // 60}:{sec % 60:02d}"
 
 
-def build_text(videos: list, starts: list, span: str, cfg: dict) -> tuple:
+def build_text(videos: list, starts: list, span: str, cfg: dict, lead: int = None, intro: float = 0.0) -> tuple:
     """(tiêu đề, mô tả, thẻ) viết bằng code — không tốn lượt gọi model. Chương có mốc thời gian
-    (YouTube tự chia chương: mốc đầu 0:00, từ 3 chương, mỗi chương >= 10 giây)."""
+    (YouTube tự chia chương: mốc đầu 0:00, từ 3 chương, mỗi chương >= 10 giây).
+
+    lead: chương nổi bật (nhiều lượt xem nhất tuần) -> tiêu đề MỞ BẰNG câu chuyện đó (24/11/2026: video dài #9 có 2
+    lượt xem, #14 có 0 — tiêu đề "7 câu chuyện qua con số tuần 15/11–21/11" không gợi tò mò, không ai tìm như vậy).
+    intro: số giây lời dẫn mở đầu (có thì thêm chương "0:00 Giới thiệu", các chương sau dời theo)."""
     from .publish import metadata
     n = len(videos)
-    # khuôn cố định, ngắn (bản đầu ghép tiêu đề một chương vào nên bị cắt "…Việt Nam và Hàn…")
-    title = metadata._truncate_words(lang.pick(
-        vi=f"{n} câu chuyện qua con số tuần {span} | Việt Nam, Hàn Quốc và thế giới",
-        ko=f"숫자로 본 이번 주 이야기 {n}편 ({span}) | 한국과 세계"), metadata.TITLE_MAX)
+    tail = lang.pick(vi=f"{n} câu chuyện qua con số tuần {span}", ko=f"숫자로 본 이번 주 {n}편 ({span})")
+    if lead is not None and 0 <= lead < len(videos):
+        head = videos[lead]["title"]           # week_videos đã thêm đơn vị nếu tiêu đề Shorts bỏ mất (chapter_title)
+        title = metadata._truncate_words(f"{head} | {tail}", metadata.TITLE_MAX)
+    else:   # khuôn cũ (không biết chương nào nổi bật)
+        title = metadata._truncate_words(lang.pick(
+            vi=f"{n} câu chuyện qua con số tuần {span} | Việt Nam, Hàn Quốc và thế giới",
+            ko=f"숫자로 본 이번 주 이야기 {n}편 ({span}) | 한국과 세계"), metadata.TITLE_MAX)
     lines = [lang.pick(vi=f"{n} câu chuyện dữ liệu Việt Nam – Hàn Quốc – thế giới trong tuần {span}, mỗi câu chuyện"
                           " một chương:",
                        ko=f"{span} 한 주 동안의 데이터 이야기 {n}편, 이야기마다 한 챕터:"), ""]
-    lines += [f"{ts(s)} {v['title']}" for v, s in zip(videos, starts)]
+    if intro > 0:
+        lines.append(lang.pick(vi="0:00 Giới thiệu", ko="0:00 소개"))
+    lines += [f"{ts(s + intro)} {v['title']}" for v, s in zip(videos, starts)]
     sources, music = [], []
     for v in videos:
         for l in str(v["description"] or "").splitlines():
@@ -129,6 +139,55 @@ def build_text(videos: list, starts: list, span: str, cfg: dict) -> tuple:
                 tags.append(t)
                 seen.add(t.lower())
     return title, desc, tags
+
+
+def lead_chapter(videos: list) -> int:
+    """Chỉ số chương được xem nhiều nhất trên YouTube (số công khai, API key — không tốn quota OAuth). Lỗi -> 0."""
+    import os
+    from .publish import youtube
+    key = os.getenv("YOUTUBE_API_KEY")
+    ids = [v.get("youtube_id") for v in videos if v.get("youtube_id")]
+    if not key or not ids:
+        return 0
+    try:
+        stats = youtube.public_stats(ids, key)
+    except Exception as exc:
+        log.warning("Không đọc được lượt xem các chương: %s", exc)
+        return 0
+    views = [(stats.get(v.get("youtube_id"), {}).get("views", 0), -k) for k, v in enumerate(videos)]
+    return -max(views)[1]
+
+
+def intro_text(videos: list, span: str, lead: int) -> str:
+    """Lời dẫn mở đầu (~10 giây) do CODE ghép từ tiêu đề các Shorts đã đăng (đã qua mọi cổng) — không số mới."""
+    n, top = len(videos), videos[lead]["title"].rstrip(" .?!")
+    return lang.pick(vi=f"Tuần qua con số, {span}: {n} câu chuyện. Được xem nhiều nhất tuần này: {top}. "
+                        "Cùng xem lại từng câu chuyện.",
+                     ko=f"숫자로 본 한 주, {span}. 이번 주 이야기는 {n}편입니다. 가장 많이 본 이야기: {top}. "
+                        "하나씩 다시 살펴볼까요?")
+
+
+def make_intro(videos: list, span: str, series: str, chapters: list, lead: int, concurrency: int = 3):
+    """Phần mở đầu video dài: giọng kênh đọc lời dẫn (1 lượt TTS/tuần) + danh sách chương (render-web WideIntro).
+    Lỗi (hết hạn mức TTS...) -> None: video dài vẫn ra như cũ, chỉ thiếu lời dẫn. -> (file mp4, số giây)."""
+    from .audio import tts
+    from .render import web
+    try:
+        wav = tts.synth(intro_text(videos, span, lead), TMP / "intro.wav")
+        dur = round(max(tts.wav_duration(wav) + 0.6, 10.5), 2)    # YouTube chỉ chia chương khi mỗi chương >= 10 giây
+        props = {"brand": web.brand_props(), "duration": dur, "series": series, "chapters": chapters, "lead": lead,
+                 "headline": lang.pick(vi=f"{len(videos)} câu chuyện qua con số", ko=f"숫자 이야기 {len(videos)}편"),
+                 "leadLabel": lang.pick(vi="xem nhiều nhất", ko="가장 많이 봄")}
+        if lang.code() != "vi":
+            props["lang"] = lang.code()
+        raw = web.render(props, TMP / "intro_raw.mp4", concurrency=concurrency, composition="WideIntro")
+        part = TMP / "part_0.mp4"
+        ff("-i", raw, "-i", wav, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-af", "apad",
+           "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2", "-shortest", part)
+        return part, ffprobe_duration(part)
+    except Exception as exc:
+        log.warning("Không làm được lời dẫn mở đầu (video dài vẫn ra, không có lời dẫn): %s", exc)
+        return None
 
 
 # ------------------------------------------------------------------ dựng
@@ -152,6 +211,7 @@ def build(now: datetime = None, concurrency: int = 3) -> dict:
     series = lang.pick(vi=f"TUẦN QUA CON SỐ · {span}", ko=f"숫자로 본 한 주 · {span}")
     chapters = [v["title"] for v in videos]
     TMP.mkdir(parents=True, exist_ok=True)
+    lead = lead_chapter(videos)
     parts, starts, t, stories = [], [], 0.0, []
     for k, v in enumerate(videos, 1):
         story, audio = chapter_source(v["script_id"])
@@ -168,12 +228,16 @@ def build(now: datetime = None, concurrency: int = 3) -> dict:
         starts.append(t)
         t += ffprobe_duration(part)
         parts.append(part)
+    intro = make_intro(videos, span, series, chapters, lead, concurrency)
+    if intro:
+        parts.insert(0, intro[0])
+    intro_secs = intro[1] if intro else 0.0
     lst = TMP / "parts.txt"
     lst.write_text("".join(f"file '{p.as_posix()}'\n" for p in parts), encoding="utf-8")
     OUTPUT.mkdir(exist_ok=True)
     final = OUTPUT / f"weekly_{d1:%Y-%m-%d}.mp4"
     ff("-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", "-movflags", "+faststart", final)
-    title, desc, tags = build_text(videos, starts, span, cfg)
+    title, desc, tags = build_text(videos, starts, span, cfg, lead=lead, intro=intro_secs)
     thumb = thumbnail(stories, len(videos), span, final.with_suffix(".thumb.jpg"))
     log.info("VIDEO DÀI: %s (%.0f giây, %d chương)", final, ffprobe_duration(final), len(videos))
     return {"file": final, "title": title, "description": desc, "tags": tags, "chapters": chapters,
@@ -196,7 +260,8 @@ def thumbnail(stories: list, count: int, span: str, out: Path) -> Path:
         frame, kind = pick_frame(p)
         if frame is not None:
             rank = IMAGE_KINDS.index(kind) if kind in IMAGE_KINDS else len(IMAGE_KINDS)
-            picked.append((rank, len(picked), {"story": {**p, "words": [], "sfx": []}, "frame": frame}))
+            picked.append((rank, len(picked), {"story": {**p, "words": [], "sfx": [], "finding": None, "opening": 0},
+                                                "frame": frame}))
     cards = [c for _, _, c in sorted(picked, key=lambda x: x[:2])[:3]]
     if not cards:
         return None

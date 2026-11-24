@@ -155,7 +155,7 @@ def image(script_id: int, out: Path = None) -> Path:
     frame, kind = pick_frame(props)
     if frame is None:
         return None
-    props = {**props, "words": [], "sfx": []}            # bỏ phụ đề: ảnh là biểu đồ sạch
+    props = {**props, "words": [], "sfx": [], "finding": None, "opening": 0}   # biểu đồ sạch: không phụ đề, không thẻ
     # JPEG: Facebook nhận ảnh tới 4 MB, khuyên PNG dưới 1 MB — khung 1080x1920 dạng PNG đã ~1 MB
     out = out or RENDER / f"fbpost_{script_id}.jpg"
     pf = out.with_suffix(".props.json")

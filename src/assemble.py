@@ -402,7 +402,7 @@ def main():
             from .render import web
             props = web.build_story(spec, timed, args.script_id,
                                     render_clip=lambda sc, i: render_scene(sc, i),
-                                    caption_size=st.get("captions"))
+                                    caption_size=st.get("captions"), opening=st.get("opening"))
             final_spec_path.write_text(yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
             raw = web.render(props, RENDER / f"web_{args.script_id}.mp4",
                              concurrency=int(rcfg.get("web_concurrency", 3)))
@@ -465,9 +465,17 @@ def main():
     # Giá trị THẬT đã dùng cho thử nghiệm phong cách (khác mức được gán -> video không tính cho núm đó:
     # giọng hôm nay chậm phải đọc nhanh hơn mức gán, kho nhạc trống, Remotion lùi về Manim...)
     real_secs = ffprobe_duration(final)
+
+    def opening_ok() -> bool:
+        try:
+            return bool(json.loads((RENDER / f"web_{args.script_id}.props.json").read_text(encoding="utf-8")).get("finding"))
+        except (OSError, ValueError):
+            return False
     with_db(lambda c: style.record_applied(c, args.script_id, tempo=round(tempo, 3),
                                            music=st.get("music") if track else None,
                                            captions=st.get("captions") if engine == "web" else None,
+                                           # thẻ mở đầu chỉ có khi video có phát hiện (câu mở đầu) và dựng bằng Remotion
+                                           opening=st.get("opening") if engine == "web" and opening_ok() else None,
                                            # video dài quá mức được gán thì không tính cho núm độ dài
                                            length=st.get("length") if st.get("length")
                                            and real_secs <= 1.1 * float(st["length"]) else None))

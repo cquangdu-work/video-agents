@@ -66,7 +66,7 @@ const CornerLogo: React.FC<{ brand: StoryProps["brand"] }> = ({ brand }) => (
 );
 
 export const Story: React.FC<StoryProps> = ({ brand, scenes, words, source, sfx, world, hideCaptions, hideLogo,
-  captionSize, finding }) => {
+  captionSize, finding, opening }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
@@ -85,6 +85,7 @@ export const Story: React.FC<StoryProps> = ({ brand, scenes, words, source, sfx,
         </Sequence>
       ))}
       {finding && <FindingCard f={finding} brand={brand} t={t} />}
+      {finding && opening ? <FindingCard f={finding} brand={brand} t={t} opening={opening} /> : null}
       {!hideLogo && !scenes.some((sc) => sc.kind === "intro") && <CornerLogo brand={brand} />}
       {!hideCaptions && <Captions words={words} t={t} brand={brand} size={captionSize} />}
       {src && current?.kind !== "clip" && (

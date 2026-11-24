@@ -38,7 +38,7 @@ export type World = {
 };
 
 /** Phát hiện đáng nhớ (src/render/web.finding_of): câu mở đầu đã kiểm + con số chính, thẻ lớn cuối video. */
-export type Finding = { value: string; text: string; start: number; end: number; label: string };
+export type Finding = { value: string; text: string; start: number; end: number; label: string; cta?: string };
 
 // ---- cảnh chung (map 1-1 với template của spec)
 export type IntroScene = Span & { kind: "intro" };
@@ -131,4 +131,5 @@ export type StoryProps = {
   hideLogo?: boolean; // video dài (Wide) đã có nhận diện riêng ở cột phải
   captionSize?: number; // cỡ chữ phụ đề (px) của phong cách đang thử nghiệm (src/style.py); thiếu = 80
   finding?: Finding | null;
+  opening?: number; // giây thẻ mở đầu phủ khung đầu (núm "opening" của src/style.py); 0/thiếu = không
 };

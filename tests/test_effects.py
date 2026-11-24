@@ -60,3 +60,29 @@ class OvertakeTest(unittest.TestCase):
 
     def test_no_anchor_no_events(self):
         self.assertEqual(web_map.overtakes([{"label": "A", "values": [1, 2], "strong": False}]), [])
+
+
+class OpeningCardTest(unittest.TestCase):
+    """Thẻ mở đầu (núm "opening" của src/style.py, 24/11/2026): chỉ có khi video có phát hiện; không dài quá 60% cảnh đầu;
+    thẻ cuối có dòng mời theo dõi."""
+
+    def spec(self):
+        return [{"template": "statement", "seconds": 3.0, "voice": "Việt Nam gấp 5,06 lần Hàn Quốc.",
+                 "params": {"text": "Việt Nam gấp 5,06 lần Hàn Quốc."}},
+                {"template": "statement", "seconds": 7.0, "voice": "Câu kết.", "params": {"text": "Câu kết."}}]
+
+    def build(self, opening):
+        with lang.using("vi"):
+            return web.build_story(self.spec(), [], "t", opening=opening)
+
+    def test_opening_capped_by_first_scene_and_cta_present(self):
+        p = self.build(2.4)
+        self.assertEqual(p["opening"], 1.8)                                  # 60% của cảnh đầu 3 giây
+        self.assertIn("Theo dõi", p["finding"]["cta"])
+        self.assertNotIn("opening", self.build(0))
+        self.assertNotIn("opening", self.build(None))
+
+    def test_style_knob_window(self):
+        from src import style
+        self.assertEqual(style.arms("opening", {}), [0.0, 1.2, 2.4])
+        self.assertEqual(style.fmt("opening", 1.2), "1,2 giây")
