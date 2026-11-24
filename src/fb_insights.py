@@ -83,7 +83,7 @@ def parse(metrics: dict) -> dict:
         if isinstance(v, dict):
             return sum(v.values())
         return v
-    out = {"plays": num("blue_reels_play_count"), "reach": num("post_impressions_unique"),
+    out = {"plays": num("blue_reels_play_count"), "reach": num("fb_reels_total_plays"),
            "followers": num("post_video_followers"), "reactions": num("post_video_likes_by_reaction_type"),
            "social": num("post_video_social_actions")}
     for col, name in (("avg_watch_s", "post_video_avg_time_watched"), ("view_time_s", "post_video_view_time")):

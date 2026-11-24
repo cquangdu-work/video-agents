@@ -320,7 +320,9 @@ def post_engagement(post_id: str, get=None) -> dict:
 
 
 # ------------------------------------------------------------------ đọc số liệu / bình luận
-REEL_METRICS = ("blue_reels_play_count", "post_impressions_unique", "post_video_avg_time_watched",
+# post_impressions_unique bị Meta từ chối cho Reels (đo 24/11/2026: "(#100) The value must be a valid insights metric"
+# làm hỏng CẢ lượt đọc của báo cáo tuần 22/11) -> bỏ; reel_insights còn tự đọc lẻ từng chỉ số khi cả lô bị từ chối.
+REEL_METRICS = ("blue_reels_play_count", "fb_reels_total_plays", "post_video_avg_time_watched",
                 "post_video_view_time", "post_video_followers", "post_video_likes_by_reaction_type",
                 "post_video_social_actions", "post_video_retention_graph")
 
@@ -338,9 +340,19 @@ def _value(v):
 def reel_insights(video_id: str, get=None) -> dict:
     """Số liệu trọn đời của một Reel (GET /{video-id}/video_insights, quyền read_insights +
     pages_manage_engagement). -> {tên chỉ số: giá trị}; chỉ số nào Facebook không trả thì vắng mặt."""
-    body = graph_get(f"{video_id}/video_insights", get, metric=",".join(REEL_METRICS))
+    try:
+        items = graph_get(f"{video_id}/video_insights", get, metric=",".join(REEL_METRICS)).get("data") or []
+    except (FacebookAuthError, FacebookUploadError) as exc:     # Meta gắn lỗi tham số kiểu OAuthException
+        if "valid insights metric" not in str(exc):
+            raise
+        items = []                               # Meta bỏ một chỉ số: đọc lẻ từng cái, bỏ cái hỏng
+        for m in REEL_METRICS:
+            try:
+                items += graph_get(f"{video_id}/video_insights", get, metric=m).get("data") or []
+            except (FacebookAuthError, FacebookUploadError):
+                log.info("Meta không còn nhận chỉ số Reel %s", m)
     out = {}
-    for item in body.get("data") or []:
+    for item in items:
         vals = item.get("values") or []
         if item.get("name") and vals:
             out[item["name"]] = _value(vals[-1].get("value"))

@@ -206,3 +206,24 @@ class FbCommentTest(FbCase):
         with mock.patch.dict("os.environ", {"YOUTUBE_API_KEY": ""}):
             self.assertEqual(community.run(CFG, self.con, llm=self.llm, fb_fetch=lambda fid, after: pages[fid],
                                            send=lambda *a, **k: 1), [])
+
+
+import unittest  # noqa: E402
+
+
+class ReelMetricFallbackTest(unittest.TestCase):
+    """Ca thật 22/11/2026: Meta từ chối post_impressions_unique cho Reels -> cả lô hỏng, báo cáo tuần không có số Reel.
+    Giờ cả lô bị từ chối thì đọc lẻ từng chỉ số, bỏ cái hỏng."""
+
+    def test_bad_metric_is_skipped(self):
+        from src.publish import facebook
+
+        def get(path, get=None, **params):
+            ms = params["metric"].split(",")
+            if len(ms) > 1 or ms[0] == "post_video_followers":
+                raise facebook.FacebookAuthError("Facebook lỗi 400: (#100) The value must be a valid insights metric")
+            return {"data": [{"name": ms[0], "values": [{"value": 5}]}]}
+        with mock.patch.object(facebook, "graph_get", side_effect=get):
+            out = facebook.reel_insights("V1")
+        self.assertEqual(out["blue_reels_play_count"], 5)
+        self.assertNotIn("post_video_followers", out)
