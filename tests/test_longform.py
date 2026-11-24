@@ -26,9 +26,9 @@ class WeekSelectionTest(unittest.TestCase):
         con.execute("CREATE TABLE videos (id INTEGER PRIMARY KEY, script_id INTEGER, title TEXT, status TEXT,"
                     " youtube_id TEXT, published_at TEXT, description TEXT, tags TEXT)")
         con.execute("CREATE TABLE scripts (id INTEGER PRIMARY KEY, idea_id INTEGER)")
-        con.execute("CREATE TABLE ideas (id INTEGER PRIMARY KEY, title TEXT)")
+        con.execute("CREATE TABLE ideas (id INTEGER PRIMARY KEY, title TEXT, summary TEXT)")
         con.execute("INSERT INTO scripts VALUES (103, 1)")
-        con.execute("INSERT INTO ideas VALUES (1, 'Vốn FDI vào so với GDP: Việt Nam và Hàn Quốc')")
+        con.execute("INSERT INTO ideas VALUES (1, 'Vốn FDI vào so với GDP: Việt Nam và Hàn Quốc', '')")
         rows = [_video(1, "cũ quá", 10), _video(2, "b", 16), _video(3, "FDI Việt Nam gấp 5,06 lần Hàn Quốc", 15),
                 _video(4, "loại", 17, status="rejected"),
                 _video(5, "video dài tuần trước", 18, script=False)]

@@ -547,9 +547,13 @@ def fetch_kosis(cfg: dict, today: date = None) -> list:
     if not tables or per_day <= 0:
         return []
     start = ((today or date.today()).toordinal() * per_day) % len(tables)
+    rotation = [tables[(start + k) % len(tables)] for k in range(len(tables))]
+    # bảng của CHỦ ĐỀ TUẦN (src/themes.py) lấy trước xoay vòng: "DT_x" hoặc "DT_x:sgg" (cùng bảng, cấp 시군구)
+    pri = set(cfg.get("priority") or [])
+    key = lambda t: f"{t.get('tbl')}:{t['level']}" if t.get("level") else str(t.get("tbl"))
+    first = [t for t in tables if key(t) in pri][:per_day]
     items = []
-    for k in range(min(per_day, len(tables))):
-        t = tables[(start + k) % len(tables)]
+    for t in (first + [t for t in rotation if t not in first])[:per_day]:
         build = BUILDERS.get(t.get("kind"))
         if not build:
             log.warning("KOSIS: không biết dạng bảng %s", t.get("kind"))

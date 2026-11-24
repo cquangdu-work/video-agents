@@ -270,6 +270,34 @@ growth:
   # ngưỡng YPP từ 1/2/2027 (CLAUDE.md): 1.000 sub + 8.000 giờ xem video dài/năm HOẶC 20 triệu lượt Shorts/90 ngày
   ypp: {subs: 1000, watch_hours: 8000, shorts_views_90d: 20000000}
 
+# ---------- CHỦ ĐỀ TUẦN cho video dài (src/themes.py, Du đồng ý 24/11/2026 sau bản phân tích xu hướng) ----------
+# Video dài "tổng hợp tuần" chỉ 1-2 lượt xem (không ai tìm kiểu đó). Tuần tính từ themes_start (Chủ nhật), xoay vòng.
+# Trong tuần: bảng số của chủ đề lấy trước, ý tưởng/kịch bản khớp `words` ưu tiên tới khi đủ theme_shorts Short;
+# thứ Bảy video dài = các Short đó, tiêu đề = `title` (từ khoá người ta tìm). wb = mã World Bank, owid = slug OWID.
+longform:
+  max_chapters: 8
+  themes_start: "2026-11-22"
+  theme_shorts: 3
+  themes:
+    - key: the-gioi         # "Việt Nam đứng thứ mấy thế giới": trung vị 158.000 lượt; bản đồ là dạng xem nhiều nhất kênh
+      title: "Việt Nam đứng thứ mấy thế giới? Bản đồ số liệu"
+      words: ["bản đồ thế giới", "đứng thứ"]
+      owid: [co-emissions-per-capita, share-electricity-renewables, median-age, pm25-air-pollution]
+    - key: gia-hoa          # già hoá dân số / mức sinh: trung vị 54.600 lượt
+      title: "Việt Nam chưa giàu đã già? Dân số qua các con số"
+      words: ["65 tuổi", "tỷ suất sinh", "tuổi thọ", "tuổi trung vị"]
+      wb: [SP.POP.65UP.TO.ZS, SP.DYN.TFRT.IN, SP.DYN.LE00.IN]
+      owid: [median-age]
+    - key: nang-luong       # điện, than, năng lượng tái tạo: trung vị 61.800 lượt
+      title: "Điện, than và năng lượng tái tạo: Việt Nam ở đâu?"
+      words: ["điện", "năng lượng", "co2", "than", "tái tạo"]
+      wb: [EG.USE.ELEC.KH.PC]
+      owid: [share-electricity-renewables, share-electricity-coal, co-emissions-per-capita]
+    - key: thu-nhap         # GDP / thu nhập: trung vị 158.000-173.000 lượt
+      title: "Người Việt làm gì, kiếm bao nhiêu? Lao động và thu nhập qua số liệu"
+      words: ["lao động", "thu nhập", "gdp", "nông nghiệp", "thất nghiệp"]
+      wb: [NY.GDP.PCAP.CD, SL.AGR.EMPL.ZS, SL.UEM.TOTL.ZS]
+
 # ---------- Agent Học kênh lớn (src/analysis/big_channels.py, lượt Phân tích Chủ nhật) ----------
 big_channels:
   min_subs: 300000       # "kênh lớn"

@@ -183,6 +183,9 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     fb_prefs = learning.preferences("fb_preferences")
     ig_prefs = learning.preferences("ig_preferences")      # kênh Hàn: người xem Instagram (src/ig_insights.py)
     grow = growth._data()                  # ưu tiên của agent Tăng trưởng (đọc một lần)
+    from . import themes                   # CHỦ ĐỀ TUẦN của video dài: còn thiếu Short thì kịch bản khớp chủ đề dựng trước
+    theme = themes.wanted(con, cfg, (now.astimezone(timezone(timedelta(hours=float(
+        cfg["daily"].get("utc_offset_hours", 9))))).date() if now else None))
     max_age = cfg["daily"].get("max_script_age_days", 3)
     min_words = cfg["daily"].get("min_script_words", 150)
     max_words = max_script_words(cfg)
@@ -244,11 +247,12 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
         out.append({"id": r["id"], "score": score, "has_final": final_path(r["id"]).exists(),
                     "family": family, "kind": feats["kind"], "streak": streak(family, recent),
                     "fresh": is_fresh({"summary": r["summary"]}),
+                    "theme": bool(theme and themes.matches(theme, r["title"], r["summary"])),
                     "long": words > max_words, "learned": bonus, "boost": boost})
     # Kịch bản DÀI hơn độ dài mới (viết trước 19/11 cho video 60-90 giây) xếp sau cùng: chỉ dựng khi
     # không còn kịch bản nào đúng khổ 45-60 giây (assemble đọc nhanh tối đa 1,12 lần vẫn ra ~80 giây)
     # số VỪA CÔNG BỐ (kosis.build_monthly_map) dựng trước nhất: giá trị của nó nằm ở chỗ ra ngay ngày công bố
-    return sorted(out, key=lambda c: (c["long"], not c["fresh"], c["streak"], not c["has_final"],
+    return sorted(out, key=lambda c: (c["long"], not c["fresh"], not c["theme"], c["streak"], not c["has_final"],
                                       -(c["score"] + PREF_WEIGHT * (c["learned"] + c["boost"])), -c["id"]))
 
 

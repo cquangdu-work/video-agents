@@ -47,7 +47,8 @@ def week_videos(con, now: datetime, days: int = 7) -> list:
     """Shorts đã đăng (có trên YouTube) trong `days` ngày qua, cũ trước mới sau."""
     since = (now - timedelta(days=days)).isoformat(timespec="seconds")
     rows = con.execute(
-        "SELECT v.*, i.title AS idea_title FROM videos v LEFT JOIN scripts s ON s.id = v.script_id"
+        "SELECT v.*, i.title AS idea_title, i.summary AS idea_summary FROM videos v"
+        " LEFT JOIN scripts s ON s.id = v.script_id"
         " LEFT JOIN ideas i ON i.id = s.idea_id WHERE v.status='published' AND v.script_id IS NOT NULL"
         " AND v.youtube_id IS NOT NULL AND v.published_at >= ? ORDER BY v.published_at", (since,)).fetchall()
     return [dict(r, title=chapter_title(dict(r))) for r in rows]
@@ -96,17 +97,21 @@ def ts(sec: float) -> str:
     return f"{sec // 3600}:{sec % 3600 // 60:02d}:{sec % 60:02d}" if sec >= 3600 else f"{sec // 60}:{sec % 60:02d}"
 
 
-def build_text(videos: list, starts: list, span: str, cfg: dict, lead: int = None, intro: float = 0.0) -> tuple:
+def build_text(videos: list, starts: list, span: str, cfg: dict, lead: int = None, intro: float = 0.0,
+               theme: str = None) -> tuple:
     """(tiêu đề, mô tả, thẻ) viết bằng code — không tốn lượt gọi model. Chương có mốc thời gian
     (YouTube tự chia chương: mốc đầu 0:00, từ 3 chương, mỗi chương >= 10 giây).
 
     lead: chương nổi bật (nhiều lượt xem nhất tuần) -> tiêu đề MỞ BẰNG câu chuyện đó (24/11/2026: video dài #9 có 2
     lượt xem, #14 có 0 — tiêu đề "7 câu chuyện qua con số tuần 15/11–21/11" không gợi tò mò, không ai tìm như vậy).
-    intro: số giây lời dẫn mở đầu (có thì thêm chương "0:00 Giới thiệu", các chương sau dời theo)."""
+    intro: số giây lời dẫn mở đầu (có thì thêm chương "0:00 Giới thiệu", các chương sau dời theo).
+    theme: tiêu đề CHỦ ĐỀ TUẦN (src/themes.py) — có thì tiêu đề video là chủ đề (từ khoá người ta tìm) + số chương."""
     from .publish import metadata
     n = len(videos)
     tail = lang.pick(vi=f"{n} câu chuyện qua con số tuần {span}", ko=f"숫자로 본 이번 주 {n}편 ({span})")
-    if lead is not None and 0 <= lead < len(videos):
+    if theme:
+        title = metadata._truncate_words(f"{theme} | {tail}", metadata.TITLE_MAX)
+    elif lead is not None and 0 <= lead < len(videos):
         head = videos[lead]["title"]           # week_videos đã thêm đơn vị nếu tiêu đề Shorts bỏ mất (chapter_title)
         title = metadata._truncate_words(f"{head} | {tail}", metadata.TITLE_MAX)
     else:   # khuôn cũ (không biết chương nào nổi bật)
@@ -116,6 +121,9 @@ def build_text(videos: list, starts: list, span: str, cfg: dict, lead: int = Non
     lines = [lang.pick(vi=f"{n} câu chuyện dữ liệu Việt Nam – Hàn Quốc – thế giới trong tuần {span}, mỗi câu chuyện"
                           " một chương:",
                        ko=f"{span} 한 주 동안의 데이터 이야기 {n}편, 이야기마다 한 챕터:"), ""]
+    if theme:
+        lines = [theme, "", lang.pick(vi=f"{n} góc nhìn bằng số liệu, mỗi góc một chương:",
+                                      ko=f"데이터로 본 {n}가지 이야기, 이야기마다 한 챕터:"), ""]
     if intro > 0:
         lines.append(lang.pick(vi="0:00 Giới thiệu", ko="0:00 소개"))
     lines += [f"{ts(s + intro)} {v['title']}" for v, s in zip(videos, starts)]
@@ -139,6 +147,23 @@ def build_text(videos: list, starts: list, span: str, cfg: dict, lead: int = Non
                 tags.append(t)
                 seen.add(t.lower())
     return title, desc, tags
+
+
+def theme_chapters(videos: list, cfg: dict, now: datetime) -> tuple:
+    """CHỦ ĐỀ TUẦN (src/themes.py): đủ >= MIN_CHAPTERS Short khớp chủ đề -> (chỉ các Short đó, tiêu đề chủ đề — từ khoá
+    người ta tìm); không đủ / kênh không cấu hình chủ đề -> (videos như cũ, None)."""
+    from . import themes
+    tz = timezone(timedelta(hours=float(cfg.get("publish", {}).get("youtube", {}).get("utc_offset_hours", 7))))
+    theme = themes.current(cfg, now.astimezone(tz).date())
+    if not theme:
+        return videos, None
+    on_theme = [v for v in videos if themes.matches(theme, v.get("idea_title"), v.get("idea_summary"))]
+    if len(on_theme) >= MIN_CHAPTERS:
+        log.info("Video dài theo chủ đề tuần \"%s\": %d Short", theme["key"], len(on_theme))
+        return on_theme, theme["title"]
+    log.info("Chủ đề tuần \"%s\" mới có %d Short (cần %d) — video dài như cũ", theme["key"], len(on_theme),
+             MIN_CHAPTERS)
+    return videos, None
 
 
 def chapter_views(videos: list):
@@ -181,22 +206,28 @@ def pick_chapters(videos: list, views, limit: int = MAX_CHAPTERS) -> tuple:
     return [videos[k] for k in keep], ([views[k] for k in keep] if views else views)
 
 
-def intro_text(videos: list, span: str, lead: int) -> str:
+def intro_text(videos: list, span: str, lead: int, theme: str = None) -> str:
     """Lời dẫn mở đầu (~10 giây) do CODE ghép từ tiêu đề các Shorts đã đăng (đã qua mọi cổng) — không số mới."""
     n, top = len(videos), videos[lead]["title"].rstrip(" .?!")
+    if theme:
+        return lang.pick(vi=f"{theme.rstrip(' .?!')}? Tuần này, {n} câu chuyện số liệu cùng một chủ đề. Nổi bật nhất: {top}."
+                            " Cùng xem từng góc nhìn.",
+                         ko=f"{theme.rstrip(' .?!')}? 이번 주는 한 가지 주제로 숫자 이야기 {n}편입니다. 가장 많이 본 이야기: {top}."
+                            " 하나씩 살펴볼까요?")
     return lang.pick(vi=f"Tuần qua con số, {span}: {n} câu chuyện. Được xem nhiều nhất tuần này: {top}. "
                         "Cùng xem lại từng câu chuyện.",
                      ko=f"숫자로 본 한 주, {span}. 이번 주 이야기는 {n}편입니다. 가장 많이 본 이야기: {top}. "
                         "하나씩 다시 살펴볼까요?")
 
 
-def make_intro(videos: list, span: str, series: str, chapters: list, lead: int, concurrency: int = 3):
+def make_intro(videos: list, span: str, series: str, chapters: list, lead: int, concurrency: int = 3,
+               theme: str = None):
     """Phần mở đầu video dài: giọng kênh đọc lời dẫn (1 lượt TTS/tuần) + danh sách chương (render-web WideIntro).
     Lỗi (hết hạn mức TTS...) -> None: video dài vẫn ra như cũ, chỉ thiếu lời dẫn. -> (file mp4, số giây)."""
     from .audio import tts
     from .render import web
     try:
-        wav = tts.synth(intro_text(videos, span, lead), TMP / "intro.wav")
+        wav = tts.synth(intro_text(videos, span, lead, theme), TMP / "intro.wav")
         dur = round(max(tts.wav_duration(wav) + 0.6, 10.5), 2)    # YouTube chỉ chia chương khi mỗi chương >= 10 giây
         props = {"brand": web.brand_props(), "duration": dur, "series": series, "chapters": chapters, "lead": lead,
                  "headline": lang.pick(vi=f"{len(videos)} câu chuyện qua con số", ko=f"숫자 이야기 {len(videos)}편"),
@@ -226,6 +257,7 @@ def build(now: datetime = None, concurrency: int = 3) -> dict:
         con.close()
     if len(videos) < MIN_CHAPTERS:
         raise RuntimeError(f"Tuần này mới có {len(videos)} Shorts đã đăng (cần >= {MIN_CHAPTERS})")
+    videos, theme_title = theme_chapters(videos, cfg, now)
     views = chapter_views(videos)
     videos, views = pick_chapters(videos, views, int((cfg.get("longform") or {}).get("max_chapters", MAX_CHAPTERS)))
     # giờ của người xem chính (kênh Việt +7, kênh Hàn +9 — publish.youtube.utc_offset_hours)
@@ -253,7 +285,7 @@ def build(now: datetime = None, concurrency: int = 3) -> dict:
         starts.append(t)
         t += ffprobe_duration(part)
         parts.append(part)
-    intro = make_intro(videos, span, series, chapters, lead, concurrency)
+    intro = make_intro(videos, span, series, chapters, lead, concurrency, theme_title)
     if intro:
         parts.insert(0, intro[0])
     intro_secs = intro[1] if intro else 0.0
@@ -262,7 +294,7 @@ def build(now: datetime = None, concurrency: int = 3) -> dict:
     OUTPUT.mkdir(exist_ok=True)
     final = OUTPUT / f"weekly_{d1:%Y-%m-%d}.mp4"
     ff("-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", "-movflags", "+faststart", final)
-    title, desc, tags = build_text(videos, starts, span, cfg, lead=lead, intro=intro_secs)
+    title, desc, tags = build_text(videos, starts, span, cfg, lead=lead, intro=intro_secs, theme=theme_title)
     thumb = thumbnail(stories, len(videos), span, final.with_suffix(".thumb.jpg"))
     log.info("VIDEO DÀI: %s (%.0f giây, %d chương)", final, ffprobe_duration(final), len(videos))
     return {"file": final, "title": title, "description": desc, "tags": tags, "chapters": chapters,

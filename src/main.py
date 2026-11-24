@@ -40,6 +40,9 @@ def collect(cfg: dict, con) -> int:
         cfg = topics.with_requests(cfg, con)
     except Exception as exc:
         log.warning("Không đọc được hàng đợi chủ đề (bỏ qua): %s", exc)
+    from . import themes                 # CHỦ ĐỀ TUẦN của video dài: bảng số của chủ đề lấy trước xoay vòng
+    if themes.wanted(con, cfg):
+        cfg = themes.with_theme(cfg)
     items = fetch_all(cfg)
     log.info("Lấy được %d ý tưởng thô từ các nguồn", len(items))
     added = db.insert_raw_ideas(con, items, cfg["dedup"]["title_similarity_threshold"])
@@ -48,6 +51,7 @@ def collect(cfg: dict, con) -> int:
 
 
 FRESH_POINTS = 10       # ý tưởng từ số vừa công bố: xếp trước mọi ý tưởng khác (tổng điểm Biên tập ~15-27)
+THEME_POINTS = 4        # ý tưởng khớp CHỦ ĐỀ TUẦN (src/themes.py) khi tuần này còn thiếu Short của chủ đề
 
 
 def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
@@ -136,9 +140,12 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
     from . import growth, learning
     from .sources.datatable import topic_family
     grow = growth._data()
+    from . import themes
+    theme = themes.wanted(con, cfg)
     boost = lambda i: growth.IDEA_BOOST_POINTS * growth.boost_for(
         topic_family(i.get("source_name")), learning.video_kind(i.get("title"), i.get("source_name")), grow) \
-        + (FRESH_POINTS if is_fresh(i) else 0)
+        + (FRESH_POINTS if is_fresh(i) else 0) \
+        + (THEME_POINTS if theme and themes.matches(theme, i.get("title"), i.get("summary")) else 0)
     selected = balance_families(sorted(selected, key=lambda i: -(i["score"] + boost(i))))
     # Kịch bản hụt chuẩn (thiếu số, quá ngắn) không được tính -> thử thêm ý tưởng kế
     # tiếp theo điểm, nhưng có trần để không đốt quota LLM vô hạn.

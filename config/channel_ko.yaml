@@ -229,6 +229,36 @@ community:
 growth:
   ypp: {subs: 1000, watch_hours: 8000, shorts_views_90d: 20000000}
 
+# ---------- CHỦ ĐỀ TUẦN cho video dài (src/themes.py, Du đồng ý 24/11/2026 sau bản phân tích xu hướng) ----------
+# Tuần tính từ themes_start (Chủ nhật), xoay vòng danh sách. Trong tuần: bảng số của chủ đề lấy trước, ý tưởng/kịch bản
+# khớp `words` được ưu tiên tới khi đủ theme_shorts Short; thứ Bảy video dài = các Short đó, tiêu đề = `title`.
+# wb = mã World Bank, owid = slug OWID, kosis = bảng KOSIS ("DT_x" hoặc "DT_x:sgg"). Căn cứ chọn: quét YouTube 24/11.
+longform:
+  max_chapters: 8
+  themes_start: "2026-11-22"
+  theme_shorts: 4
+  themes:
+    - key: chulsan          # 출산율 반등: tin tức 0,9 triệu / 0,5 triệu lượt; số thật tháng 8/2026 +13%
+      title: "출산율 반등, 진짜일까? 숫자로 본 한국의 출생과 결혼"
+      words: ["출산", "출생", "혼인", "결혼"]
+      wb: [SP.DYN.TFRT.IN]
+      kosis: [DT_1B81A21]
+    - key: jibang           # 지방소멸 dạng bản đồ: 34.000 lượt, gần như không ai làm
+      title: "지도에서 사라지는 한국? 숫자로 본 지방소멸"
+      words: ["고령", "65세", "순이동", "중위연령"]
+      wb: [SP.POP.65UP.TO.ZS]
+      kosis: ["DT_1YL20631:sgg", "DT_1YL20642:sgg", DT_1YL20631]
+      owid: [median-age]
+    - key: segye            # dạng xem nhiều nhất của kênh (3/3 video đầu bảng là bản đồ thế giới)
+      title: "세계 지도로 본 한국, 한국은 몇 위일까?"
+      words: ["세계 지도"]
+      owid: [co-emissions-per-capita, share-electricity-renewables, pm25-air-pollution, median-age]
+    - key: honja            # 1인 가구: trung vị 67.600 lượt
+      title: "혼자 사는 한국, 1인 가구와 일자리를 숫자로 보다"
+      words: ["1인 가구", "1인가구", "고용률", "실업률"]
+      wb: [SL.UEM.TOTL.ZS]
+      kosis: [DT_1YL21161, "DT_1YL21161:sgg"]
+
 big_channels:
   # 24/11/2026: lượt đầu chỉ giữ được kênh hoạt hình tiếng Anh -> hạ ngưỡng (kênh số liệu tiếng Hàn nhỏ hơn), từ khoá
   # theo kiểu Shorts số liệu ở Hàn, chỉ giữ kênh đăng tiêu đề tiếng Hàn (big_channels.MIN_KOREAN)
