@@ -712,6 +712,35 @@ def make_room_for_rich(spec: list) -> list:
     return [sc for i, sc in enumerate(spec) if i not in drop]
 
 
+def absorb_statements(spec: list, wps: float) -> list:
+    """Tự sửa: cảnh bản đồ/cuộc đua đứng MỘT MÌNH với một câu quá ngắn -> nhận thêm câu của cảnh chữ liền sau (hoặc
+    liền trước): lời giữ nguyên thứ tự, chỉ mất hình cảnh chữ, bản đồ đủ thời gian để xem. Ca thật 24/11 (chạy thử bản
+    đồ 17 시도): model cho bản đồ gánh 5 cụm từ (3,2 giây) dù bị trả lại 3 lần, câu sau là cảnh chữ."""
+    spec = list(spec)
+    i = 0
+    while i < len(spec):
+        sc = spec[i]
+        need = RICH_MIN_SECONDS.get(sc.get("template"))
+        voice = " ".join(str(sc.get("voice") or "").split())
+        alone = all(" ".join(str(spec[j].get("voice") or "").split()) != voice
+                    for j in (i - 1, i + 1) if 0 <= j < len(spec))
+        if need and voice and alone and len(voice.split()) / wps < need:
+            for j in (i + 1, i - 1):
+                if 0 <= j < len(spec) and spec[j].get("template") == "statement":
+                    other = " ".join(str(spec[j].get("voice") or "").split())
+                    nb = [k for k in (j - 1, j + 1) if 0 <= k < len(spec) and k != i]
+                    if not other or any(" ".join(str(spec[k].get("voice") or "").split()) == other for k in nb):
+                        continue                    # câu đó còn hình khác đi kèm — không đụng
+                    sc["voice"] = f"{voice} {other}" if j > i else f"{other} {voice}"
+                    sc["seconds"] = float(sc.get("seconds") or 0) + float(spec[j].get("seconds") or 0)
+                    del spec[j]
+                    if j < i:
+                        i -= 1
+                    break
+        i += 1
+    return spec
+
+
 FOCUS_LABELS = {"việt nam", "hàn quốc", "한국", "일본"}     # kênh Việt / kênh Hàn
 MAX_LINES = 4              # biểu đồ đường trên khung dọc: quá 4 đường là không đọc nổi
 
@@ -994,7 +1023,7 @@ Yêu cầu:
             problems.append("cảnh đứng yên quá lâu: " + "; ".join(slow) + " — tách thành 2-3 cảnh"
                             " LIỀN NHAU (mỗi cảnh một ý của câu, hoặc thêm 'statement' tóm ý),"
                             " các cảnh đó ghi CÙNG 'voice'")
-        spec = make_room_for_rich(spec)
+        spec = absorb_statements(make_room_for_rich(spec), words_per_second(cfg))
         short = short_rich_scenes(spec, words_per_second(cfg))
         if short:
             problems.append("cảnh nhiều chi tiết quá ngắn: " + "; ".join(short))

@@ -124,6 +124,29 @@ class ProvinceSourceTest(unittest.TestCase):
         self.assertEqual(len(sc["params"]["items"]), 17)
 
 
+class AbsorbStatementTest(unittest.TestCase):
+    """Ca thật 24/11: bản đồ gánh một câu 5 cụm (3,2 giây), câu sau là cảnh chữ -> bản đồ nhận luôn câu đó."""
+
+    def test_short_map_takes_next_statement(self):
+        from src.crew import absorb_statements
+        spec = [{"template": "big_number", "voice": "가 나 다", "seconds": 3},
+                {"template": "map", "voice": "1명을 넘긴 지역은 전남과 세종뿐입니다.", "seconds": 3},
+                {"template": "statement", "voice": "서울은 0.63명으로 최하위입니다.", "seconds": 3}]
+        out = absorb_statements(spec, 1.1)
+        self.assertEqual([s["template"] for s in out], ["big_number", "map"])
+        self.assertEqual(out[1]["voice"], "1명을 넘긴 지역은 전남과 세종뿐입니다. 서울은 0.63명으로 최하위입니다.")
+
+    def test_long_enough_or_shared_statement_untouched(self):
+        from src.crew import absorb_statements
+        long_map = [{"template": "map", "voice": " ".join(["말"] * 8), "seconds": 6},
+                    {"template": "statement", "voice": "다른 문장", "seconds": 3}]
+        self.assertEqual(len(absorb_statements(long_map, 1.1)), 2)
+        shared = [{"template": "map", "voice": "짧은 문장", "seconds": 3},
+                  {"template": "statement", "voice": "같은 문장 둘", "seconds": 2},
+                  {"template": "versus", "voice": "같은 문장 둘", "seconds": 2}]
+        self.assertEqual(len(absorb_statements(shared, 1.1)), 3)
+
+
 class ProvinceSceneTest(unittest.TestCase):
     def props(self, national=0.75):
         from src.render.web_map import map_props
