@@ -29,6 +29,7 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 
+from .. import lang
 from . import learned as store
 
 log = logging.getLogger("big_channels")
@@ -46,6 +47,10 @@ NICHE = re.compile(r"population|\bgdp\b|econom|per capita|\brank(ing|ed|s)?\b|ri
                    r"\bmaps?\b|countr|\bnations?\b|dân số|kinh tế|xếp hạng|giàu nhất|nghèo nhất|quốc gia|các nước|"
                    r"bản đồ|số liệu|인구|경제|순위|국가|나라|지도|통계", re.I)
 MIN_NICHE = 0.3
+# Kênh Hàn chỉ học từ kênh lớn đăng tiêu đề TIẾNG HÀN (24/11/2026: lượt đầu giữ HistoryBalls, King Animations — kênh
+# hoạt hình tiếng Anh lọt bộ lọc ngách nhờ chữ "countries", "maps"; sổ tay còn câu rác tiếng Anh, Biên kịch đọc vào)
+HANGUL = re.compile(r"[가-힣]")
+MIN_KOREAN = 0.5
 DEFAULTS = {"min_subs": 300_000, "max_channels": 12, "rediscover_days": 28, "outlier_ratio": 3.0,
             "watch_per_week": 4, "months_back": 6, "queries": [], "seed_channels": []}
 
@@ -155,6 +160,7 @@ def scan_channel(ch: dict, ratio: float, get=None, now: datetime = None) -> dict
             "per_week": round(len(recent) / 4, 1),
             "niche": round(sum(1 for s in shorts
                                if NICHE.search(s["title"].replace(ch["title"], " "))) / len(shorts), 2),
+            "korean": round(sum(1 for s in shorts if HANGUL.search(s["title"])) / len(shorts), 2),
             "outliers": sorted(outliers, key=lambda o: -o["ratio"])}
 
 
@@ -296,6 +302,9 @@ def update(con, cfg: dict, now: datetime = None, get=None, post=None) -> list:
             continue
         if s["niche"] < MIN_NICHE and not ch.get("manual"):
             log.info("Bỏ kênh %s: chỉ %d%% tiêu đề đúng ngách", ch.get("title"), 100 * s["niche"])
+            continue
+        if lang.code() == "ko" and s.get("korean", 1) < MIN_KOREAN and not ch.get("manual"):
+            log.info("Bỏ kênh %s: chỉ %d%% tiêu đề tiếng Hàn", ch.get("title"), 100 * s.get("korean", 0))
             continue
         if len(kept) < c["max_channels"] or ch.get("manual"):
             scans.append(s)

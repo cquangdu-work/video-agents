@@ -193,24 +193,27 @@ style:
   experiments: true
 
 community:
-  enabled: false      # bật khi kênh có video + Du duyệt được bình luận tiếng Hàn
+  enabled: true       # bật 24/11/2026: kênh có bình luận đầu tiên; nháp trả lời tiếng Hàn + bản dịch, Du ✅ mới đăng
   max_videos: 30
 growth:
   ypp: {subs: 1000, watch_hours: 8000, shorts_views_90d: 20000000}
 
 big_channels:
-  min_subs: 300000
+  # 24/11/2026: lượt đầu chỉ giữ được kênh hoạt hình tiếng Anh -> hạ ngưỡng (kênh số liệu tiếng Hàn nhỏ hơn), từ khoá
+  # theo kiểu Shorts số liệu ở Hàn, chỉ giữ kênh đăng tiêu đề tiếng Hàn (big_channels.MIN_KOREAN)
+  min_subs: 100000
   max_channels: 12
   outlier_ratio: 3.0
   watch_per_week: 4
   rediscover_days: 28
   seed_channels: []
   queries:
-    - {q: "국가 비교", lang: ko}
     - {q: "나라별 순위", lang: ko}
-    - {q: "데이터 시각화", lang: ko}
+    - {q: "세계 순위 쇼츠", lang: ko}
+    - {q: "OECD 순위 한국", lang: ko}
     - {q: "한국 일본 비교", lang: ko}
-    - {q: "country comparison", lang: en}
+    - {q: "통계로 보는", lang: ko}
+    - {q: "지도로 보는 세계", lang: ko}
 
 competitor_analysis:
   months_back: 6
