@@ -6,6 +6,7 @@ import { LANG } from "./lib/locale";
 import { Background } from "./components/Background";
 import { Captions } from "./components/Captions";
 import { ChartWorld } from "./components/ChartWorld";
+import { FindingCard } from "./components/FindingCard";
 import { BarChart, BigNumber, Clip, HookContext, LineChartTitle, LineSolo, PercentRing, Statement, Versus } from "./scenes/Generic";
 import { BarRace, MapView } from "./scenes/MapRace";
 import { HeroLine } from "./scenes/HeroLine";
@@ -65,7 +66,7 @@ const CornerLogo: React.FC<{ brand: StoryProps["brand"] }> = ({ brand }) => (
 );
 
 export const Story: React.FC<StoryProps> = ({ brand, scenes, words, source, sfx, world, hideCaptions, hideLogo,
-  captionSize }) => {
+  captionSize, finding }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = frame / fps;
@@ -83,6 +84,7 @@ export const Story: React.FC<StoryProps> = ({ brand, scenes, words, source, sfx,
           </HookContext.Provider>
         </Sequence>
       ))}
+      {finding && <FindingCard f={finding} brand={brand} t={t} />}
       {!hideLogo && !scenes.some((sc) => sc.kind === "intro") && <CornerLogo brand={brand} />}
       {!hideCaptions && <Captions words={words} t={t} brand={brand} size={captionSize} />}
       {src && current?.kind !== "clip" && (

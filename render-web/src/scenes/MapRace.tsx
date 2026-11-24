@@ -2,6 +2,7 @@ import React from "react";
 import { AbsoluteFill, Easing, Img, staticFile } from "remotion";
 import { BarRaceScene, Brand, MapLabel, MapScene } from "../types";
 import { lerp, pop, ramp } from "../lib/anim";
+import { LANG } from "../lib/locale";
 import { SceneTitle } from "./Generic";
 
 // BẢN ĐỒ và CUỘC ĐUA SỐ LIỆU. Mọi hình học do Python tính (src/render/web_map.py) — kể cả
@@ -152,6 +153,10 @@ export const BarRace: React.FC<P<BarRaceScene>> = ({ s, brand, tl, dur }) => {
   };
   const a = layout(started ? k : 0), b = layout(started ? Math.min(k + 1, s.years.length - 1) : 0);
   const appear = ramp(tl, 0, 0.4);
+  // NHÃN VƯỢT (24/11/2026: chuyển động phải giúp hiểu số liệu): chặng nước "ta" vượt nước khác -> "↑ vượt …" bám
+  // theo thanh, giữ 1,4 giây (một chặng có khi chỉ 0,3 giây — quá nhanh để đọc); nhiều lần vượt sát nhau thì hiện lần mới nhất
+  const legT = (leg: number) => 0.5 + ((leg + 0.5) / legs) * (Math.max(0.75 * dur, 1.0) - 0.5);
+  const ev = [...(s.overtakes ?? [])].reverse().find((e) => tl >= legT(e.leg) && tl <= legT(e.leg) + 1.4);
   return (
     <AbsoluteFill style={{ opacity: exitOf(tl, dur) }}>
       <SceneTitle text={s.title} brand={brand} tl={tl} />
@@ -170,6 +175,16 @@ export const BarRace: React.FC<P<BarRaceScene>> = ({ s, brand, tl, dur }) => {
               opacity: it.strong ? 1 : 0.5, boxShadow: it.strong ? `0 0 30px ${it.fill}55` : undefined }} />
             <div style={{ position: "absolute", left: BAR_X + w + 12, top: (rowH - 38) / 2, fontSize: 30, fontWeight: 800,
               color: it.ink }}>{it.shown[shownIdx]}</div>
+            {ev && ev.item === i && (() => {
+              const e0 = legT(ev.leg), k2 = Math.min(ramp(tl, e0, e0 + 0.25), 1 - ramp(tl, e0 + 1.15, e0 + 1.4));
+              return (
+                <div style={{ position: "absolute", left: Math.min(BAR_X + w + 130, 700), top: (rowH - 46) / 2, opacity: k2,
+                  transform: `translateY(${(1 - k2) * 10}px)`, fontSize: 30, fontWeight: 800, color: brand.background,
+                  background: brand.good, borderRadius: 12, padding: "4px 14px", whiteSpace: "nowrap" }}>
+                  {LANG === "ko" ? `↑ ${ev.passed.join("·")} 추월` : `↑ vượt ${ev.passed.join(", ")}`}
+                </div>
+              );
+            })()}
           </div>
         );
       })}

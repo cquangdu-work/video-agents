@@ -162,6 +162,15 @@ export const ChartWorld: React.FC<{ world: World; scenes: Scene[]; t: number; br
     }
   }
   const coHead = co ? heads.find((h) => h.i === co.s) : undefined;
+
+  // ---- NGOẶC ĐO KHOẢNG CÁCH năm cuối (24/11/2026: chuyển động phải giúp hiểu số liệu) — chỉ khi đường đã vẽ tới
+  // năm cuối ở chế độ toàn màn hình: ngoặc mọc từ giữa ra hai đầu, rồi hiện "×5,06" / "24 điểm %" do Python tính
+  const gp = w.gap;
+  const gva = gp ? exactAt(w.series[gp.a], gp.x) : null, gvb = gp ? exactAt(w.series[gp.b], gp.x) : null;
+  const gk = gp && isFull && st && p.drawEnd >= w.maxX - 1e-6 && gva !== null && gvb !== null
+    ? ramp(tl, 0.72 * dur, 0.72 * dur + 0.5, Easing.out(Easing.cubic)) : 0;
+  const gx = gp ? X(gp.x) + 44 : 0, gya = gva !== null ? Y(gva) : 0, gyb = gvb !== null ? Y(gvb) : 0;
+  const gmid = (gya + gyb) / 2, ghalf = Math.abs(gya - gyb) / 2 * gk;
   const ref = w.reference && y1 > w.reference.y * 1.08 ? ramp(y1, w.reference.y * 1.08, w.reference.y * 1.3) : 0;
 
   return (
@@ -217,6 +226,13 @@ export const ChartWorld: React.FC<{ world: World; scenes: Scene[]; t: number; br
             <circle key={`fd${j}`} cx={f.px} cy={f.py} r={14 * Math.min(fk, 1.2)} fill={w.series[f.s].color} stroke={brand.background} strokeWidth={4} />
           ))}
         </g>
+        {gk > 0 && (
+          <g opacity={Math.min(1, gk * 1.5)}>
+            <line x1={gx} x2={gx} y1={gmid - ghalf} y2={gmid + ghalf} stroke={brand.accent} strokeWidth={5} />
+            <line x1={gx - 16} x2={gx} y1={gmid - ghalf} y2={gmid - ghalf} stroke={brand.accent} strokeWidth={5} />
+            <line x1={gx - 16} x2={gx} y1={gmid + ghalf} y2={gmid + ghalf} stroke={brand.accent} strokeWidth={5} />
+          </g>
+        )}
         {call > 0 && coHead && [0, 1].map((j) => {
           const r = 20 + ((t * 70 + j * 35) % 70);
           return <circle key={`c${j}`} cx={coHead.x} cy={coHead.y} r={r} fill="none" stroke={brand.accent}
@@ -263,6 +279,21 @@ export const ChartWorld: React.FC<{ world: World; scenes: Scene[]; t: number; br
         <div key={`fy${x}`} style={{ position: "absolute", top: box.top - 62, left: X(x) - 100, width: 200, textAlign: "center",
           fontSize: 36, fontWeight: 800, color: brand.accent, opacity: Math.min(fk, 1) }}>{x}</div>
       ))}
+
+      {gk > 0 && gp && (() => {
+        const roomy = Math.abs(gya - gyb) >= 200;
+        const top = roomy ? gmid - 60 : Math.max(gya, gyb) + 70;
+        const k = ramp(tl, 0.72 * dur + 0.35, 0.72 * dur + 0.8);
+        return (
+          <div style={{ position: "absolute", right: 1080 - gx + 24, top, textAlign: "right", opacity: k,
+            transform: `translateX(${(1 - k) * 20}px)` }}>
+            <div style={{ display: "inline-block", fontSize: 64, fontWeight: 800, color: brand.background, lineHeight: 1.1,
+              background: brand.accent, borderRadius: 16, padding: "4px 18px" }}>{gp.value}</div>
+            <div style={{ marginTop: 8, fontSize: 30, fontWeight: 700, color: brand.text, maxWidth: 520,
+              textShadow: "0 2px 12px rgba(0,0,0,0.9)" }}>{gp.label}</div>
+          </div>
+        );
+      })()}
 
       {fullness > 0 && (
         <div style={{ position: "absolute", top: 362, right: 90, fontSize: 92, fontWeight: 800, color: brand.accent,

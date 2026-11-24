@@ -284,7 +284,71 @@ def build_world(spec: list, colors: dict):
     noun = re.split(r"\s*(?:/|trên)\s*100", unit)[0].strip() if per else ""
     if per and noun and y_max > 105:
         world["reference"] = {"y": 100, "label": lang.pick(vi=f"100 = mỗi người 1 {noun}", ko=f"100 = 1인당 1{noun}")}
+    gap = gap_of(series, unit)
+    if gap:
+        world["gap"] = gap
     return world
+
+
+def gap_of(series: list, unit: str):
+    """KHOẢNG CÁCH ở năm cuối giữa đường được nhấn và đường kia -> ngoặc đo trên biểu đồ khi vẽ xong (24/11/2026, Du:
+    "chuyển động phải giúp hiểu số liệu"). Tỷ lệ %: chênh bao nhiêu điểm phần trăm; còn lại: gấp mấy lần (1,2-1.000 lần,
+    như datatable.ratio_phrase). Số tính từ chính chuỗi số trên hình. Không đủ điều kiện -> None."""
+    from ..sources.datatable import MAX_RATIO
+    if len(series) < 2:
+        return None
+    a = next((i for i, s in enumerate(series) if s["emphasis"]), 0)
+    b = next(i for i in range(len(series)) if i != a)
+    x = max(series[a]["xs"][-1], series[b]["xs"][-1])
+    if series[a]["xs"][-1] != x or series[b]["xs"][-1] != x:
+        return None
+    va, vb = series[a]["ys"][-1], series[b]["ys"][-1]
+    hi, lo = (a, b) if va >= vb else (b, a)
+    name = lambda i: series[i]["label"]
+    if unit.strip().startswith("%"):
+        d = abs(va - vb)
+        if d < 1:
+            return None
+        num = lang.readable(d)
+        label = lang.pick(vi=f"{name(hi)} hơn {name(lo)} {num} điểm %", ko=f"{name(hi)}, {name(lo)}보다 {num}%p 높음")
+        return {"a": a, "b": b, "x": x, "value": lang.pick(vi=f"{num} điểm %", ko=f"{num}%p"), "label": label,
+                "number": d}
+    if min(va, vb) <= 0:
+        return None
+    r = max(va, vb) / min(va, vb)
+    if not 1.2 <= r <= MAX_RATIO:
+        return None
+    num = lang.readable(r)
+    label = lang.pick(vi=f"{name(hi)} gấp {num} lần {name(lo)}", ko=f"{name(hi)}: {name(lo)}의 {num}배")
+    return {"a": a, "b": b, "x": x, "value": lang.pick(vi=f"×{num}", ko=f"{num}배"), "label": label, "number": r}
+
+
+# Số trong câu: 1.234,5 | 1,234.5 | 9,71 | 44.5 (kèm đơn vị ngay sau nếu có)
+_NUM = re.compile(r"\d[\d.,]*\d|\d")
+_UNIT_AFTER = re.compile(r"^\s?(%p|%|điểm phần trăm|lần|배|위|세|명|년|tuổi|người|USD|đô la|달러|kWh|tấn|톤|만|억|조)")
+
+
+def finding_of(spec: list, duration: float):
+    """PHÁT HIỆN ĐÁNG NHỚ của video (24/11/2026, Du: "mỗi video phải có một phát hiện đáng nhớ", "hình ảnh phải đẹp
+    ngay cả khi tắt âm thanh"): câu mở đầu — điều mạnh nhất, máy đã chọn trong 3 phương án và đã qua MỌI cổng kiểm
+    số — kèm con số chính của nó, hiện thành thẻ lớn trong ~3 giây cuối video. Không viết thêm chữ hay số mới.
+    Con số chính = số đầu tiên KHÔNG phải mốc năm (ưu tiên số có đơn vị %, lần, 위...). Không có số -> None."""
+    hook = next((str(sc.get("voice") or "").strip() for sc in spec if str(sc.get("voice") or "").strip()), "")
+    if not hook or duration < 8:
+        return None
+    cands = []
+    for m in _NUM.finditer(hook):
+        tok = m.group().rstrip(".,")
+        unit = _UNIT_AFTER.match(hook[m.end():])
+        year = re.fullmatch(r"(19|20)\d\d", tok) and not (unit and unit.group(1) in ("%", "%p", "lần", "배"))
+        if year:
+            continue
+        cands.append((0 if unit else 1, m.start(), tok + (unit.group(0) if unit else "")))
+    # chỉ có mốc năm ("Việt Nam 2024 mới bằng Hàn Quốc 1991"): thẻ vẫn hiện câu phát hiện, không có số lớn
+    value = min(cands)[2].strip() if cands else ""
+    span = min(3.2, max(2.2, 0.08 * duration))
+    return {"value": value, "text": hook, "start": round(duration - span, 3), "end": round(duration, 3),
+            "label": lang.pick(vi="ĐIỀU ĐÁNG NHỚ", ko="핵심 한 줄")}
 
 
 def _same_series(p: dict, world: dict, colors: dict) -> bool:
@@ -340,7 +404,8 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None, capt
         out = []
         for s in w["series"]:
             out += s["xs"] + [round(y, s["dec"]) for y in s["ys"]]
-        return out + _nice_ticks(w["yMax"]) + ([100] if w.get("reference") else [])
+        gap = [round(w["gap"]["number"], 2)] if w.get("gap") else []
+        return out + _nice_ticks(w["yMax"]) + ([100] if w.get("reference") else []) + gap
 
     def callout_for(w, start, end):
         """Con số chốt: giá trị cuối của một đường mà lời đọc cảnh này nói ra -> chú thích lớn
@@ -500,6 +565,15 @@ def build_story(spec: list, timed_words: list, script_id, render_clip=None, capt
     sources = [s["source"] for s in scenes if s.get("source")]
     props = {"brand": brand_props(), "duration": round(t, 3), "scenes": scenes, "words": words,
              "source": max(set(sources), key=sources.count) if sources else "", "sfx": sfx, "world": world}
+    finding = finding_of(spec, t)
+    if finding:
+        props["finding"] = finding
+        add_sfx("thump", finding["start"] + 0.15, 0.4)
+        if spec:                       # số của thẻ phát hiện là số của câu mở đầu (đã kiểm) — cho Kiểm định biết
+            try:
+                spec[-1]["shown"] = list(spec[-1].get("shown") or []) + [lang.parse(_NUM.search(finding["value"]).group())]
+            except (AttributeError, ValueError):
+                pass
     if caption_size:
         props["captionSize"] = int(round(float(caption_size)))
     if lang.code() != "vi":       # Remotion đọc để chọn phông chữ + kiểu viết số (render-web/src/lib/locale.ts)

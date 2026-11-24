@@ -33,7 +33,12 @@ export type ChartState = {
 export type World = {
   series: Series[]; minX: number; maxX: number; yMax: number; unit: string;
   reference?: { y: number; label: string };
+  // khoảng cách năm cuối giữa đường được nhấn (a) và đường kia (b) — ngoặc đo khi vẽ xong (src/render/web.gap_of)
+  gap?: { a: number; b: number; x: number; value: string; label: string };
 };
+
+/** Phát hiện đáng nhớ (src/render/web.finding_of): câu mở đầu đã kiểm + con số chính, thẻ lớn cuối video. */
+export type Finding = { value: string; text: string; start: number; end: number; label: string };
 
 // ---- cảnh chung (map 1-1 với template của spec)
 export type IntroScene = Span & { kind: "intro" };
@@ -79,6 +84,7 @@ export type MapScene = Span & {
 export type BarRaceScene = Span & {
   kind: "bar_race"; title: string; years: number[]; unit: string;
   items: { label: string; values: number[]; shown: string[]; fill: string; ink: string; strong: boolean; flag?: string }[];
+  overtakes?: { leg: number; item: number; passed: string[] }[]; // chặng nước "ta" vượt nước khác (web_map.overtakes)
 };
 
 // ---- cảnh riêng của bản demo #30 (tools/demo_web30.py)
@@ -124,4 +130,5 @@ export type StoryProps = {
   hideCaptions?: boolean; // video dài (Wide): phụ đề vẽ to ở cột phải thay vì trong khung dọc
   hideLogo?: boolean; // video dài (Wide) đã có nhận diện riêng ở cột phải
   captionSize?: number; // cỡ chữ phụ đề (px) của phong cách đang thử nghiệm (src/style.py); thiếu = 80
+  finding?: Finding | null;
 };

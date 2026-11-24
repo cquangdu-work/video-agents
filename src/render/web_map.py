@@ -204,4 +204,28 @@ def race_props(p: dict, colors: dict, flag_of) -> dict:
                       "ink": colors.get(key, colors["accent"]) if key else colors["text"],
                       "strong": bool(key), "flag": flag_of(it.get("label"))})
     return {"title": str(p.get("title", "")), "years": [int(y) for y in p.get("years") or []],
-            "items": items, "unit": str(p.get("unit") or "")}
+            "items": items, "unit": str(p.get("unit") or ""), "overtakes": overtakes(items)}
+
+
+def overtakes(items: list) -> list:
+    """Chặng nào nước "ta" (Việt Nam | Hàn Quốc, không có thì thanh được nhấn đầu tiên) VƯỢT nước khác -> nhãn
+    "↑ vượt …" đúng chặng đó (24/11/2026, Du: "chuyển động phải giúp hiểu số liệu"). Tính bằng thứ hạng thật giữa
+    hai mốc năm liền nhau. -> [{"leg": k, "item": chỉ số thanh, "passed": [tên…]}]."""
+    anchor_name = lang.pick(vi="việt nam", ko="한국")
+    strong = [i for i, it in enumerate(items) if it["strong"]]
+    a = next((i for i in strong if items[i]["label"].strip().lower() == anchor_name), strong[0] if strong else None)
+    if a is None or not items:
+        return []
+    n = min(len(it["values"]) for it in items)
+
+    def rank(j: int) -> dict:
+        order = sorted(range(len(items)), key=lambda i: -items[i]["values"][j])
+        return {i: r for r, i in enumerate(order)}
+    out = []
+    for k in range(n - 1):
+        r0, r1 = rank(k), rank(k + 1)
+        passed = [items[i]["label"] for i in range(len(items))
+                  if i != a and r0[i] < r0[a] and r1[i] > r1[a]]
+        if passed:
+            out.append({"leg": k, "item": a, "passed": passed[:2]})
+    return out
