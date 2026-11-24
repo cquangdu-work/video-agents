@@ -294,8 +294,8 @@ export const ChartWorld: React.FC<{ world: World; scenes: Scene[]; t: number; br
             transform: `translateX(${(1 - k) * 20}px)` }}>
             <div style={{ display: "inline-block", fontSize: small ? 46 : 64, fontWeight: 800, color: brand.background, lineHeight: 1.1,
               background: brand.accent, borderRadius: 16, padding: "4px 18px" }}>{gp.value}</div>
-            <div style={{ marginTop: 8, fontSize: small ? 24 : 30, fontWeight: 700, color: brand.text, maxWidth: 520,
-              textShadow: "0 2px 12px rgba(0,0,0,0.9)" }}>{gp.label}</div>
+            {roomy && <div style={{ marginTop: 8, fontSize: small ? 24 : 30, fontWeight: 700, color: brand.text,
+              whiteSpace: "nowrap", textShadow: "0 2px 12px rgba(0,0,0,0.9)" }}>{gp.label}</div>}
           </div>
         );
       })()}
