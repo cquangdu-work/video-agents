@@ -116,14 +116,143 @@ def script_words_timed(script_words: list, heard: list, min_match: float = 0.6) 
 SENTENCE_END = (".", "!", "?", "…", ":", ";")
 
 
-def chunk_words(words: list, chunk_size: int = 3, pause: float = 0.35) -> list:
+# ------------------------------------------------------------------ cụm phụ đề tiếng Việt theo TỪ
+# Tiếng Việt viết cách từng ÂM TIẾT: đếm 3 "từ" (khoảng trắng) một cụm là cắt ngang từ ghép — ca thật 26/11/2026
+# (video CO2): "Trong 212 quốc" / "gia, Việt Nam" / "đứng thứ 91". Người xem tắt tiếng (và khán giả lớn tuổi
+# của kênh) đọc rất khó. Cách làm: ghép âm tiết thành từ theo danh sách từ ghép (assets/lang/vi_words.txt + tên
+# nước trong assets/geo/world.json), rồi chọn chỗ ngắt bằng quy hoạch động: cụm ~3 âm tiết, không cụm 1 âm tiết,
+# không quá dài (xuống dòng), ưu tiên ngắt sau dấu phẩy, tránh tách con số khỏi chữ đi cùng ("thứ | 91").
+ROOT = Path(__file__).resolve().parents[2]
+VI_WORDS = ROOT / "assets" / "lang" / "vi_words.txt"
+VI_GEO = ROOT / "assets" / "geo" / "world.json"
+MAX_UNIT = 4                     # từ dài nhất (âm tiết) được giữ nguyên một khối
+CHUNK_MAX = 4                    # cụm ghép từ nhiều từ: tối đa 4 âm tiết
+SIZE_COST = {1: 3.0, 2: 0.3, 3: 0.0, 4: 0.6}     # 2 âm tiết thường là MỘT từ — vẫn dễ đọc
+WRAP_CHARS = 17                  # quá chừng này ký tự thì phụ đề 88-96 px dễ xuống dòng
+_PUNCT = "\"'“”‘’()[]«»"
+_SOFT_END = (",", ";", ":")
+UNIT_WORDS = {"lần", "kg", "km", "tấn", "tỷ", "triệu", "nghìn", "usd", "đô", "độ", "giờ", "phút", "giây", "tuổi",
+              "kwh", "mét", "lít", "dặm", "điểm", "%", "người", "năm", "tháng", "ngày", "tuần"}
+_ANY_END = (".", ",", "!", "?", "…", ";", ":")
+
+
+def _key(token: str) -> str:
+    import unicodedata
+    return unicodedata.normalize("NFC", str(token)).strip(_PUNCT + ".,!?…;:").lower()
+
+
+def _vi_lexicon() -> frozenset:
+    global _LEXICON
+    if _LEXICON is None:
+        import json
+        words = set()
+        try:
+            for line in VI_WORDS.read_text(encoding="utf-8").splitlines():
+                if line.strip() and not line.lstrip().startswith("#"):
+                    words.add(" ".join(_key(x) for x in line.split()))
+        except OSError:
+            log.warning("Không đọc được %s — phụ đề chia theo âm tiết", VI_WORDS)
+        try:
+            for c in json.loads(VI_GEO.read_text(encoding="utf-8"))["countries"].values():
+                for name in [c.get("name", "")] + list(c.get("aliases") or []):
+                    words.add(" ".join(_key(x) for x in str(name).replace("-", " ").split()))
+        except (OSError, ValueError, KeyError, AttributeError):
+            pass
+        _LEXICON = frozenset(w for w in words if 2 <= len(w.split()) <= MAX_UNIT)
+    return _LEXICON
+
+
+_LEXICON = None
+
+
+def vi_units(tokens: list) -> list:
+    """Độ dài (số âm tiết) của từng từ, ghép tham lam từ dài nhất: ["Trong","212","quốc","gia,"] -> [1, 1, 2].
+    Không ghép qua dấu câu (âm tiết giữa từ không được mang dấu phẩy/chấm)."""
+    lex, out, i = _vi_lexicon(), [], 0
+    while i < len(tokens):
+        for size in range(min(MAX_UNIT, len(tokens) - i), 1, -1):
+            seq = tokens[i:i + size]
+            if any(t.rstrip(_PUNCT).endswith(_ANY_END) for t in seq[:-1]):
+                continue                    # có dấu câu bên trong
+            if " ".join(_key(t) for t in seq) in lex:
+                out.append(size)
+                i += size
+                break
+        else:
+            out.append(1)
+            i += 1
+    return out
+
+
+def _is_number(token: str) -> bool:
+    """Con số ("91", "1,37", "60,5%") — không tính chữ có số bên trong như "CO2"."""
+    return token.strip(_PUNCT)[:1].isdigit()
+
+
+def _vi_split(seg: list) -> list:
+    """Một đoạn liền (không có cuối câu / chỗ nghỉ bên trong) -> các cụm, chỉ ngắt giữa hai từ."""
+    tokens = [w[0] for w in seg]
+    bounds = [0]
+    for size in vi_units(tokens):
+        bounds.append(bounds[-1] + size)
+
+    def cost(a: int, b: int) -> float:
+        part = tokens[a:b]
+        c = SIZE_COST.get(b - a, 2.5)
+        chars = len(" ".join(part))
+        c += 1.5 if chars > WRAP_CHARS else 0.0
+        c += 3.0 if chars > WRAP_CHARS + 6 else 0.0
+        if any(t.rstrip(_PUNCT).endswith(_SOFT_END) for t in part[:-1]):
+            c += 0.8                        # dấu phẩy nằm GIỮA cụm: "Năm 2023, lượng" — nên ngắt ở dấu phẩy
+        if b < len(tokens):                 # chỗ ngắt nằm giữa đoạn
+            if part[-1].rstrip(_PUNCT).endswith(_SOFT_END):
+                c -= 0.5                    # ngắt sau dấu phẩy: tự nhiên nhất
+            elif _is_number(tokens[b]):
+                c += 1.0                    # "đứng thứ | 91": số tách khỏi chữ dẫn tới nó
+            elif _is_number(part[-1]):     # sau số hay là chỗ ngắt tự nhiên ("đứng thứ 91 | về..."), trừ khi
+                c += 1.2 if _key(tokens[b]) in UNIT_WORDS else 0.4    # chữ sau là đơn vị: "60,5 | kg"
+        return c
+
+    best = {0: (0.0, None)}
+    for j in range(1, len(bounds)):
+        b = bounds[j]
+        for i in range(j - 1, -1, -1):
+            a = bounds[i]
+            if b - a > CHUNK_MAX and j - i > 1:
+                break                       # nhiều từ ghép lại thì tối đa CHUNK_MAX âm tiết (một từ dài vẫn được)
+            if a in best:
+                c = best[a][0] + cost(a, b)
+                if b not in best or c < best[b][0]:
+                    best[b] = (c, a)
+    cuts, b = [], len(tokens)
+    while b:
+        a = best[b][1]
+        cuts.append(seg[a:b])
+        b = a
+    return cuts[::-1]
+
+
+def chunk_words(words: list, chunk_size: int = 3, pause: float = 0.35, language: str = None) -> list:
     """Chia các từ thành cụm phụ đề tối đa chunk_size từ, và LUÔN ngắt cụm ở cuối câu
     (từ kết thúc bằng . ! ? …) hoặc chỗ nghỉ dài hơn `pause` giây.
 
     Trước đây cứ đếm đủ 3 từ là ngắt nên cụm hay vắt ngang hai câu ("phòng nữa. Công"):
     chữ của câu sau hiện ra khi người xem còn đang nghe câu trước.
+
+    Kênh tiếng Việt: cụm theo TỪ chứ không theo âm tiết (_vi_split); kênh Hàn đã cách theo 어절 nên giữ như cũ.
     """
     ends = lambda w: w[0].rstrip('"”’)').endswith(SENTENCE_END)
+    if language is None:
+        from .. import lang
+        language = lang.code()
+    if language == "vi" and words:
+        segs = []
+        for i, w in enumerate(words):
+            prev = words[i - 1] if i else None
+            if not segs or ends(prev) or w[1] - prev[2] > pause:
+                segs.append([])
+            segs[-1].append(w)
+        return [chunk for seg in segs for chunk in _vi_split(seg)]
     chunks = []
     for i, w in enumerate(words):
         prev = words[i - 1] if i else None

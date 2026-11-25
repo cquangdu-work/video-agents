@@ -18,10 +18,12 @@ export const Captions: React.FC<{ words: Word[]; t: number; brand: Brand; size?:
     const ch = list[i];
     const nextStart = i + 1 < list.length ? list[i + 1][0].s : Infinity;
     const hold = Math.min(0.5, nextStart - ch[ch.length - 1].e);
-    if (t >= ch[0].s - 0.04 && t < ch[ch.length - 1].e + Math.max(hold, 0)) cur = ch;
+    // cụm ĐẦU video hiện ngay từ khung 0 (26/11/2026): giọng thường bắt đầu sau ~0,1-0,3 giây, đúng lúc người xem
+    // quyết định lướt qua hay không — khung đầu phải đọc được câu mở đầu
+    if ((i === 0 || t >= ch[0].s - 0.04) && t < ch[ch.length - 1].e + Math.max(hold, 0)) cur = ch;
   }
   if (!cur) return null;
-  const enter = clamp01((t - cur[0].s + 0.04) / 0.12);
+  const enter = cur === list[0] ? 1 : clamp01((t - cur[0].s + 0.04) / 0.12);
   return (
     <div style={{
       position: "absolute", top: 1395, left: 60, right: 60, textAlign: "center",

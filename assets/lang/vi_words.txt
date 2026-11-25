@@ -1,0 +1,909 @@
+# Từ ghép tiếng Việt (2-4 âm tiết) cho phụ đề: cụm phụ đề KHÔNG ngắt giữa một từ trong danh sách này
+# (ca thật 26/11/2026: "Trong 212 quốc" / "gia, Việt Nam"). Tên nước + tên phụ lấy thêm từ assets/geo/world.json.
+# Soạn tay từ ~1.500 cặp âm tiết hay gặp nhất trong kịch bản thật của kênh (26/11/2026) + từ thông dụng.
+# Một dòng một từ, chữ thường; thêm từ: chỉ cần thêm dòng (src/audio/subtitles.py đọc lúc chạy).
+
+# --- số liệu, biểu đồ, xếp hạng
+biểu đồ
+đồ thị
+bản đồ
+sơ đồ
+con số
+số liệu
+dữ liệu
+chỉ số
+tỷ lệ
+tỷ trọng
+tỷ suất
+phần trăm
+điểm phần trăm
+bình quân
+đầu người
+trung bình
+trung vị
+tổng số
+tổng cộng
+tổng hợp
+tổng kết
+tổng quan
+số lượng
+sản lượng
+khối lượng
+diện tích
+nồng độ
+nhiệt độ
+tốc độ
+mức độ
+biên độ
+hệ số
+chữ số
+xếp hạng
+thứ hạng
+vị trí
+vị thế
+dẫn đầu
+đứng đầu
+đứng thứ
+đứng bét
+bét bảng
+đầu bảng
+cuối bảng
+bảng xếp hạng
+á quân
+ngôi vương
+cao nhất
+thấp nhất
+lớn nhất
+nhanh nhất
+mới nhất
+cao hơn
+thấp hơn
+nhiều hơn
+so sánh
+so với
+khoảng cách
+chênh lệch
+cách biệt
+khác biệt
+khác nhau
+tương đương
+thống kê
+khảo sát
+báo cáo
+nghiên cứu
+phân tích
+đo lường
+đánh giá
+đối chiếu
+ghi nhận
+công bố
+cập nhật
+dự báo
+xu hướng
+cột mốc
+mốc thời gian
+thời gian
+thời điểm
+thời kỳ
+giai đoạn
+thập kỷ
+thập niên
+thế kỷ
+hôm nay
+hiện nay
+hiện tại
+ngày nay
+quá khứ
+tương lai
+lịch sử
+kỷ lục
+
+# --- tăng giảm, chuyển động
+tăng trưởng
+tăng gấp
+tăng vọt
+tăng lên
+tăng tốc
+tăng thêm
+tăng mạnh
+gia tăng
+sụt giảm
+suy giảm
+đi lên
+đi xuống
+vươn lên
+leo lên
+vượt qua
+vượt mốc
+vượt xa
+vượt trội
+bứt phá
+chạm mốc
+chạm ngưỡng
+thu hẹp
+mở rộng
+dừng lại
+quay lại
+trở lại
+nhìn lại
+thay đổi
+chuyển đổi
+chuyển dịch
+dịch chuyển
+chuyển sang
+đảo chiều
+ngược lại
+ngược dòng
+lội ngược dòng
+liên tục
+tiếp tục
+đều đặn
+đột ngột
+nhanh chóng
+ngoạn mục
+mạnh mẽ
+rõ rệt
+đáng kể
+bùng nổ
+biến động
+ổn định
+duy trì
+giữ vững
+kéo dài
+bắt đầu
+kết thúc
+khởi đầu
+xuất phát
+xuất hiện
+diễn ra
+trải qua
+đỉnh cao
+đỉnh điểm
+dốc đứng
+
+# --- kinh tế, xã hội
+kinh tế
+nền kinh tế
+tài chính
+đầu tư
+doanh nghiệp
+doanh thu
+công ty
+tập đoàn
+ngân hàng
+thị trường
+sản xuất
+sản phẩm
+xuất khẩu
+nhập khẩu
+thương mại
+dịch vụ
+công nghiệp
+nông nghiệp
+lâm nghiệp
+ngư nghiệp
+chế biến
+chế tạo
+nhà máy
+lao động
+việc làm
+làm việc
+thu nhập
+tiền lương
+chi phí
+giá trị
+giá cả
+lạm phát
+đô la
+dân số
+dân cư
+người dân
+con người
+nhân loại
+phụ nữ
+nam giới
+nữ giới
+trẻ em
+thiếu niên
+người già
+gia đình
+hộ gia đình
+xã hội
+cộng đồng
+đô thị
+thành thị
+thành phố
+nông thôn
+giáo dục
+đại học
+học sinh
+sinh viên
+y tế
+bệnh viện
+sức khỏe
+tuổi thọ
+tử vong
+sinh ra
+mức sinh
+hôn nhân
+kết hôn
+quốc phòng
+quốc tế
+quản lý
+chính phủ
+chính sách
+chính thức
+pháp luật
+an toàn
+bảo vệ
+hạ tầng
+giao thông
+du lịch
+du khách
+người nước ngoài
+nước ngoài
+
+# --- năng lượng, môi trường, khoa học
+năng lượng
+tái tạo
+điện năng
+điện tử
+điện thoại
+di động
+thuê bao
+xe điện
+ô tô
+lưới điện
+mặt trời
+gió
+than đá
+dầu mỏ
+khí đốt
+khí thải
+phát thải
+nhà kính
+khí nhà kính
+khí hậu
+môi trường
+nắng nóng
+ô nhiễm
+bụi mịn
+rừng
+che phủ
+sa mạc
+trái đất
+hành tinh
+vũ trụ
+không gian
+ngôi sao
+sao chổi
+mặt trăng
+ánh sáng
+năm ánh sáng
+quỹ đạo
+kính viễn vọng
+viễn vọng
+tàu vũ trụ
+con tàu
+khoa học
+nhà khoa học
+công nghệ
+trí tuệ
+nhân tạo
+trí tuệ nhân tạo
+internet
+mạng xã hội
+máy chủ
+thiết bị
+hệ thống
+kỹ thuật
+ứng dụng
+sinh học
+hóa học
+vật chất
+thực phẩm
+thực vật
+động vật
+dinh dưỡng
+thịt bò
+cà phê
+lúa gạo
+rượu vang
+đồ uống
+nước sạch
+nguồn nước
+
+# --- địa lý
+thế giới
+toàn cầu
+quốc gia
+lãnh thổ
+khu vực
+châu á
+châu âu
+châu phi
+châu mỹ
+châu đại dương
+bắc mỹ
+nam mỹ
+đông á
+đông nam á
+nam á
+trung đông
+tây âu
+biển đông
+hoàng sa
+trường sa
+nước ta
+
+# --- từ thông dụng
+chúng ta
+hoàn toàn
+toàn bộ
+thực tế
+sự thật
+tuy nhiên
+trong khi
+khi đó
+sau đó
+sau khi
+vì sao
+tại sao
+ra sao
+thế nào
+bao nhiêu
+như vậy
+dù vậy
+vì vậy
+do đó
+thậm chí
+không chỉ
+không hề
+cụ thể
+tức là
+đó là
+đây là
+chính là
+điều này
+điều đó
+cả hai
+một nửa
+một phần
+bên cạnh
+phía sau
+đằng sau
+bên trong
+cuối cùng
+đầu tiên
+lần đầu
+lần lượt
+ban đầu
+có thể
+khả năng
+nguy cơ
+rủi ro
+nguyên nhân
+kết quả
+tác động
+ảnh hưởng
+vai trò
+vấn đề
+câu hỏi
+bài toán
+mục tiêu
+cơ hội
+lựa chọn
+quan trọng
+phổ biến
+thông thường
+bình thường
+quen thuộc
+bất ngờ
+ấn tượng
+bí ẩn
+cực kỳ
+vô cùng
+rất lớn
+khổng lồ
+nổi bật
+rõ ràng
+dễ dàng
+phức tạp
+trực tiếp
+tập trung
+thông tin
+hình ảnh
+màn hình
+câu chuyện
+bức tranh
+góc nhìn
+hành trình
+cuộc đua
+trở thành
+trở nên
+gần như
+gần đây
+ngày càng
+càng ngày
+chứng kiến
+cho thấy
+phản ánh
+thể hiện
+hiển thị
+minh họa
+đánh dấu
+nhấn mạnh
+theo dõi
+sử dụng
+tham gia
+tiếp cận
+phát triển
+phát hiện
+cải thiện
+tồn tại
+hoạt động
+giải quyết
+
+# --- bổ sung: từ ghép thông dụng (văn nói, tin tức)
+ả rập
+xê út
+ả rập xê út
+kết nối
+công việc
+văn phòng
+nhân viên
+người lao động
+công nhân
+nông dân
+chủ nhà
+mua sắm
+tiêu dùng
+người tiêu dùng
+tiền tệ
+tiết kiệm
+vay nợ
+nợ công
+ngân sách
+thuế
+tăng giá
+giảm giá
+giá nhà
+nhà ở
+căn hộ
+chung cư
+đất đai
+bất động sản
+cổ phiếu
+chứng khoán
+lợi nhuận
+thua lỗ
+cạnh tranh
+hợp tác
+đối tác
+đối thủ
+thị phần
+khách hàng
+thương hiệu
+hàng hóa
+hàng không
+vận tải
+cảng biển
+đường sắt
+đường bộ
+cao tốc
+tàu điện
+máy bay
+xe máy
+phương tiện
+nhiên liệu
+xăng dầu
+năng suất
+hiệu quả
+hiệu suất
+chất lượng
+tiêu chuẩn
+quy định
+luật pháp
+pháp lý
+quyền lợi
+bình đẳng
+giới tính
+nam nữ
+trẻ sơ sinh
+sơ sinh
+mang thai
+sinh con
+sinh đẻ
+tỷ suất sinh
+già hóa
+người cao tuổi
+cao tuổi
+tuổi già
+nghỉ hưu
+lương hưu
+bảo hiểm
+y khoa
+bác sĩ
+bệnh nhân
+bệnh tật
+ung thư
+tim mạch
+tiểu đường
+béo phì
+thừa cân
+dịch bệnh
+đại dịch
+vắc xin
+thuốc lá
+rượu bia
+ăn uống
+chế độ ăn
+lương thực
+nông sản
+thủy sản
+hải sản
+chăn nuôi
+trồng trọt
+gạo
+thịt lợn
+thịt gà
+sữa
+trứng
+rau quả
+trái cây
+đường ăn
+muối
+cà phê
+chè
+trà
+nước ngọt
+nước uống
+nguồn điện
+nhà máy điện
+điện hạt nhân
+hạt nhân
+thủy điện
+điện gió
+điện mặt trời
+pin
+năng lượng sạch
+than
+khí
+dầu
+khí hậu
+biến đổi
+biến đổi khí hậu
+nóng lên
+nhiệt lượng
+mực nước
+nước biển
+băng tan
+lũ lụt
+hạn hán
+bão
+thiên tai
+động đất
+núi lửa
+đại dương
+biển cả
+đất liền
+hòn đảo
+quần đảo
+bán đảo
+sông ngòi
+dòng sông
+rừng rậm
+cây xanh
+đa dạng
+loài vật
+sinh vật
+vi khuẩn
+tế bào
+gen
+bộ não
+cơ thể
+con mắt
+vệ tinh
+tên lửa
+phi hành gia
+thiên văn
+thiên hà
+hố đen
+hệ mặt trời
+sao hỏa
+sao kim
+sao mộc
+mặt đất
+bầu trời
+khí quyển
+oxy
+nhiệt độ
+độ ẩm
+mưa
+mùa hè
+mùa đông
+mùa mưa
+ban ngày
+ban đêm
+buổi sáng
+buổi tối
+hàng ngày
+hằng ngày
+hàng năm
+hằng năm
+hàng tháng
+hàng tuần
+hai mươi
+ba mươi
+bốn mươi
+năm mươi
+sáu mươi
+bảy mươi
+tám mươi
+chín mươi
+một trăm
+hàng trăm
+hàng nghìn
+hàng triệu
+hàng tỷ
+nghìn tỷ
+gấp đôi
+gấp ba
+một nửa
+phần lớn
+phần nhỏ
+đa số
+thiểu số
+hầu hết
+tất cả
+toàn thể
+trên dưới
+xấp xỉ
+khoảng chừng
+ít nhất
+nhiều nhất
+ít hơn
+lâu hơn
+sớm hơn
+muộn hơn
+nhanh hơn
+chậm hơn
+mạnh hơn
+yếu hơn
+giàu có
+nghèo đói
+nghèo nàn
+giàu nhất
+nghèo nhất
+đắt đỏ
+rẻ nhất
+đắt nhất
+miễn phí
+trung quốc
+nhật bản
+ấn độ
+thái lan
+hoa kỳ
+nước mỹ
+nước anh
+nước pháp
+nước đức
+nước nga
+liên minh
+liên hợp quốc
+liên minh châu âu
+ngân hàng thế giới
+quỹ tiền tệ
+tổ chức
+cơ quan
+viện nghiên cứu
+trường đại học
+trung tâm
+học viện
+nhà nước
+quốc hội
+tổng thống
+thủ tướng
+chính quyền
+địa phương
+tỉnh thành
+miền bắc
+miền nam
+miền trung
+phía bắc
+phía nam
+phía đông
+phía tây
+thủ đô
+hà nội
+hồ chí minh
+thành phố hồ chí minh
+sài gòn
+đà nẵng
+hải phòng
+cần thơ
+seoul
+busan
+tokyo
+bắc kinh
+thượng hải
+đài loan
+hồng kông
+ma cao
+triều tiên
+đông dương
+đông bắc
+tây nam
+châu lục
+lục địa
+xích đạo
+bắc cực
+nam cực
+vùng lạnh
+nhiệt đới
+ôn đới
+dân tộc
+văn hóa
+ngôn ngữ
+tiếng việt
+tiếng hàn
+tiếng anh
+tôn giáo
+phật giáo
+truyền thống
+lễ hội
+âm nhạc
+bóng đá
+thể thao
+trò chơi
+điện ảnh
+phim ảnh
+truyền hình
+báo chí
+mạng internet
+điện thoại thông minh
+máy tính
+phần mềm
+phần cứng
+dữ liệu lớn
+an ninh
+quân đội
+chiến tranh
+hòa bình
+xung đột
+người tị nạn
+di cư
+nhập cư
+người di cư
+lao động nước ngoài
+du học
+du học sinh
+kiều hối
+thị thực
+visa
+hộ chiếu
+quốc tịch
+cư dân
+công dân
+người việt
+người hàn
+người nhật
+người trung quốc
+người mỹ
+mọi người
+ai đó
+cái gì
+điều gì
+vì thế
+bởi vì
+cho nên
+nhưng mà
+mặc dù
+dù cho
+nếu như
+giả sử
+thật ra
+thực ra
+quả thật
+đặc biệt
+nhất là
+ví dụ
+chẳng hạn
+cũng như
+hơn nữa
+ngoài ra
+bên ngoài
+trước đây
+trước đó
+từ đó
+đến nay
+đến khi
+cho đến
+lúc đó
+ngay cả
+ngay lập tức
+dần dần
+từ từ
+mãi mãi
+luôn luôn
+thường xuyên
+đôi khi
+hiếm khi
+không bao giờ
+chưa từng
+đã từng
+vẫn còn
+không còn
+chỉ còn
+còn lại
+còn hơn
+hơn cả
+kém hơn
+tốt hơn
+tồi tệ
+tốt nhất
+tệ nhất
+xấu nhất
+đầu tiên
+thứ nhất
+thứ tư
+thứ năm
+thứ sáu
+thứ bảy
+thứ tám
+thứ chín
+thứ mười
+hạng nhất
+hạng nhì
+hạng ba
+top đầu
+nhóm đầu
+nhóm cuối
+nửa đầu
+nửa sau
+chặng đường
+con đường
+bước ngoặt
+bước tiến
+bước lùi
+cú sốc
+cú hích
+động lực
+sức mạnh
+sức ép
+áp lực
+thách thức
+cơ hội
+lợi thế
+bất lợi
+điểm yếu
+điểm mạnh
+ưu thế
+cân bằng
+mất cân bằng
+chênh lệch giàu nghèo
+bất bình đẳng
+
+# --- thêm sau khi thử trên lời đọc thật (26/11)
+toàn thế giới
+trên thế giới
+mặt trăng
+sao thủy
+sao kim
+sao thổ
+sao thiên vương
+sao hải vương
+thiên vương
+hải vương
+dải ngân hà
+ngân hà
+quốc đảo
+khẩu phần
+mức tiêu thụ
+tiêu thụ
+người tiêu dùng
+người sử dụng
+người dùng internet
+điện tái tạo
+năng lượng tái tạo
+đi tiếp

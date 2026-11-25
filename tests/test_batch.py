@@ -80,10 +80,35 @@ class SubtitleChunkTest(unittest.TestCase):
         # Ca thật (video #4): cụm "phòng nữa. Công" hiện chữ của câu sau khi còn đọc câu trước
         words = (spread("Đừng vội kết nối AI với công việc văn phòng nữa!", 0.0, 2.9)
                  + spread("Công nghệ AI đang giúp doanh nghiệp.", 3.0, 5.0))
-        texts = [" ".join(w[0] for w in c) for c in chunk_words(words)]
+        # cách chia theo khoảng trắng (kênh Hàn: mỗi 어절 là một từ)
+        texts = [" ".join(w[0] for w in c) for c in chunk_words(words, language="ko")]
         # ... và cụm cuối câu không bị mồ côi một từ ("đang giúp doanh | nghiệp." -> 2 + 2)
         self.assertEqual(texts, ["Đừng vội kết", "nối AI với", "công việc văn", "phòng nữa!",
                                  "Công nghệ AI", "đang giúp", "doanh nghiệp."])
+        # kênh Việt: cụm theo TỪ — không còn "kết | nối", "văn | phòng"; vẫn không vắt qua hai câu
+        texts = [" ".join(w[0] for w in c) for c in chunk_words(words, language="vi")]
+        self.assertEqual(texts, ["Đừng vội", "kết nối AI", "với công việc", "văn phòng nữa!",
+                                 "Công nghệ AI", "đang giúp", "doanh nghiệp."])
+
+    def test_vi_chunks_never_split_a_compound_word(self):
+        from src.audio.subtitles import chunk_words
+        texts = lambda s: [" ".join(w[0] for w in c) for c in chunk_words(spread(s, 0.0, 5.0), language="vi")]
+        # ca thật 26/11/2026 (video CO2): "Trong 212 quốc" / "gia, Việt Nam" / "đứng thứ 91"
+        self.assertEqual(texts("Trong 212 quốc gia, Việt Nam đứng thứ 91 về lượng CO2 bình quân đầu người."),
+                         ["Trong 212", "quốc gia,", "Việt Nam", "đứng thứ 91", "về lượng CO2", "bình quân",
+                          "đầu người."])
+        # số đi liền đơn vị; tên nước nhiều âm tiết (assets/geo/world.json) là một khối; ngắt ở dấu phẩy
+        got = texts("Người Việt ăn trung bình 60,5 kg thịt mỗi năm, Ả Rập Saudi ăn nhiều hơn.")
+        self.assertIn("60,5 kg thịt", got)
+        self.assertTrue(any(c.startswith("Ả Rập Saudi") for c in got), got)
+        self.assertTrue(any(c.endswith("năm,") for c in got), got)
+        for c in got:
+            self.assertLessEqual(len(c.split()), 4, c)
+
+    def test_vi_units_do_not_join_across_punctuation(self):
+        from src.audio.subtitles import vi_units
+        self.assertEqual(vi_units(["quốc", "gia,", "Việt", "Nam"]), [2, 2])
+        self.assertEqual(vi_units(["quốc.", "gia"]), [1, 1])          # "quốc. Gia..." là hai câu
 
     def test_subtitles_show_the_script_text_with_whisper_timing(self):
         from src.audio.subtitles import script_words_timed
