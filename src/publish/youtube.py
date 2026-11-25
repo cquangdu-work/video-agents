@@ -320,9 +320,12 @@ def build_body(title: str, description: str, tags: list, yt_cfg: dict,
         # YouTube chỉ cho hẹn giờ với video đang ở chế độ riêng tư
         status["privacyStatus"] = "private"
         status["publishAt"] = publish_at
+    # Ngôn ngữ theo KÊNH đang chạy: trước 26/11/2026 ghi cứng "vi" nên mọi video kênh Hàn bị YouTube
+    # coi là tiếng Việt (nhãn ngôn ngữ dùng cho tìm kiếm, phụ đề tự động, phân phối theo ngôn ngữ)
+    from .. import lang
     snippet = {"title": title, "description": description,
                "categoryId": str(yt_cfg.get("category_id", "27")),
-               "defaultLanguage": "vi", "defaultAudioLanguage": "vi"}
+               "defaultLanguage": lang.code(), "defaultAudioLanguage": lang.code()}
     if tags:                       # API báo lỗi 400 nếu gửi tags rỗng
         snippet["tags"] = tags
     return {"snippet": snippet, "status": status}

@@ -422,6 +422,15 @@ class YouTubeTest(unittest.TestCase):
         s = youtube.build_body("T", "D", [], self.YT, "2026-11-11T12:00:00Z")["status"]
         self.assertEqual((s["privacyStatus"], s["publishAt"]), ("private", "2026-11-11T12:00:00Z"))
 
+    def test_build_body_language_follows_channel(self):
+        # ca thật 26/11/2026: 7 video kênh Hàn đã đăng với nhãn tiếng Việt (ghi cứng "vi")
+        from src import lang
+        sn = youtube.build_body("T", "D", [], self.YT)["snippet"]
+        self.assertEqual((sn["defaultLanguage"], sn["defaultAudioLanguage"]), ("vi", "vi"))
+        with lang.using("ko"):
+            sn = youtube.build_body("T", "D", [], self.YT)["snippet"]
+        self.assertEqual((sn["defaultLanguage"], sn["defaultAudioLanguage"]), ("ko", "ko"))
+
     def test_compute_publish_at(self):
         cfg = dict(self.YT, publish_time_local="19:00")
         self.assertIsNone(youtube.compute_publish_at(self.YT))
