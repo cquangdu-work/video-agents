@@ -155,7 +155,11 @@ def _vi_lexicon() -> frozenset:
         try:
             for c in json.loads(VI_GEO.read_text(encoding="utf-8"))["countries"].values():
                 for name in [c.get("name", "")] + list(c.get("aliases") or []):
-                    words.add(" ".join(_key(x) for x in str(name).replace("-", " ").split()))
+                    name = " ".join(_key(x) for x in str(name).replace("-", " ").split())
+                    words.add(name)
+                    # "người Việt Nam": không có mục này thì "người việt" (danh sách từ) giành mất chữ "Việt" ->
+                    # "mỗi người Việt | Nam phát thải" (chạy thử 26/11/2026 trên video CO2)
+                    words.add("người " + name)
         except (OSError, ValueError, KeyError, AttributeError):
             pass
         _LEXICON = frozenset(w for w in words if 2 <= len(w.split()) <= MAX_UNIT)

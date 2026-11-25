@@ -907,3 +907,5 @@ người dùng internet
 điện tái tạo
 năng lượng tái tạo
 đi tiếp
+phân nửa
+quá nửa
