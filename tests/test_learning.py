@@ -45,6 +45,10 @@ class KindTest(unittest.TestCase):
             self.assertEqual(kinds(got), {kind}, got)
         why = crew.content_problems({"scenes": [{"voice": "Vì sao phụ nữ Việt Nam đi làm nhiều hơn?"}]}, WOMEN)
         self.assertEqual(kinds(why), {"hook_vi_sao"})
+        guess = story.opening_problems({"scenes": [{"voice": "Trong 189 nước, Việt Nam đứng thứ mấy?"},
+                                                   {"voice": "Câu trả lời khá bất ngờ."},
+                                                   {"voice": "Phụ nữ đi làm 68,6%."}]})[0]
+        self.assertEqual(kinds(guess), {"hook_do"})
 
     def test_wording_gates(self):
         for kind, voice in (("du_bao", "Năm 2025, quy mô kinh tế Việt Nam dự kiến đạt 515 tỷ USD."),
@@ -222,6 +226,7 @@ class ViewerTest(MemoryCase):
                            ("Hàn Quốc dùng điện gấp 5 lần Việt Nam — 30 năm trước thì ngược lại.", "doi-lap"),
                            ("Tỷ lệ dùng internet Việt Nam tăng từ 0,25% năm 2000 lên 84,2% năm 2024.", "doi-lap"),
                            ("Năm 2023 có 540.000 người Việt sống ở Hàn.", "khac"),
+                           ("Trong 212 nước, Việt Nam đứng thứ mấy về khí thải CO2 mỗi người?", "doan"),
                            ("", "khac")):
             self.assertEqual(learning.hook_type(text), want, text)
 

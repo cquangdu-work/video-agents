@@ -93,6 +93,43 @@ def _words(text: str) -> list:
 OPENER_WORDS = 3   # "Việt Nam …" là chuyện thường của kênh: so 2 từ đầu thì chặn oan
 
 
+# Câu mở đầu ĐỐ người xem (26/11/2026): "Trong 212 nước, Việt Nam đứng thứ mấy về CO2 mỗi người?" — khác "Vì sao…?"
+# (video bảng số không trả lời được) ở chỗ đáp án là MỘT CON SỐ có trong bảng, nói ngay câu 2. Người xem ở lại chờ
+# đáp án và hay đoán trong bình luận (bình luận ≈ 0 ở mọi video tới 26/11). Đáp án phải tới ngay: hỏi rồi vòng vo
+# là câu view.
+GUESS_HOOK = re.compile(r"(thứ|hạng|vị trí)\s+(mấy|bao nhiêu)|(gấp|hơn|kém)\s+(mấy|bao nhiêu)\s+lần|"
+                        r"bao nhiêu\s+(lần|nước|quốc gia)|đoán (xem|thử)")
+GUESS_HOOK_KO = re.compile(r"몇\s*(위|배|등|번째|개국|나라)|얼마나|어디일까|누구일까")
+GUESS_ANSWER = {"rank": (r"(thứ|hạng|vị trí)\s+(mấy|bao nhiêu)|bao nhiêu\s+(nước|quốc gia)",
+                         r"(thứ|hạng|vị trí)\s+\d|đứng (đầu|cuối|chót|bét)|dẫn đầu|\d+\s*(trên|/)\s*\d+"),
+                "ratio": (r"lần", r"\d+(,\d+)?\s*lần|gấp\s+(đôi|ba|rưỡi)")}
+GUESS_ANSWER_KO = {"rank": (r"몇\s*(위|등|번째)", r"\d+\s*(위|등|번째)|꼴찌|최하위|1위"),
+                   "ratio": (r"몇\s*배|얼마나", r"\d+(\.\d+)?\s*배|\d+(\.\d+)?\s*%")}
+
+
+def is_guess_hook(text: str) -> bool:
+    t = " ".join(str(text or "").lower().split())
+    return t.rstrip(" \"'”").endswith("?") and bool((GUESS_HOOK_KO if lang.code() == "ko" else GUESS_HOOK).search(t))
+
+
+def guess_answer_problem(script: dict) -> str:
+    """Câu mở đầu đố người xem thì một trong HAI câu ngay sau phải có đáp án bằng con số. Trả "" nếu đạt."""
+    scenes = [sc for sc in script.get("scenes") or [] if isinstance(sc, dict)]
+    hook = " ".join(str(scenes[0].get("voice") or "").split()) if scenes else ""
+    if not is_guess_hook(hook):
+        return ""
+    after = " ".join(str(sc.get("voice") or "") for sc in scenes[1:3]).lower()
+    low = hook.lower()
+    for ask, answer in (GUESS_ANSWER_KO if lang.code() == "ko" else GUESS_ANSWER).values():
+        if re.search(ask, low):
+            return "" if re.search(answer, after) else (
+                f"câu mở đầu đố người xem (“{hook[:70]}”) mà 2 câu ngay sau chưa có đáp án — câu 2 phải trả lời"
+                " ngay bằng con số")
+    return "" if re.search(r"\d", after) else (
+        f"câu mở đầu đố người xem (“{hook[:70]}”) mà 2 câu ngay sau chưa có đáp án — câu 2 phải trả lời ngay"
+        " bằng con số")
+
+
 def opener(text: str) -> str:
     """Ba từ đầu (chữ thường, bỏ dấu câu) — để so cách mở đầu giữa các video."""
     return " ".join(w.strip(".,!?:;\"'“”").lower() for w in _words(text)[:OPENER_WORDS])
@@ -297,6 +334,9 @@ def opening_problems(script: dict) -> tuple:
             soft.append(f"cảnh {k} lùi về quá khứ ngay đầu video (“{v[:60]}”) — chứng minh hook trước")
         elif generic.search(v):
             soft.append(f"cảnh {k} là câu đệm chung chung (“{v[:60]}”)")
+    guess = guess_answer_problem(script)
+    if guess:
+        hard.append(guess)
     empty = [not re.search(r"\d", v) for v in voices[1:]]
     if any(a and b for a, b in zip(empty, empty[1:])):
         hard.append("15 giây đầu (cảnh 2-5) có hai câu liền nhau không có con số — người xem bỏ đi"

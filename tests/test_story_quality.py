@@ -128,6 +128,28 @@ class OpeningTest(unittest.TestCase):
                         "Năm 2025, con số đó đã là 40%.")
         self.assertEqual(story.opening_problems(s), ([], []))
 
+    def test_guess_hook_must_be_answered_right_away(self):
+        # 26/11/2026: mở đầu đố người xem — đáp án (con số) phải ở câu 2-3, không vòng vo
+        hook = "Trong 212 nước, Việt Nam đứng thứ mấy về khí thải CO2 mỗi người?"
+        self.assertTrue(story.is_guess_hook(hook))
+        self.assertFalse(story.is_guess_hook("Vì sao Hàn Quốc sinh ít con nhất thế giới?"))
+        self.assertFalse(story.is_guess_hook("Việt Nam đứng thứ 91 trong 212 nước."))
+        good = self.script(hook, "Thứ 91, ngay giữa bảng.", "Mỗi người thải 3,69 tấn mỗi năm.")
+        self.assertEqual(story.opening_problems(good), ([], []))
+        bad = self.script(hook, "Câu trả lời có thể làm bạn bất ngờ.", "Mỗi người Việt thải 3,69 tấn.")
+        hard, _ = story.opening_problems(bad)
+        self.assertTrue(any("đố người xem" in p for p in hard), hard)
+        ratio = self.script("Tỷ lệ điện tái tạo của Việt Nam gấp mấy lần thế giới?",
+                            "Gấp 1,37 lần, dù Việt Nam chỉ đứng thứ 77.", "Thế giới đạt 30%.")
+        self.assertEqual(story.opening_problems(ratio), ([], []))
+        from src.lang import using
+        with using("ko"):
+            ko = self.script("209개국 중 한국 산림 비율은 몇 위일까요?", "23위입니다.", "64.4%예요.")
+            self.assertEqual(story.guess_answer_problem(ko), "")
+            ko["scenes"][1]["voice"] = "답은 의외입니다."
+            ko["scenes"][2]["voice"] = "지도를 보시죠."
+            self.assertTrue(story.guess_answer_problem(ko))
+
     def test_relatable_small_numbers_are_not_table_reading(self):
         self.assertFalse(story.has_data_number("Tức là cứ 3 phụ nữ thì 2 người đi làm."))
         self.assertFalse(story.has_data_number("Việt Nam leo từ hạng 10 lên hạng 8."))

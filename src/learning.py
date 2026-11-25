@@ -83,6 +83,8 @@ KINDS = [
     ("spec_json", r"^không đọc được danh sách cảnh", "trả lời sai khuôn JSON", "trả về đúng một JSON array"),
     ("bia_so", r"không có trong bài nguồn|BỊA SỐ", "con số không có trong nguồn (thường do tự tính)",
      "chỉ dùng số có sẵn — tóm tắt đã tính sẵn tỷ số, số năm"),
+    ("hook_do", r"đố người xem", "câu mở đầu đố người xem mà không trả lời ngay",
+     "câu 2 trả lời ngay bằng con số (vd “Thứ 91.”)"),
     ("dinh_nghia", r"định nghĩa chỉ số", "câu định nghĩa chỉ số ở 15 giây đầu",
      "định nghĩa để trên chữ của biểu đồ, lời đọc chứng minh hook"),
     ("hai_cau_khong_so", r"hai câu liền nhau không có con số", "15 giây đầu có hai câu không số liền nhau",
@@ -263,8 +265,11 @@ def du_block(con) -> str:
 # --------------------------------------------------------------------- 3. học từ người xem
 def hook_type(text: str) -> str:
     """Kiểu câu mở đầu, khớp LUẬT HOOK của crew.HOOK_GUIDE: a) đối lập con số, b) mốc thời gian,
-    c) thứ hạng, d) câu hỏi; còn lại (điều ngược trực giác...) là 'khac'."""
+    c) thứ hạng, d) câu hỏi, f) đố người xem ('doan'); còn lại (điều ngược trực giác...) là 'khac'."""
     t = " ".join(str(text or "").lower().split())
+    from .story import is_guess_hook
+    if is_guess_hook(t):
+        return "doan"          # đố người xem, đáp án là con số ở câu 2 (26/11/2026) — tách khỏi câu hỏi khác để so
     if t.endswith("?"):
         return "cau-hoi"
     from . import lang

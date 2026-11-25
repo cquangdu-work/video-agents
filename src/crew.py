@@ -409,6 +409,9 @@ LUẬT HOOK (cảnh 1 — quyết định người xem có ở lại không):
   d) Câu hỏi có điều cụ thể (không phải câu hỏi chung chung): "Vì sao Hàn Quốc sinh ít con nhất
      thế giới dù giàu gấp 7 lần?"
   e) Điều ngược trực giác (phải có trong nguồn).
+  f) Đố người xem, đáp án là CON SỐ trong bảng: "Trong 212 nước, Việt Nam đứng thứ mấy về khí thải CO2 mỗi
+     người?" — rồi câu 2 trả lời NGAY ("Thứ 91, ngay giữa bảng."). Chỉ đố điều bảng số trả lời được (thứ hạng,
+     gấp mấy lần); người xem ở lại chờ đáp án và hay đoán trong bình luận. Máy kiểm câu 2-3 phải có đáp án.
 - 6-16 từ, có ít nhất một con số từ nguồn HOẶC một so sánh cụ thể. Hook là câu ĐỌC THÀNH TIẾNG:
   không hashtag, không emoji, không tên kênh.
 - Hook phải NÓI RÕ ĐANG ĐO CÁI GÌ ("ô tô điện", "lao động nông nghiệp", "vốn FDI"): người lướt tới không
@@ -435,7 +438,8 @@ NGÔN NGỮ — KÊNH NÀY DÀNH CHO NGƯỜI HÀN (ưu tiên hơn mọi ví d�
 - Tên nước đúng như trong tóm tắt (한국, 일본, 중국...). So sánh bằng con số, giọng trung tính — không khơi gợi đối
   đầu dân tộc (한일/한중 감정).
 - Ví dụ hook ĐÚNG KIỂU (không chép nguyên): a) "한국 출산율 0.75명, 일본보다 낮습니다." b) "2024년 한국은 1980년 일본
-  수준" — CHỈ khi tóm tắt có dòng "같은 수준" ghi đúng hai năm đó. c) "129개국 중 73위, 한국 근로시간의 의외의 순위".
+  수준" — CHỈ khi tóm tắt có dòng "같은 수준" ghi đúng hai năm đó. c) "129개국 중 73위, 한국 근로시간의 의외의 순위". f) đố: "209개국 중 한국 산림 비율은 몇 위일까요?" rồi câu 2
+  trả lời ngay "23위입니다." 
 - CẤM: mở bằng "왜…?" với ý tưởng bảng số; "충격", "경악", "소름", "하지 마세요", "알고 계셨나요", "안녕하세요",
   "오늘은"; câu đệm "데이터에 따르면", "통계에 따르면", "수치를 보면", "즉", "다시 말해"; nêu nguyên nhân (때문,
   정책, 덕분...) mà tóm tắt không nói; "역대 최고/최저" (bảng chỉ có từ năm đầu); "예상/전망/것입니다" cho năm đã
