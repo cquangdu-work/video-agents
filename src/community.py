@@ -57,6 +57,8 @@ def fetch_new(con, videos: list, token: str = None, api_key: str = None, fetch=N
     """Bình luận gốc CHƯA thấy bao giờ của các video. Đọc từ mới tới cũ, gặp bình luận đã lưu thì dừng."""
     from .publish import youtube
     fetch = fetch or youtube.comment_threads
+    from .publish.first_comment import own_comment_ids
+    own = own_comment_ids(con)            # bình luận đầu tiên do chính kênh đăng: không tự phân loại câu của mình
     out = []
     for v in videos:
         page = None
@@ -73,7 +75,7 @@ def fetch_new(con, videos: list, token: str = None, api_key: str = None, fetch=N
                     break
                 sn = ((item.get("snippet") or {}).get("topLevelComment") or {}).get("snippet") or {}
                 text = str(sn.get("textOriginal") or sn.get("textDisplay") or "").strip()
-                if text:
+                if text and item["id"] not in own:
                     out.append({"id": item["id"], "youtube_id": v["youtube_id"], "video_id": v["id"],
                                 "title": v.get("title") or "", "author": sn.get("authorDisplayName", ""),
                                 "text": text[:1000], "published_at": sn.get("publishedAt", ""),

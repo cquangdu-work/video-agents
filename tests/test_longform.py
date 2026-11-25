@@ -71,6 +71,31 @@ class PublishTest(unittest.TestCase):
         self.assertEqual(api.call_count, 2)
         self.assertEqual(tt.call_count, 1)                        # chỉ Shorts
 
+    def test_related_video_reminder_lists_the_chapter_shorts(self):
+        # 26/11/2026: video dài 1-2 lượt xem; nhãn "video liên quan" dưới Short là đường sang video dài, API không
+        # có trường này -> bot nhắc Du gắn tay, kèm link Studio của từng Short
+        import tempfile
+        from pathlib import Path
+        from src import db
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(db, "DB_PATH", Path(d) / "t.db"):
+            con = db.connect()
+            try:
+                for i, (title, yt) in enumerate((("Bản đồ CO2", "aaa"), ("Thịt", "bbb"), ("Chưa đăng", None)), 1):
+                    con.execute("INSERT INTO videos (id, script_id, file, title, youtube_id) VALUES (?,?,?,?,?)",
+                                (i, 10 + i, "f", title, yt))
+                con.commit()
+                long = {"id": 9, "script_id": None, "youtube_id": "LONG1"}
+                self.assertEqual(longform.related_video_message(con, long), "")      # chưa biết chương nào
+                db.set_state(con, "longform_chapters_9", json.dumps([1, 2, 3]))
+                msg = longform.related_video_message(con, long)
+            finally:
+                con.close()
+        self.assertIn("https://youtu.be/LONG1", msg)
+        self.assertIn("https://studio.youtube.com/video/aaa/edit", msg)
+        self.assertIn("https://studio.youtube.com/video/bbb/edit", msg)
+        self.assertNotIn("Chưa đăng", msg)                                    # Short chưa có trên YouTube
+        self.assertIn("cho 2 Short", msg)
+
 
 if __name__ == "__main__":
     unittest.main()

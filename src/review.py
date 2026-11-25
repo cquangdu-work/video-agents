@@ -1227,7 +1227,7 @@ def remind_facebook_access(con, now: datetime = None) -> bool:
     return True
 
 
-def check_scheduled(con, now: datetime = None) -> list:
+def check_scheduled(con, now: datetime = None, cfg: dict = None) -> list:
     """Video đã qua giờ hẹn công khai: hỏi YouTube chế độ hiển thị thật. Vẫn riêng tư thì báo Du
     (project API chưa qua audit thì YouTube khoá video ở riêng tư — giờ hẹn không có tác dụng).
     Trả về [(video_id, chế độ hiển thị)] của những video vừa soát."""
@@ -1246,7 +1246,23 @@ def check_scheduled(con, now: datetime = None) -> list:
         db.update_video(con, r["id"], youtube_privacy=privacy)
         db.set_state(con, f"yt_publish_at_{r['id']}", "")          # mỗi video chỉ soát một lần
         if privacy == "public":
-            tg.send_message(f"🌐 Video #{r['id']} đã công khai đúng giờ: {r['youtube_url']}")
+            note = ""
+            try:                     # bình luận đầu tiên của kênh (src/publish/first_comment.py) — lỗi không ảnh hưởng gì
+                from .publish import first_comment
+                if first_comment.post(con, db.get_video(con, r["id"]), cfg or load_config()):
+                    note = "\n💬 Đã đăng bình luận đầu tiên của kênh (câu hỏi mời người xem trả lời)"
+            except Exception as exc:
+                log.warning("Bình luận đầu tiên video #%s lỗi: %s", r["id"], exc)
+            tg.send_message(f"🌐 Video #{r['id']} đã công khai đúng giờ: {r['youtube_url']}{note}")
+            video = db.get_video(con, r["id"])
+            if video and not video.get("script_id"):       # video dài: nhắc gắn "video liên quan" từ các Short
+                try:
+                    from . import longform
+                    msg = longform.related_video_message(con, video)
+                    if msg:
+                        tg.send_message(msg)
+                except Exception as exc:
+                    log.warning("Tin nhắc video liên quan #%s lỗi: %s", r["id"], exc)
         else:
             tg.send_message(
                 f"⚠️ Video #{r['id']} đã quá giờ hẹn nhưng vẫn “{privacy}”: {r['youtube_url']}\n"
@@ -1285,7 +1301,7 @@ def housekeeping(con, cfg: dict, now: datetime = None) -> None:
     """Các việc chạy định kỳ trong vòng lặp listen; lỗi ở đây không được làm sập bot."""
     yt = cfg["publish"]["youtube"]
     for job in (lambda: retry_quota_waits(con, cfg, now),
-                lambda: remind_token(con, yt, now), lambda: check_scheduled(con, now),
+                lambda: remind_token(con, yt, now), lambda: check_scheduled(con, now, cfg),
                 lambda: publish_instagram_due(con, cfg, now), lambda: publish_ig_posts_due(con, cfg, now),
                 lambda: remind_facebook_access(con, now)):
         try:

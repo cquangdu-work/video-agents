@@ -301,6 +301,42 @@ class ReviewFlowTest(DbCase):
         self.assertFalse(review.remind_token(self.con, yt, now))         # cùng ngày: không nhắc lại
         self.assertFalse(review.remind_token(self.con, dict(yt, oauth_token_days=None), now))  # Production
 
+    def test_channel_posts_one_first_comment_when_the_video_goes_public(self):
+        # 26/11/2026 (Du đồng ý): bình luận ≈ 0 ở mọi video -> kênh mở lời bằng một câu hỏi khi video công khai
+        res = {"id": "abcdefghijk", "url": "https://youtube.com/shorts/abcdefghijk", "privacy": "private",
+               "requested_privacy": "private", "publish_at": "2026-11-13T12:00:00Z"}
+        cfg = json.loads(json.dumps(CFG)); cfg["publish"]["youtube"].update(mode="api", first_comment=True)
+        with mock.patch.object(youtube, "upload", return_value=res):
+            review.handle_update(self.con, cb(f"ok:{self.vid}"), cfg)
+        after = datetime(2026, 11, 13, 13, 0, tzinfo=timezone.utc)
+        with mock.patch.object(youtube, "get_status", return_value={"privacyStatus": "public"}), \
+                mock.patch.object(youtube, "has_scope", return_value=True), \
+                mock.patch.object(youtube, "access_token", return_value="t"), \
+                mock.patch.object(youtube, "post_comment", return_value="Ugx1") as post:
+            self.assertEqual(review.check_scheduled(self.con, after, cfg), [(self.vid, "public")])
+            from src.publish import first_comment
+            self.assertEqual(first_comment.post(self.con, db.get_video(self.con, self.vid), cfg), "")  # chỉ một lần
+        self.assertEqual(post.call_count, 1)
+        vid_arg, text = post.call_args[0][:2]
+        self.assertEqual(vid_arg, "abcdefghijk")
+        self.assertTrue(text.strip() and "?" in text and "http" not in text, text)
+        self.assertIn("bình luận đầu tiên", self.calls("send_message")[-1][1][0])
+        self.assertEqual(first_comment.own_comment_ids(self.con), {"Ugx1"})
+        # tắt trong cấu hình thì không đăng
+        cfg["publish"]["youtube"]["first_comment"] = False
+        self.assertEqual(first_comment.post(self.con, {"id": 99, "youtube_id": "x", "script_id": 1}, cfg,
+                                            poster=lambda *a: "never"), "")
+
+    def test_first_comment_text_follows_channel_language_and_video_type(self):
+        from src.lang import using
+        from src.publish import first_comment as fc
+        self.assertIn("Số liệu: World Bank Open Data",
+                      fc.text_for({"id": 1, "script_id": 5}, "World Bank Open Data"))
+        self.assertNotIn("{source}", fc.text_for({"id": 1, "script_id": 5}, ""))   # thiếu nguồn: mẫu không có nguồn
+        self.assertIn("Tuần sau", fc.text_for({"id": 2, "script_id": None}))
+        with using("ko"):
+            self.assertIn("출처", fc.text_for({"id": 2, "script_id": 5}, "Our World in Data"))
+
     def test_scheduled_video_still_private_after_its_time_is_reported(self):
         res = {"id": "abcdefghijk", "url": "https://youtube.com/shorts/abcdefghijk", "privacy": "private",
                "requested_privacy": "private", "publish_at": "2026-11-13T12:00:00Z"}

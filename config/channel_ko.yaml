@@ -312,6 +312,9 @@ publish:
     made_for_kids: false
     contains_synthetic_media: true
     notify_subscribers: true
+    # Bình luận đầu tiên của kênh khi video công khai — một câu hỏi mời người xem trả lời (src/publish/first_comment.py,
+    # Du đồng ý 26/11/2026). false = tắt.
+    first_comment: true
     publish_time_local: "19:00"   # giờ tối Hàn Quốc
     # 2 video/ngày (24/11/2026): mỗi khung một video, khung sớm nhất còn trống (youtube.compute_publish_at)
     publish_times_local: ["12:00", "19:00"]
@@ -384,7 +387,7 @@ profile:
     title: ["숫자세계"]
     accent: "숫자"
     tagline: "지도·그래프·순위 레이스로 보는 한국과 세계"
-    chip: "매일 저녁 7시 새 영상"
+    chip: "매일 낮 12시 · 저녁 7시 새 영상"     # 2 video/ngày từ 25/11/2026
     sources: "데이터: 세계은행 · Our World in Data · KOSIS"
   youtube:
     language: ko
@@ -397,13 +400,13 @@ profile:
       📊 데이터: 세계은행(World Bank), Our World in Data, KOSIS 국가통계포털 — 출처는 영상 화면과 설명란에 표시합니다.
       ✅ 모든 숫자는 영상을 만들기 전에 원본 데이터와 대조합니다.
       🤖 내레이션은 AI 음성입니다. 대본은 AI의 도움을 받아 작성하며, 채널 운영자가 모든 영상을 직접 검토한 뒤 공개합니다.
-      🕖 매일 저녁 7시(한국 시간)에 새 영상이 올라옵니다.
+      🕖 매일 낮 12시와 저녁 7시(한국 시간)에 새 영상이 올라옵니다.
     keywords: ["숫자세계", "데이터", "통계", "세계 순위", "한국", "일본", "OECD", "지도", "그래프", "경제", "인구",
                "데이터 시각화", "인포그래픽"]
   facebook_about: "숫자로 보는 한국과 세계 — 지도와 그래프로 매일 한 편씩."
   tiktok_bio: "숫자로 보는 한국과 세계 📊 지도·그래프·순위 레이스, 매일 새 영상"
   instagram_name: "숫자세계 | 데이터로 보는 세계"
-  instagram_bio: "숫자로 보는 한국과 세계 📊\n지도·그래프·순위 레이스\n매일 저녁 7시 새 영상"
+  instagram_bio: "숫자로 보는 한국과 세계 📊\n지도·그래프·순위 레이스\n매일 낮 12시 · 저녁 7시 새 영상"
   # Bài giới thiệu ghim đầu trang Instagram (ảnh assets/brand/ko/instagram_intro.jpg — src/brand_kit.py), đăng MỘT lần
   # bằng src/channel_profile.py --ig-intro --apply sau khi Du duyệt.
   instagram_intro: |-

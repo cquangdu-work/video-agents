@@ -387,6 +387,30 @@ def preview(path: Path) -> Path:
     return out
 
 
+def related_video_message(con, video: dict) -> str:
+    """Tin nhắc Du gắn "video liên quan" từ các Short làm chương sang video dài vừa công khai (26/11/2026).
+
+    Vì sao: video dài hằng tuần chỉ được 1-2 lượt xem; Shorts mỗi video ~1.000 lượt từ luồng Shorts. Nhãn "video
+    liên quan" dưới Short là đường đưa người xem Shorts sang video dài (giờ xem cho YPP). YouTube Data API KHÔNG có
+    trường này -> Du gắn tay trong Studio, ~10 giây mỗi Short. Trả "" nếu không biết chương nào."""
+    try:
+        ids = json.loads(db.get_state(con, f"longform_chapters_{video['id']}") or "[]")
+    except ValueError:
+        ids = []
+    rows = [con.execute("SELECT id, title, youtube_id FROM videos WHERE id = ?", (i,)).fetchone() for i in ids]
+    rows = [r for r in rows if r and r["youtube_id"]]
+    if not rows or not video.get("youtube_id"):
+        return ""
+    lines = [f"{k}. {str(r['title'])[:60]}\n   https://studio.youtube.com/video/{r['youtube_id']}/edit"
+             for k, r in enumerate(rows, 1)]
+    return (f"🔗 Video dài #{video['id']} đã công khai: https://youtu.be/{video['youtube_id']}\n"
+            f"Gắn nó làm “Video liên quan” cho {len(rows)} Short dưới đây (YouTube không có API cho việc này, ~10 giây"
+            " mỗi Short): mở link → mục “Video liên quan” (Related video) → chọn video dài → Lưu. Trên điện thoại: ứng"
+            " dụng YouTube Studio → Short → Chỉnh sửa → Video liên quan.\n"
+            "Người xem Short sẽ thấy nhãn bấm sang video dài — đường chính để video dài có lượt xem (giờ xem cho YPP)."
+            "\n\n" + "\n".join(lines))
+
+
 def send(result: dict) -> int:
     from . import telegram_bot as tg
     con = db.connect()
@@ -400,6 +424,8 @@ def send(result: dict) -> int:
              datetime.now(timezone.utc).isoformat(timespec="seconds")))
         con.commit()
         vid = cur.lastrowid
+        # nhớ các Short làm chương: khi video dài công khai, bot nhắc Du gắn "video liên quan" (related_video_message)
+        db.set_state(con, f"longform_chapters_{vid}", json.dumps(result.get("video_ids") or []))
         qc_line = " · ".join(f"{'✅' if c['ok'] else '❌'} {c['name']}: {c['value']}" for c in res)
         caption = (f"🎞️ VIDEO DÀI #{vid} chờ duyệt ({len(result['chapters'])} chương, ghép Shorts tuần này)\n"
                    f"📌 {result['title']}\n\nKiểm định: {qc_line}\n"

@@ -527,6 +527,20 @@ def reply_comment(parent_id: str, text: str, token: str) -> str:
     return r.json().get("id", "")
 
 
+def post_comment(video_id: str, text: str, token: str) -> str:
+    """Đăng một bình luận GỐC dưới video của kênh (tên kênh đứng tên) — bình luận đầu tiên do code ghép từ mẫu
+    (src/publish/first_comment.py, Du đồng ý 26/11/2026). Tốn 50 đơn vị quota. Trả về id chuỗi bình luận."""
+    r = requests.post(f"{API_URL}/commentThreads", params={"part": "snippet"}, timeout=30,
+                      headers={"Authorization": f"Bearer {token}"},
+                      json={"snippet": {"videoId": video_id,
+                                        "topLevelComment": {"snippet": {"textOriginal": text}}}})
+    if r.status_code in (401, 403) and ("insufficient" in r.text.lower() or "PERMISSION_DENIED" in r.text):
+        raise YouTubeAuthError("Token chưa có quyền đăng bình luận — gửi /capquyen cho bot")
+    if r.status_code != 200:
+        raise YouTubeUploadError(f"Không đăng được bình luận ({r.status_code}): {r.text[:200]}")
+    return r.json().get("id", "")
+
+
 def my_channel_id(token: str) -> str:
     """ID kênh của token hiện tại (1 đơn vị quota). Không commit ID kênh vào repo — chỉ lưu ở DB trên VM."""
     r = requests.get(f"{API_URL}/channels", timeout=30, params={"part": "id", "mine": "true"},

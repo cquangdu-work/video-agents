@@ -364,6 +364,9 @@ publish:
     made_for_kids: false
     contains_synthetic_media: true   # khai báo nội dung AI (giọng đọc AI) theo CLAUDE.md
     notify_subscribers: true
+    # Bình luận đầu tiên của kênh khi video công khai — một câu hỏi mời người xem trả lời (src/publish/first_comment.py,
+    # Du đồng ý 26/11/2026). false = tắt.
+    first_comment: true
     # Hẹn giờ công khai (chỉ áp dụng mode api + privacy private). null = không hẹn.
     publish_time_local: "19:00" # giờ tối Việt Nam; null = công khai ngay khi upload
     utc_offset_hours: 7         # múi giờ của người xem chính (Việt Nam = +7)

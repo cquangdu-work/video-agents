@@ -189,6 +189,13 @@ class CommunityTest(Case):
         got = community.fetch_new(self.con, [{"id": 1, "youtube_id": "vid1aaaaaaa", "title": "t"}], fetch=self.fetch)
         self.assertEqual([c["id"] for c in got], ["c5", "c4"])
 
+    def test_the_channels_own_first_comment_is_not_classified(self):
+        # 26/11/2026: kênh tự đăng bình luận đầu tiên (src/publish/first_comment.py) — không tự trả lời chính mình
+        db.set_state(self.con, "yt_comment_1", "c4")
+        got = community.fetch_new(self.con, [{"id": 1, "youtube_id": "vid1aaaaaaa", "title": "t"}], fetch=self.fetch)
+        self.assertNotIn("c4", [c["id"] for c in got])
+        self.assertEqual(len(got), 4)
+
     def test_one_unreadable_video_does_not_sink_the_run(self):
         def fetch(video_id, **kw):
             if video_id == "private0000":
