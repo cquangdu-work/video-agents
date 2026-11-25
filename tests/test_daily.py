@@ -112,6 +112,24 @@ class PickTest(DailyCase):
         self.assertEqual(daily.streak("viet-han", ["viet-han", "viet-han", "the-gioi"]), 2)
         self.assertEqual(daily.streak("the-gioi", ["viet-han", "the-gioi"]), 0)
 
+    def test_script_without_the_viewers_country_counts_as_one_more_day_of_the_same_family(self):
+        # 26/11/2026: ý tưởng không nhắc Việt Nam (Voyager 35 lượt) chỉ được dựng khi kịch bản có nhắc đều cùng mảng
+        # với video hôm qua
+        from src.sources import datatable as dt
+        self.script(1, 26.5); self.script(2, 30.0); self.script(3, 20.0)
+        for sid, src, title in ((1, dt.WB_SOURCE, "Điện tiêu thụ: Việt Nam và Hàn Quốc"),
+                                (2, dt.OWID_SOURCE, "Voyager 1 cách Trái Đất một ngày ánh sáng"),
+                                (3, dt.OWID_SOURCE, "Bản đồ thế giới: CO2 mỗi người — Việt Nam thứ 91/212")):
+            self.con.execute("UPDATE ideas SET source_name=?, title=? WHERE id=?", (src, title, sid))
+        self.script(9, 30.0)
+        self.con.execute("UPDATE ideas SET source_name=? WHERE id=9", (dt.KOSIS_SOURCE,))
+        vid = db.upsert_video(self.con, 9, "f", "T", "D", [], [])
+        db.update_video(self.con, vid, tg_message_id=5)            # hôm qua: video Việt–Hàn
+        self.con.commit()
+        picked = daily.pick_candidates(self.con, CFG)
+        self.assertEqual([c["id"] for c in picked], [3, 2, 1])
+        self.assertEqual([c["streak"] for c in picked], [0, 1, 1])
+
     def test_too_short_legacy_script_is_skipped_before_spending_tts(self):
         # Ca thật trên VM: kịch bản đời cũ 3 cảnh ~115 từ có điểm CAO NHẤT nên bị chọn trước
         self.script(1, 26.5, words=110)

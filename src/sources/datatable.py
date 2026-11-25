@@ -34,6 +34,23 @@ def topic_family(source_name) -> str:
     return "bai-bao"
 
 
+# NƯỚC CỦA NGƯỜI XEM (26/11/2026): kênh Việt neo Việt Nam, kênh Hàn neo Hàn Quốc. Đo thật tới 26/11: video không
+# nhắc nước của người xem xem kém hẳn — kênh Hàn: cà phê (top 10 không có Hàn) 610, điện châu Á 61 lượt so với
+# ~1.200 của mọi video có Hàn Quốc; kênh Việt: Voyager 35, sao khổng lồ 372 so với 724-1.335 của bản đồ/biểu đồ có
+# Việt Nam. Chỉ HẠ ưu tiên (main.balance_families, daily.pick_candidates), không cấm — vẫn còn chỗ cho chủ đề khác.
+ANCHOR_NAMES = {"vi": ("việt nam", "người việt"), "ko": ("한국",)}
+ANCHOR_CHARS = 600            # tiêu đề + đầu tóm tắt (bảng mọi nước ở cuối tóm tắt bản đồ thì nước nào cũng có tên)
+
+
+def anchored(idea: dict) -> bool:
+    """Ý tưởng có nói tới nước của người xem (tiêu đề hoặc đầu tóm tắt). Số thống kê Hàn Quốc (KOSIS) ở kênh Hàn và
+    số vừa công bố luôn tính là có (tóm tắt ghi 전국/시도, không nhất thiết có chữ "한국")."""
+    if is_fresh(idea) or (lang.code() == "ko" and idea.get("source_name") == KOSIS_SOURCE):
+        return True
+    text = (str(idea.get("title") or "") + " " + str(idea.get("summary") or "")[:ANCHOR_CHARS]).lower()
+    return any(name in text for name in ANCHOR_NAMES.get(lang.code(), ()))
+
+
 def vn_number(x: float) -> str:
     """Viết số theo kiểu của KÊNH (src/lang.py), làm tròn vừa đủ để ĐỌC được: kênh Việt 36226.97 -> '36.227',
     83.74 -> '83,7', 0.721 -> '0,72' (kênh Hàn: '36,227', '83.7', '0.72'). Biên kịch chép nguyên dạng này

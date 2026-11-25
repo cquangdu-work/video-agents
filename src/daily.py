@@ -178,7 +178,7 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
     công) -> điểm Biên tập + điểm "người xem thích" đã học (src/learning.py) -> mới hơn.
     """
     from . import growth, learning
-    from .sources.datatable import is_fresh, topic_family
+    from .sources.datatable import anchored, is_fresh, topic_family
     prefs = learning.preferences()
     fb_prefs = learning.preferences("fb_preferences")
     ig_prefs = learning.preferences("ig_preferences")      # kênh Hàn: người xem Instagram (src/ig_insights.py)
@@ -245,7 +245,11 @@ def pick_candidates(con, cfg: dict, now: datetime = None) -> list:
         # agent Tăng trưởng (src/growth.py): cùng mảng + dạng với video ĐỘT BIẾN gần đây thì làm trước
         boost = growth.boost_for(feats["family"], feats["kind"], grow)
         out.append({"id": r["id"], "score": score, "has_final": final_path(r["id"]).exists(),
-                    "family": family, "kind": feats["kind"], "streak": streak(family, recent),
+                    "family": family, "kind": feats["kind"],
+                    # không nhắc nước của người xem (datatable.anchored) = coi như làm lại mảng hôm qua thêm một
+                    # ngày: chỉ được dựng khi kịch bản có nhắc đều cùng mảng với video gần nhất
+                    "streak": streak(family, recent) + (0 if anchored({"title": r["title"], "summary": r["summary"]})
+                                                        else 1),
                     "fresh": is_fresh({"summary": r["summary"]}),
                     "theme": bool(theme and themes.matches(theme, r["title"], r["summary"])),
                     "long": words > max_words, "learned": bonus, "boost": boost})

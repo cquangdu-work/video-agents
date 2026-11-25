@@ -174,6 +174,23 @@ class FamilyTest(unittest.TestCase):
         self.assertEqual([i["id"] for i in main.balance_families(ideas)], [1, 3, 4, 2, 6, 5])
         self.assertEqual(main.balance_families([]), [])
 
+    def test_ideas_without_the_viewers_country_wait_behind(self):
+        # 26/11/2026: video không nhắc nước của người xem xem kém hẳn (Voyager 35, cà phê kênh Hàn 610 lượt)
+        vn = lambda i, src: {"id": i, "source_name": src, "title": f"Bản đồ thế giới: chỉ số {i} — Việt Nam thứ 9"}
+        far = lambda i, src: {"id": i, "source_name": src, "title": "NASA's Voyager 1 is now one light-day away"}
+        ideas = [far(1, "ScienceDaily"), vn(2, datatable.WB_SOURCE), vn(3, datatable.OWID_SOURCE),
+                 far(4, datatable.OWID_SOURCE), vn(5, datatable.WB_SOURCE)]
+        # cần 2 kịch bản: hai ý tưởng có Việt Nam viết trước, ý tưởng xa tốt nhất đứng ngay sau (dự phòng)
+        self.assertEqual([i["id"] for i in main.balance_families(ideas, 2)], [2, 3, 1, 5, 4])
+        self.assertTrue(datatable.anchored({"title": "x", "summary": "Chỉ số: … Việt Nam: 3,69 tấn"}))
+        self.assertFalse(datatable.anchored({"title": "x", "summary": "a" * 700 + " Việt Nam"}))  # chỉ đầu tóm tắt
+        from src.lang import using
+        with using("ko"):
+            self.assertTrue(datatable.anchored({"title": "세계 지도: 산림 면적 비율 — 한국 209개국 중 23위"}))
+            self.assertFalse(datatable.anchored({"title": "커피 생산량 순위 경쟁: 세계 상위 10개국"}))
+            self.assertTrue(datatable.anchored({"title": "이번 달 통계: 출생아 수",
+                                                "source_name": datatable.KOSIS_SOURCE}))
+
     def test_owid_ideas_say_where_the_numbers_come_from_instead_of_a_second_source(self):
         names = fake_names()
         item = owid.build_map(dict(CHART, origin="Tổ chức Y tế Thế giới (WHO)"), fake_table(names), names,

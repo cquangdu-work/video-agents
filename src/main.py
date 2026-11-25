@@ -146,7 +146,7 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
         topic_family(i.get("source_name")), learning.video_kind(i.get("title"), i.get("source_name")), grow) \
         + (FRESH_POINTS if is_fresh(i) else 0) \
         + (THEME_POINTS if theme and themes.matches(theme, i.get("title"), i.get("summary")) else 0)
-    selected = balance_families(sorted(selected, key=lambda i: -(i["score"] + boost(i))))
+    selected = balance_families(sorted(selected, key=lambda i: -(i["score"] + boost(i))), want)
     # Kịch bản hụt chuẩn (thiếu số, quá ngắn) không được tính -> thử thêm ý tưởng kế
     # tiếp theo điểm, nhưng có trần để không đốt quota LLM vô hạn.
     selected = selected[: want + int(cfg["daily"].get("extra_script_tries", 2))]
@@ -198,24 +198,37 @@ def run_agents(cfg: dict, con, use_telegram: bool = True) -> int:
     return sent
 
 
-def balance_families(ideas: list) -> list:
+def balance_families(ideas: list, want: int = None) -> list:
     """Xếp xen kẽ các mảng chủ đề (datatable.topic_family: viet-han / the-gioi / bai-bao), trong
     mỗi mảng giữ thứ tự điểm; mảng có ý tưởng điểm cao nhất đi trước.
     [VH 26, VH 25, TG 24, BB 23] -> [VH 26, TG 24, BB 23, VH 25].
 
     Biên tập (model) hay chấm ý tưởng Việt–Hàn cao nhất vì bảng số dày đặc -> 3 suất viết kịch bản
     mỗi ngày đều về một mảng (ca thật 13-18/11). Xen kẽ thì mảng nào có ý tưởng đạt điểm sàn
-    cũng được viết ít nhất một kịch bản."""
-    from .sources.datatable import topic_family
-    queues = {}
-    for idea in ideas:
-        queues.setdefault(topic_family(idea.get("source_name")), []).append(idea)
-    out = []
-    while any(queues.values()):
-        for q in queues.values():
-            if q:
-                out.append(q.pop(0))
-    return out
+    cũng được viết ít nhất một kịch bản.
+
+    26/11/2026: ý tưởng KHÔNG nhắc nước của người xem (datatable.anchored) xem kém hẳn -> xếp SAU `want` ý tưởng
+    có nhắc (ý tưởng tốt nhất trong số đó đứng ngay sau, được viết khi một kịch bản phía trước hỏng)."""
+    from .sources.datatable import anchored, topic_family
+
+    def interleave(items: list) -> list:
+        queues = {}
+        for idea in items:
+            queues.setdefault(topic_family(idea.get("source_name")), []).append(idea)
+        out = []
+        while any(queues.values()):
+            for q in queues.values():
+                if q:
+                    out.append(q.pop(0))
+        return out
+
+    near = [i for i in ideas if anchored(i)]
+    far = [i for i in ideas if not anchored(i)]
+    if not near or not far:
+        return interleave(ideas)
+    near, far = interleave(near), interleave(far)
+    k = len(near) if want is None else max(int(want), 0)
+    return near[:k] + far[:1] + near[k:] + far[1:]
 
 
 def source_text_for(idea: dict, fetch) -> str:
