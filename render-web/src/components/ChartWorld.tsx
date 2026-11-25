@@ -91,11 +91,14 @@ export const ChartWorld: React.FC<{ world: World; scenes: Scene[]; t: number; br
   for (let i = 0; i < plans.length; i++) if (plans[i].start <= t + 1e-6) k = i;
   const p = plans[k], st = p.st, tl = t - p.start, dur = p.end - p.start;
 
-  const opacity = st ? (p.prevVisible ? 1 : ramp(tl, 0, 0.4)) : (p.prevVisible ? 1 - ramp(tl, 0, 0.35) : 0);
+  // Biểu đồ là cảnh ĐẦU video (26/11/2026): hiện đủ ngay khung 0 và đường bắt đầu vẽ ngay — trước đó khung đầu chỉ có
+  // tiêu đề trên nền trống (hiện dần 0,4 giây, đường đợi 8% cảnh), đúng lúc người xem quyết định lướt qua hay không.
+  const first = p.start <= 1e-6;
+  const opacity = st ? (p.prevVisible || first ? 1 : ramp(tl, 0, 0.4)) : (p.prevVisible ? 1 - ramp(tl, 0, 0.35) : 0);
   if (opacity <= 0.001) return null;
 
   const drawn = !st ? p.drawFrom
-    : st.mode === "full" ? lerp(p.drawFrom, p.drawEnd, ramp(tl, 0.08 * dur, 0.7 * dur, Easing.inOut(Easing.cubic)))
+    : st.mode === "full" ? lerp(p.drawFrom, p.drawEnd, ramp(tl, first ? 0 : 0.08 * dur, 0.7 * dur, Easing.inOut(Easing.cubic)))
       : lerp(p.drawFrom, p.drawEnd, ramp(tl, 0.1, 0.9));
   const move = ramp(tl, 0, MOVE);
   const [x0, x1, y0, y1] = st ? lerpView(p.prevView, targetView(w, st, drawn, tl, dur), move) : p.prevView;

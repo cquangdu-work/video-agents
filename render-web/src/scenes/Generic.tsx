@@ -19,7 +19,13 @@ const exitOf = (tl: number, dur: number) => 1 - ramp(tl, dur - 0.15, dur);
 // k: mức "mọc" của HÌNH (thanh, cột, vòng %) — chiều dài/độ lớn của nó chính là số liệu. CON SỐ thì KHÔNG đếm chạy từ 0
 // nữa (24/11/2026, Du: "chuyển động phải giúp hiểu số liệu, không chỉ để trang trí"): khung giữa chừng của hiệu ứng đếm
 // hiện số không có trong dữ liệu (video #10: "3,89 lần" trên đường đếm tới 4,91) — số hiện ĐÚNG giá trị và bật lên.
-const countK = (tl: number, dur: number) => ramp(tl, 0.05 * dur, 0.62 * dur, Easing.out(Easing.cubic));
+// Cảnh MỞ ĐẦU (hook, 26/11/2026): hình mọc xong ở tl ≈ 1,0 — Story.tsx cho cảnh mở đầu chạy trước 0,6 giây nên khung đầu
+// đã có hình gần đủ và chỉ còn ~0,4 giây chuyển động; trước đó cột/vòng còn gần 0 suốt 1-2 giây đầu (37-63% người xem lướt qua).
+const countK = (tl: number, dur: number, hook = false) =>
+  ramp(tl, 0.05 * (hook ? 1 : dur), hook ? 1.0 : 0.62 * dur, Easing.out(Easing.cubic));
+/** Mọc của phần tử thứ i (cột, thanh) — lệch nhau một chút; cảnh mở đầu mọc nhanh như countK. */
+const growK = (tl: number, dur: number, hook: boolean, delay: number) =>
+  ramp(tl, 0.1 + delay, (hook ? 1.0 : 0.62 * dur) + (hook ? delay : 0), Easing.out(Easing.cubic));
 /** Cỡ chữ để một chuỗi số vừa bề ngang `width` (ước lượng ~0,6 em mỗi ký tự với font đậm). */
 const fitSize = (text: string, width: number, max: number) => Math.min(max, width / (0.62 * Math.max(text.length, 1)));
 
@@ -132,7 +138,8 @@ const PeopleGrid: React.FC<{ s: BigNumberScene; brand: Brand; tl: number; dur: n
   const iso = s.isotype!;
   const COLS = 10, CELL = 64, LEFT = (1080 - COLS * CELL) / 2;
   const Item = iso.icon ? ICONS[iso.icon] : undefined;
-  const at = 0.1 * dur, span = 0.5 * dur;
+  const hook = React.useContext(HookContext);
+  const at = hook ? 0.4 : 0.1 * dur, span = hook ? 0.6 : 0.5 * dur;
   const cells: React.ReactNode[] = [];
   for (let i = 0; i < 100; i++) {
     const r = Math.floor(i / COLS), c = i % COLS;
@@ -190,7 +197,7 @@ export const BigNumber: React.FC<P<BigNumberScene>> = ({ s, brand, tl, dur }) =>
 
 // ------------------------------------------------------------------ so găng
 export const Versus: React.FC<P<VersusScene>> = ({ s, brand, tl, dur }) => {
-  const k = countK(tl, dur);
+  const k = countK(tl, dur, React.useContext(HookContext));
   const panel = !!s.chart;
   const sides: [Valued, number][] = [[s.left, 280], [s.right, 800]];
   const longest = Math.max(fmtDec(s.left.value, s.left.dec).length, fmtDec(s.right.value, s.right.dec).length);
@@ -236,7 +243,7 @@ const ColumnChart: React.FC<P<BarChartScene>> = ({ s, brand, tl, dur }) => {
   const items = s.items.slice(0, 6);
   const n = items.length;
   const vmax = Math.max(...items.map((i) => Math.abs(i.value)), 1e-9);
-  const k = countK(tl, dur);
+  const hook = React.useContext(HookContext);
   const slot = 900 / Math.max(n, 1), colW = Math.min(150, slot * 0.62), base = 1150, maxH = 560;
   return (
     <AbsoluteFill style={{ opacity: exitOf(tl, dur) }}>
@@ -244,7 +251,7 @@ const ColumnChart: React.FC<P<BarChartScene>> = ({ s, brand, tl, dur }) => {
       <div style={{ position: "absolute", left: 80, right: 80, top: base, height: 3, background: brand.muted, opacity: 0.4 }} />
       {items.map((it, i) => {
         const cx = 90 + slot * (i + 0.5);
-        const grow = ramp(tl, 0.1 + i * 0.07, 0.62 * dur, Easing.out(Easing.cubic));
+        const grow = growK(tl, dur, hook, i * 0.07);
         const h = Math.max(maxH * Math.max(it.value, 0) / vmax * grow, 4);
         const appear = ramp(tl, 0.05 + i * 0.07, 0.3 + i * 0.07);
         return (
@@ -271,7 +278,7 @@ const ColumnChart: React.FC<P<BarChartScene>> = ({ s, brand, tl, dur }) => {
 const HorizontalBars: React.FC<P<BarChartScene>> = ({ s, brand, tl, dur }) => {
   const items = s.items.slice(0, 6);
   const vmax = Math.max(...items.map((i) => Math.abs(i.value)), 1e-9);
-  const k = countK(tl, dur);
+  const hook = React.useContext(HookContext);
   // ít hàng thì hàng to hơn và cả khối căn giữa vùng 380-1300 (không dồn lên trên, trống phía dưới)
   const pitch = Math.min(200, 860 / Math.max(items.length, 1));
   const barH = Math.round(Math.min(70, pitch * 0.36));
@@ -282,7 +289,7 @@ const HorizontalBars: React.FC<P<BarChartScene>> = ({ s, brand, tl, dur }) => {
       {items.map((it, i) => {
         const top = top0 + i * pitch;
         const appear = ramp(tl, 0.05 + i * 0.08, 0.3 + i * 0.08);
-        const w = 640 * Math.max(it.value, 0) / vmax * ramp(tl, 0.1 + i * 0.08, 0.62 * dur, Easing.out(Easing.cubic));
+        const w = 640 * Math.max(it.value, 0) / vmax * growK(tl, dur, hook, i * 0.08);
         return (
           <div key={i} style={{ position: "absolute", top, left: 90, right: 60, opacity: appear }}>
             <div style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 38, fontWeight: 800, color: it.color }}>
@@ -304,7 +311,7 @@ const HorizontalBars: React.FC<P<BarChartScene>> = ({ s, brand, tl, dur }) => {
 
 // ------------------------------------------------------------------ phần trăm
 export const PercentRing: React.FC<P<PercentScene>> = ({ s, brand, tl, dur }) => {
-  const k = countK(tl, dur);
+  const k = countK(tl, dur, React.useContext(HookContext));
   const v = Math.max(0, Math.min(s.value, 100));
   const R = 270, C = 2 * Math.PI * R;
   return (

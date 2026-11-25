@@ -3,7 +3,7 @@ import { AbsoluteFill, Easing, Img, staticFile } from "remotion";
 import { BarRaceScene, Brand, MapLabel, MapScene } from "../types";
 import { lerp, pop, ramp } from "../lib/anim";
 import { LANG } from "../lib/locale";
-import { SceneTitle } from "./Generic";
+import { HookContext, SceneTitle } from "./Generic";
 
 // BẢN ĐỒ và CUỘC ĐUA SỐ LIỆU. Mọi hình học do Python tính (src/render/web_map.py) — kể cả
 // Hoàng Sa, Trường Sa luôn có mặt, cùng màu Việt Nam, có tên. Ở đây chỉ tô màu và chuyển động.
@@ -24,7 +24,11 @@ const Label: React.FC<{ l: MapLabel; brand: Brand }> = ({ l, brand }) => (
 );
 
 export const MapView: React.FC<P<MapScene>> = ({ s, brand, tl, dur }) => {
-  const fillStart = 0.35, fillSpan = Math.max(0.6, 0.4 * dur);
+  // Cảnh MỞ ĐẦU (26/11/2026): bản đồ tô gần xong ngay khung đầu, viền nước mình + bảng số hiện trong ~0,5 giây.
+  // Đo thật: tô dần tới giây ~2,5 làm khung 0 gần như màn hình tối, 37-63% người xem lướt qua ngay giây đầu.
+  // (Story.tsx đã cho cảnh mở đầu chạy trước HOOK_HEAD = 0,6 giây: tl ở khung đầu = 0,6.)
+  const hook = React.useContext(HookContext);
+  const fillStart = hook ? 0.1 : 0.35, fillSpan = hook ? 0.8 : Math.max(0.6, 0.4 * dur);
   const fillEnd = fillStart + fillSpan;
   const late = ramp(tl, fillEnd - 0.1, fillEnd + 0.4);
   const cam = lerp(1.0, 1.035, ramp(tl, 0, dur, Easing.linear));
