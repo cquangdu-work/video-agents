@@ -174,6 +174,36 @@ class BotTest(DbCase):
         up.assert_not_called()
         self.assertFalse(any("TikTok" in m for m in self.msgs()))
 
+    def test_video_left_in_the_inbox_is_reminded_once(self):
+        # Ca thật 27/11/2026 (kênh Hàn): bot đẩy đủ 11 video, #6 nằm trong hộp thư từ 25/11 mà Du không thấy
+        from datetime import datetime, timedelta, timezone
+        with mock.patch.object(tiktok, "upload_draft", return_value={"publish_id": "p1",
+                                                                     "status": "SEND_TO_USER_INBOX"}):
+            review.handle_update(self.con, cb(f"ok:{self.vid}"), self.cfg)
+        pushed = datetime.fromisoformat(db.get_state(self.con, f"tt_pushed_at_{self.vid}"))
+        inbox = lambda pid: {"status": "SEND_TO_USER_INBOX"}
+        self.sent.clear()
+        self.assertEqual(review.remind_tiktok_inbox(self.con, self.cfg, pushed + timedelta(hours=2), inbox), [])
+        self.assertEqual(review.remind_tiktok_inbox(self.con, self.cfg, pushed + timedelta(hours=7), inbox),
+                         [self.vid])
+        self.assertIn("vẫn nằm trong hộp thư", self.msgs()[-1])
+        self.assertIn("#thegioiquaconso", self.msgs()[-1])                 # kèm lại chú thích
+        self.assertEqual(review.remind_tiktok_inbox(self.con, self.cfg, pushed + timedelta(hours=30), inbox), [])
+        # Du đã đăng thì thôi hỏi; TikTok báo lỗi thì nút đẩy lại dùng được
+        other = db.upsert_video(self.con, 7, "output/final_7.mp4", "T7", "D", ["a"], [])
+        db.set_state(self.con, f"tt_publish_{other}", "p2")                # lần đẩy cũ (chưa có mốc giờ)
+        done = lambda pid: {"status": "PUBLISH_COMPLETE"}
+        self.assertEqual(review.remind_tiktok_inbox(self.con, self.cfg, None, done), [])
+        self.assertEqual(db.get_state(self.con, f"tt_done_{other}"), "PUBLISH_COMPLETE")
+        third = db.upsert_video(self.con, 8, "output/final_8.mp4", "T8", "D", ["a"], [])
+        db.set_state(self.con, f"tt_publish_{third}", "p3")
+        failed = lambda pid: {"status": "FAILED", "fail_reason": "file_format_check_failed"}
+        self.assertEqual(review.remind_tiktok_inbox(self.con, self.cfg, None, failed), [third])
+        self.assertEqual(self.sent[-1][2]["buttons"], [[("🔁 Đẩy lại TikTok", f"tt:{third}")]])
+        self.assertEqual(db.get_state(self.con, f"tt_publish_{third}"), "")
+        self.cfg["publish"]["tiktok"]["enabled"] = False
+        self.assertEqual(review.remind_tiktok_inbox(self.con, self.cfg, None, failed), [])
+
     def test_connect_command_and_pasted_callback(self):
         review.handle_update(self.con, text("/tiktok"), self.cfg)
         self.assertIn("tiktok.com/v2/auth/authorize", self.msgs()[-1])

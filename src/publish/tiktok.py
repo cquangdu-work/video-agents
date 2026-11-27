@@ -188,6 +188,12 @@ def upload_draft(path: Path, wait_seconds: int = 90) -> dict:
     return {"publish_id": publish_id, "status": status}
 
 
+def publish_status(publish_id: str) -> dict:
+    """Trạng thái hiện tại của một lần đẩy: SEND_TO_USER_INBOX (nằm trong hộp thư, Du chưa đăng), PUBLISH_COMPLETE
+    (Du đã đăng), FAILED (kèm fail_reason)..."""
+    return _api("POST", "/post/publish/status/fetch/", access_token(), json={"publish_id": publish_id})
+
+
 def whoami() -> dict:
     """Tài khoản TikTok mà token đang trỏ vào (quyền user.info.basic)."""
     return _api("GET", "/user/info/", access_token(), params={"fields": "open_id,display_name"}).get("user", {})

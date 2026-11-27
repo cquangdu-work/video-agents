@@ -14,6 +14,7 @@ Nguyên tắc: KHÔNG có đường nào tới bước đăng mà không qua nú
 (luật "không tự động hoá 100%" trong CLAUDE.md).
 """
 import argparse
+import html
 import json
 import logging
 import re
@@ -697,6 +698,9 @@ def push_tiktok(con, video: dict, cfg: dict) -> None:
                         buttons=[[("🔁 Thử lại TikTok", f"tt:{video['id']}")]])
         return
     db.set_state(con, f"tt_publish_{video['id']}", res["publish_id"])
+    db.set_state(con, f"tt_pushed_at_{video['id']}", datetime.now(timezone.utc).isoformat(timespec="seconds"))
+    for k in ("tt_done", "tt_reminded"):            # đẩy lại sau lỗi: remind_tiktok_inbox theo dõi lần đẩy mới
+        db.set_state(con, f"{k}_{video['id']}", "")
     log.info("Đã đẩy video #%d vào hộp thư TikTok (%s)", video["id"], res["status"])
     where = ("đã nằm trong hộp thư" if res["status"] == "SEND_TO_USER_INBOX"
              else f"đang xử lý ({res['status']}) — vài phút nữa sẽ vào hộp thư")
@@ -704,6 +708,59 @@ def push_tiktok(con, video: dict, cfg: dict) -> None:
         f"📥 TikTok: video #{video['id']} {where}. Mở TikTok → Hộp thư → thông báo của app → hoàn tất"
         " và đăng. Khi đăng: bật “Nội dung do AI tạo”.\n\n<b>Chú thích</b> (chạm để copy)\n"
         + tg.code(tiktok_caption(video)), as_html=True)
+
+
+TT_REMIND_AFTER_HOURS = 6
+
+
+def remind_tiktok_inbox(con, cfg: dict, now: datetime = None, status_of=None) -> list:
+    """Video đã vào hộp thư TikTok mà Du chưa đăng sau TT_REMIND_AFTER_HOURS giờ -> nhắc MỘT lần, kèm lại chú thích.
+
+    Ca thật 27/11/2026 (kênh Hàn): Du hỏi vì sao không đẩy được lên TikTok — bot đẩy đủ 11 video, 8 video Du đã đăng,
+    nhưng #6 nằm trong hộp thư từ 25/11 và #10, #11 chờ từ sáng: thông báo của app trong hộp thư TikTok dễ bị trôi.
+    Đẩy thẳng lên trang (Direct Post) cần app TikTok qua duyệt Production — đã chốt KHÔNG làm (Du duyệt bước cuối).
+    Trả về [id đã nhắc]."""
+    from .publish import tiktok
+    if not (cfg["publish"].get("tiktok") or {}).get("enabled"):
+        return []
+    now = now or datetime.now(timezone.utc)
+    status_of = status_of or tiktok.publish_status
+    out = []
+    for key, pid in con.execute("SELECT key, value FROM state WHERE key LIKE 'tt_publish_%'").fetchall():
+        try:
+            vid = int(key.rsplit("_", 1)[1])
+        except ValueError:
+            continue
+        if not pid or db.get_state(con, f"tt_done_{vid}") or db.get_state(con, f"tt_reminded_{vid}"):
+            continue
+        at = db.get_state(con, f"tt_pushed_at_{vid}")      # lần đẩy trước 27/11 không có mốc: coi như đã lâu
+        if at and now < datetime.fromisoformat(at) + timedelta(hours=TT_REMIND_AFTER_HOURS):
+            continue
+        try:
+            st = status_of(pid)
+        except tiktok.TikTokAuthError:
+            return out                     # token hỏng: push_tiktok đã có lời nhắc riêng
+        except Exception as exc:
+            log.info("Không hỏi được trạng thái TikTok video #%s: %s", vid, str(exc)[:120])
+            continue
+        status = st.get("status")
+        video = db.get_video(con, vid)
+        if status == "PUBLISH_COMPLETE" or not video:
+            db.set_state(con, f"tt_done_{vid}", status or "gone")
+        elif status == "FAILED":
+            db.set_state(con, f"tt_done_{vid}", "FAILED")
+            db.set_state(con, f"tt_publish_{vid}", "")       # nút thử lại đẩy được lần nữa (push_tiktok)
+            tg.send_message(f"⚠️ TikTok báo video #{vid} trong hộp thư bị lỗi ({st.get('fail_reason')}) — bấm để đẩy lại.",
+                            buttons=[[("🔁 Đẩy lại TikTok", f"tt:{vid}")]])
+            out.append(vid)
+        elif status == "SEND_TO_USER_INBOX":
+            db.set_state(con, f"tt_reminded_{vid}", now.isoformat(timespec="seconds"))
+            tg.send_message(
+                f"⏰ TikTok: video #{vid} vẫn nằm trong hộp thư, chưa đăng.\n“{html.escape(str(video.get('title') or '')[:80])}”\n"
+                "Mở TikTok → Hộp thư → thông báo của app → hoàn tất và đăng (bật “Nội dung do AI tạo”).\n\n"
+                "<b>Chú thích</b> (chạm để copy)\n" + tg.code(tiktok_caption(video)), as_html=True)
+            out.append(vid)
+    return out
 
 
 # ------------------------------------------------------- Xử lý sự kiện Telegram
@@ -1303,7 +1360,7 @@ def housekeeping(con, cfg: dict, now: datetime = None) -> None:
     for job in (lambda: retry_quota_waits(con, cfg, now),
                 lambda: remind_token(con, yt, now), lambda: check_scheduled(con, now, cfg),
                 lambda: publish_instagram_due(con, cfg, now), lambda: publish_ig_posts_due(con, cfg, now),
-                lambda: remind_facebook_access(con, now)):
+                lambda: remind_facebook_access(con, now), lambda: remind_tiktok_inbox(con, cfg, now)):
         try:
             job()
         except Exception:
